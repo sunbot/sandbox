@@ -1,38 +1,25 @@
 import React from "react";
-// import "flexbox";
+import { Button, ButtonsRow } from "./button";
+import Display from "./display";
 import styles from "./calculator.module.css";
 
 const Calculator = props => {
-  let buttons = [
-    "+/-",
-    0,
-    ".",
-    "=",
-    1,
-    2,
-    3,
-    "+",
-    4,
-    5,
-    6,
-    "-",
-    7,
-    8,
-    9,
-    "*",
-    "/",
-    "x",
-    "c",
-    "ce"
+  let buttonContents = [
+    ["ce", "c", "x", "/"],
+    [7, 8, 9, "*"],
+    [4, 5, 6, "-"],
+    [1, 2, 3, "+"],
+    ["+/-", 0, ".", "="]
   ];
 
-  let calcButtonRow = <div className={styles.buttonPanel} />;
+  let buttonRows = buttonContents.map(row => {
+    return <ButtonsRow buttons={row} />;
+  });
 
   return (
     <div className={styles.container}>
-      {buttons.map(key => (
-        <div className={styles.button}>{key}</div>
-      ))}
+      <Display />
+      {buttonRows}
     </div>
   );
 };

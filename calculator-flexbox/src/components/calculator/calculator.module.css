@@ -1,17 +1,5 @@
 .container {
   display: flex;
-  /* flex-direction: row;
-  flex-wrap: wrap; */
-  flex-flow: column nowrap;
-}
-.buttonPanel {
-  justify-content: space-between;
-  flex-flow: row wrap-reverse;
-}
-.button {
-  color: blue;
-  border: 3px solid orange;
-  width: 100px;
-  height: 100px;
-  justify-content: center;
+  flex-direction: column;
+  border: yellow solid thick;
 }
