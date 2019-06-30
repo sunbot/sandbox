@@ -1,7 +1,10 @@
 .button {
   color: blue;
   border: 3px solid orange;
-  padding: 5px;
-  width: 50px;
-  height: 50px;
+  /* width: 50px;*/
+  height: 100px;
+  flex: 1 1 25%;
+  /* flex: auto; same as using 1 1 auto */
+  text-align: center;
+  line-height: 100px;
 }
