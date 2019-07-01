@@ -3,10 +3,18 @@
   font-weight: 700;
   font-size: 30px;
   border: 3px solid orange;
-  /* width: 50px;*/
   height: 100px;
   flex: 1 1 25%;
-  /* flex: auto; same as using 1 1 auto */
   text-align: center;
   line-height: 100px;
+  cursor: grab;
+}
+
+.button:hover {
+  background: orange;
+}
+
+.button:active {
+  background: white;
+  color: black;
 }

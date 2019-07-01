@@ -1,5 +1,4 @@
 .container {
   display: flex;
-  border: black thin solid;
   justify-content: space-evenly;
 }

@@ -1,11 +1,11 @@
 import React from "react";
-import { Button, ButtonsRow } from "./button";
+import { ButtonsRow } from "./button";
 import Display from "./display";
 import styles from "./calculator.module.css";
 
 const Calculator = props => {
   let buttonContents = [
-    ["ce", "c", "x", "/"],
+    ["ce", "c", "del", "/"],
     [7, 8, 9, "*"],
     [4, 5, 6, "-"],
     [1, 2, 3, "+"],
