@@ -1,0 +1,6 @@
+.App {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 auto;
+  border: red solid thick;
+}

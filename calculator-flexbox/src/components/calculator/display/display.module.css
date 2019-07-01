@@ -1,4 +1,11 @@
 .display {
-  border: black thick solid;
-  height: 120px;
+  border: yellow thick solid;
+  color: white;
+  display: flex;
+  flex-direction: row-reverse;
+}
+p {
+  font-size: 50px;
+  margin: 5px;
+  padding-right: 10px;
 }
