@@ -1,8 +1,8 @@
-.button {
-  color: white;
+button {
+  background-color: orange;
   font-weight: 700;
   font-size: 30px;
-  border: 3px solid orange;
+  border: 3px solid black;
   height: 100px;
   flex: 1 1 25%;
   text-align: center;
@@ -10,11 +10,11 @@
   cursor: grab;
 }
 
-.button:hover {
-  background: orange;
+button:hover {
+  color: white;
 }
 
-.button:active {
-  background: white;
+button:active {
+  background: #ccc;
   color: black;
 }

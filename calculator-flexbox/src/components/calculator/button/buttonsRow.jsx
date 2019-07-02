@@ -4,7 +4,7 @@ import Button from "./button";
 
 const ButtonsRow = props => {
   const items = props.buttons.map(content => {
-    return <Button content={content} />;
+    return <Button key={content} onClick={props.onClick} content={content} />;
   });
   return <div className={styles.container}>{items}</div>;
 };

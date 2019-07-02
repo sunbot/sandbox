@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { ButtonsRow } from "./button";
 import Display from "./display";
 import styles from "./calculator.module.css";
@@ -12,13 +12,21 @@ const Calculator = props => {
     ["+/-", 0, ".", "="]
   ];
 
-  let buttonRows = buttonContents.map(row => {
-    return <ButtonsRow buttons={row} />;
-  });
+  const [result, setResult] = useState();
 
+  const onHandleClick = input => {
+    if (result) setResult(result.toString() + input);
+    else {
+      setResult(input);
+    }
+  };
+
+  let buttonRows = buttonContents.map((row, index) => {
+    return <ButtonsRow key={index} buttons={row} onClick={onHandleClick} />;
+  });
   return (
     <div className={styles.container}>
-      <Display />
+      <Display content={result} />
       {buttonRows}
     </div>
   );

@@ -1,10 +1,15 @@
 import React from "react";
 import * as styles from "./display.module.css";
 
-const Display = () => {
+const Display = props => {
+  let content = 0;
+
+  if (props.content) {
+    content = props.content;
+  }
   return (
     <div className={styles.display}>
-      <p>0</p>
+      <p>{content}</p>
     </div>
   );
 };
