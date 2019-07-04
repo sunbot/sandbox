@@ -2,9 +2,11 @@
   color: white;
   display: flex;
   flex-direction: row-reverse;
+  align-items: flex-end;
+  height: 10rem;
 }
 p {
-  font-size: 50px;
+  font-size: 7em;
   margin: 5px;
   padding-right: 10px;
 }
