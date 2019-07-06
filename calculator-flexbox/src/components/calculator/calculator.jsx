@@ -11,11 +11,17 @@ const Calculator = props => {
     [1, 2, 3, "+"],
     ["+/-", 0, ".", "="]
   ];
+  const _precision = 16;
   const [operator, setOperator] = useState("");
   const [leftOperand, setLeftOperand] = useState(0);
   const [display, setDisplay] = useState("");
   const [prevInput, setPrevInput] = useState();
 
+  function formatNumber(input) {
+    const pN = Number(input).toPrecision(_precision);
+    const result = Number.parseFloat(pN);
+    return result;
+  }
   const onHandleClick = input => {
     const isnum = /^\d+$/.test(input);
     let _display = display;
@@ -24,21 +30,21 @@ const Calculator = props => {
 
     if (isnum) {
       if (isOperator(prevInput)) {
-        _display = Number(input.toString());
+        _display = formatNumber(input);
       } else {
-        _display = Number(_display + input.toString());
+        _display = formatNumber(_display + input.toString());
       }
     } else if (isOperator(input)) {
       const isPrevInputNumber = /^\d+$/.test(prevInput);
 
-      if (isPrevInputNumber && operator) {
+      if (isPrevInputNumber && (operator || input === "=")) {
         const result = calculate(leftOperand, prevInput, operator);
         _display = result;
         _leftOperand = result;
         _operator = input;
       } else {
         _operator = input;
-        _leftOperand = Number(display);
+        _leftOperand = display;
       }
     }
 
@@ -49,7 +55,13 @@ const Calculator = props => {
   };
 
   function isOperator(input) {
-    if (input === "+" || input === "-" || input === "*" || input === "/")
+    if (
+      input === "+" ||
+      input === "-" ||
+      input === "*" ||
+      input === "/" ||
+      input === "="
+    )
       return true;
   }
 
