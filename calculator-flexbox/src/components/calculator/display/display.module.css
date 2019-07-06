@@ -1,5 +1,5 @@
 .display {
-  color: white;
+  color: black;
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-end;
