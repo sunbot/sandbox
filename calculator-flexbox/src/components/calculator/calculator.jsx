@@ -11,32 +11,48 @@ const Calculator = props => {
     [1, 2, 3, "+"],
     ["+/-", 0, ".", "="]
   ];
-  const [current, setCurrent] = useState("");
-  const [operator, setOperator] = useState("+");
+  const [operator, setOperator] = useState("");
   const [leftOperand, setLeftOperand] = useState(0);
   const [display, setDisplay] = useState("");
+  const [prevInput, setPrevInput] = useState();
 
   const onHandleClick = input => {
-    var isnum = /^\d+$/.test(input);
-    console.log("current " + current);
+    const isnum = /^\d+$/.test(input);
+    let _display = display;
+    let _leftOperand = leftOperand;
+    let _operator = operator;
 
-    // if (input === "+/-") {
-    //   setCurrent(-current);
-    //   setDisplay(-current);
-    // } else
-    if (!isnum) {
-      const result = calculate(leftOperand, current, operator);
-      setOperator(input);
-      setCurrent("");
-      setLeftOperand(result);
-      setDisplay(result);
-    } else {
-      const result =
-        !display && input === 0 ? "" : current.toString() + input.toString();
-      setCurrent(result);
-      setDisplay(result);
+    if (isnum) {
+      if (isOperator(prevInput)) {
+        _display = Number(input.toString());
+      } else {
+        _display = Number(_display + input.toString());
+      }
+    } else if (isOperator(input)) {
+      const isPrevInputNumber = /^\d+$/.test(prevInput);
+
+      if (isPrevInputNumber && operator) {
+        const result = calculate(leftOperand, prevInput, operator);
+        _display = result;
+        _leftOperand = result;
+        _operator = input;
+      } else {
+        _operator = input;
+        _leftOperand = Number(display);
+      }
     }
+
+    const val = isOperator(prevInput) ? "" : _display;
+    setPrevInput(isOperator(input) ? input : Number(val + input.toString()));
+    setLeftOperand(_leftOperand);
+    setDisplay(_display);
+    setOperator(_operator);
   };
+
+  function isOperator(input) {
+    if (input === "+" || input === "-" || input === "*" || input === "/")
+      return true;
+  }
 
   function calculate(left, right, operator) {
     const leftNum = Number(left);
