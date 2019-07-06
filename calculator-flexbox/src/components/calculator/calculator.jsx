@@ -42,8 +42,7 @@ const Calculator = props => {
       }
     }
 
-    const val = isOperator(prevInput) ? "" : _display;
-    setPrevInput(isOperator(input) ? input : Number(val + input.toString()));
+    setPrevInput(isOperator(input) ? input : _display);
     setLeftOperand(_leftOperand);
     setDisplay(_display);
     setOperator(_operator);
