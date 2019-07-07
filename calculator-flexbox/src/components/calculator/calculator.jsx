@@ -2,8 +2,6 @@ import React, { useState } from "react";
 import { ButtonsRow } from "./button";
 import Display from "./display";
 import styles from "./calculator.module.css";
-import { string } from "postcss-selector-parser";
-import { isNumber } from "util";
 
 const Calculator = props => {
   const buttonContents = [
@@ -49,6 +47,7 @@ const Calculator = props => {
       HandleOperator(input);
     }
   };
+
   function HandleNumbers(input) {
     let result;
     if (isOperator(prevInput)) {
@@ -62,14 +61,11 @@ const Calculator = props => {
   }
 
   function HandleOperator(input) {
-    let result;
+    let result = display;
     if (isNum(prevInput) && (operator || input === "=")) {
       result = calculate(leftOperand, prevInput, operator);
-    } else {
-      result = display;
     }
 
-    setDisplay(result);
     setLeftOperand(result);
     setPrevInput(input);
     setOperator(input);
