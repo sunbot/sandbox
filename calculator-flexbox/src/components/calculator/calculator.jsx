@@ -54,7 +54,7 @@ const Calculator = props => {
       clearAll();
     }
 
-    if (isOperator(prevInput) || isNumber(prevInput)) {
+    if (isOperator(prevInput) || isNum(prevInput)) {
       HandleNumbers(0);
     }
   }
