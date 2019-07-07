@@ -28,15 +28,16 @@ const Calculator = props => {
   }
 
   const onHandleClick = input => {
-    // if (input === "del") {
-    //   if (isNum(prevInput) || prevInput === "del" ) {
-    //     let previous = prevInput.toString();
-    //     _display = formatNumber(previous.slice(0, -1));
-    //   }
-    // } else
+    if (input === "del") {
+      deleteRecent();
+    }
+
+    if (input === "c") {
+      clearAll();
+    }
 
     if (input === "ce") {
-      setDisplay(0);
+      clearRecent();
     }
 
     if (isNum(input)) {
@@ -47,6 +48,35 @@ const Calculator = props => {
       HandleOperator(input);
     }
   };
+
+  function clearRecent() {
+    if (prevInput === "=") {
+      clearAll();
+    }
+
+    if (isOperator(prevInput) || isNumber(prevInput)) {
+      HandleNumbers(0);
+    }
+  }
+
+  function deleteRecent() {
+    // if (isNum(prevInput)) {
+    //   let _display = display.toString();
+    //   const result = formatNumber(_display.slice(0, -1));
+    //   if (prevInput === 0) HandleNumbers(result);
+    //   else {
+    //     setPrevInput(result);
+    //     setDisplay(result);
+    //   }
+    // }
+  }
+
+  function clearAll() {
+    setOperator("");
+    setLeftOperand(0);
+    setPrevInput();
+    setDisplay("");
+  }
 
   function HandleNumbers(input) {
     let result;
@@ -62,6 +92,7 @@ const Calculator = props => {
 
   function HandleOperator(input) {
     let result = display;
+    // if '=' evaluate now
     if (isNum(prevInput) && (operator || input === "=")) {
       result = calculate(leftOperand, prevInput, operator);
     }
@@ -69,6 +100,7 @@ const Calculator = props => {
     setLeftOperand(result);
     setPrevInput(input);
     setOperator(input);
+    setDisplay(result);
   }
 
   function isOperator(input) {
@@ -85,11 +117,9 @@ const Calculator = props => {
   function calculate(left, right, operator) {
     const leftNum = Number(left);
     const rightNum = Number(right);
+
     if (operator === "+") {
-      const result = leftNum + rightNum;
-      console.log(`${left}${operator}${right}=${result}`);
-      console.log(result);
-      return result;
+      return leftNum + rightNum;
     }
     if (operator === "-") {
       return leftNum - rightNum;
