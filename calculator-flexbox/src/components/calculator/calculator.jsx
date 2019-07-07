@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { ButtonsRow } from "./button";
 import Display from "./display";
 import styles from "./calculator.module.css";
+import { string } from "postcss-selector-parser";
+import { isNumber } from "util";
 
 const Calculator = props => {
   const buttonContents = [
@@ -22,37 +24,56 @@ const Calculator = props => {
     const result = Number.parseFloat(pN);
     return result;
   }
+
+  function isNum(input) {
+    return /^\d+$/.test(input);
+  }
+
   const onHandleClick = input => {
-    const isnum = /^\d+$/.test(input);
-    let _display = display;
-    let _leftOperand = leftOperand;
-    let _operator = operator;
+    // if (input === "del") {
+    //   if (isNum(prevInput) || prevInput === "del" ) {
+    //     let previous = prevInput.toString();
+    //     _display = formatNumber(previous.slice(0, -1));
+    //   }
+    // } else
 
-    if (isnum) {
-      if (isOperator(prevInput)) {
-        _display = formatNumber(input);
-      } else {
-        _display = formatNumber(_display + input.toString());
-      }
-    } else if (isOperator(input)) {
-      const isPrevInputNumber = /^\d+$/.test(prevInput);
-
-      if (isPrevInputNumber && (operator || input === "=")) {
-        const result = calculate(leftOperand, prevInput, operator);
-        _display = result;
-        _leftOperand = result;
-        _operator = input;
-      } else {
-        _operator = input;
-        _leftOperand = display;
-      }
+    if (input === "ce") {
+      setDisplay(0);
     }
 
-    setPrevInput(isOperator(input) ? input : _display);
-    setLeftOperand(_leftOperand);
-    setDisplay(_display);
-    setOperator(_operator);
+    if (isNum(input)) {
+      HandleNumbers(input);
+    }
+
+    if (isOperator(input)) {
+      HandleOperator(input);
+    }
   };
+  function HandleNumbers(input) {
+    let result;
+    if (isOperator(prevInput)) {
+      result = formatNumber(input);
+    } else {
+      result = formatNumber(display + input.toString());
+    }
+
+    setPrevInput(result);
+    setDisplay(result);
+  }
+
+  function HandleOperator(input) {
+    let result;
+    if (isNum(prevInput) && (operator || input === "=")) {
+      result = calculate(leftOperand, prevInput, operator);
+    } else {
+      result = display;
+    }
+
+    setDisplay(result);
+    setLeftOperand(result);
+    setPrevInput(input);
+    setOperator(input);
+  }
 
   function isOperator(input) {
     if (
