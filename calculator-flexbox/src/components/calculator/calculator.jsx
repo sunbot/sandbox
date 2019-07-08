@@ -24,12 +24,16 @@ const Calculator = props => {
   }
 
   function isNum(input) {
-    return /^\d+$/.test(input);
+    return /^\d+.?\d*$/.test(input);
   }
 
   const onHandleClick = input => {
+    if (input === ".") {
+      handleDecimal(input);
+    }
+
     if (input === "del") {
-      deleteRecent();
+      deleteLastInput();
     }
 
     if (input === "c") {
@@ -52,23 +56,30 @@ const Calculator = props => {
   function clearRecent() {
     if (prevInput === "=") {
       clearAll();
-    }
+    } else {
+      let result = formatNumber(0);
 
-    if (isOperator(prevInput) || isNum(prevInput)) {
-      HandleNumbers(0);
+      setPrevInput(result);
+      setDisplay(result);
     }
   }
 
-  function deleteRecent() {
-    // if (isNum(prevInput)) {
-    //   let _display = display.toString();
-    //   const result = formatNumber(_display.slice(0, -1));
-    //   if (prevInput === 0) HandleNumbers(result);
-    //   else {
-    //     setPrevInput(result);
-    //     setDisplay(result);
-    //   }
-    // }
+  function handleDecimal() {
+    if (display.toString().includes(".") || !isNum(prevInput)) return;
+
+    const result = display + ".";
+    setDisplay(result);
+    setPrevInput(formatNumber(result));
+  }
+
+  function deleteLastInput() {
+    if (isNum(prevInput)) {
+      let newDisplay = display.toString();
+      const result = formatNumber(newDisplay.slice(0, -1));
+
+      setPrevInput(result);
+      setDisplay(result);
+    }
   }
 
   function clearAll() {
