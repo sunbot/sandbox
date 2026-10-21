@@ -1,0 +1,19 @@
+{
+  "name": "creature-garden",
+  "version": "0.1.0",
+  "description": "A shared garden of sim creatures that remember, evolve, and fall in love.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "express-session": "^1.19.0",
+    "google-auth-library": "^11.3.1"
+  }
+}
