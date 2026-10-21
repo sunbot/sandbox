@@ -46,7 +46,7 @@ people. Each person gets their own relationship with each creature, but they
 share the creatures, the babies, and the matchmaking. That makes the garden
 social: someone else's bonk can make a creature nervous around you, and your
 introductions can produce a baby that others get to know. The risk is one
-user griefing everyone's creatures. Mitigations are in the expansion list below.
+user griefing everyone's creatures. Mitigations are under Owner tools in the roadmap below.
 
 **Orientation as a real constraint.** The attraction system has to be fair.
 With `a`/`b`/`both`/`none`, a creature that's attracted to `both` can date
@@ -59,46 +59,90 @@ starving, or permanent loss would make people anxious and drive them away.
 Decay pushes people to come back, while the reward is always a reaction, a
 new baby, or a new diary line.
 
-## Expansion ideas (ranked by how much they add per unit of effort)
+## What makes it fun
 
-1. **Richer breeding and evolution.** Stages already change size. Next, make
-   stages change traits: a baby with high curiosity might grow up into a
-   scout. Add rare mutations, visible traits (patterns, colours, accessories)
-   that come from memories, and "lineages" you can track on a family tree.
-2. **Talking to them.** A free-text "say something" action. Use an LLM with the
-   creature's personality, the user's memory list, and recent diary entries as
-   context. Keep the template engine as the fallback for cost and latency.
-   Their voice stays consistent because the personality and memory are
-   structured data, not prompt-only.
-3. **Grudges and reputations.** Creatures talk to each other, so a bonk
-   spreads. A creature can warn a friend ("be careful, that one bonks"). This
-   turns one-on-one memory into a social system and gives players a reason to
-   behave.
-4. **Creature-to-creature events.** Without anyone watching, creatures bond,
-   fall out, argue, and make up. The diary records what happened while you were
-   gone. This is the cheapest way to make the world feel alive.
-5. **Seasons and weather.** Day/night and seasons change needs and moods, and
-   unlock seasonal foods and traits.
-6. **Garden building.** A place for creatures to live: a pond, a sunny rock,
-   a nest. Their location changes which creatures meet, and so who
-   might fall in love.
-7. **Consent and safety guardrails.** Creatures can refuse. A creature that
-   has been bonked a lot can set a boundary: no more play until you apologise.
-   You can't force a date with someone who doesn't want one. The MVP already
-   refuses petting when a creature is too scared, and says so in its reaction.
-8. **Owner tools.** Moderation controls: rate limits per person per creature,
-   an owner-only "reset this creature" action, and an activity log.
+Cozy games like Tamagotchi, Neko Atsume and Animal Crossing work because a
+two-minute visit is satisfying and there is always something new since last
+time. This garden adds two hooks those games don't have: **being remembered**,
+and **drama you caused**.
 
-## Decisions to make with you
+### Who plays, and what they want
 
-- **Pronouns and labels for orientation/sex.** The MVP uses placeholder
-  sexes `a` and `b`, with `both` and `none` for attraction. You may want
-  different labels or more options. The code treats them as data, so it's a
-  rename, not a rewrite.
-- **Feel of dying or losing a creature.** The MVP never kills creatures. Do
-  you want permanent loss, or is that too harsh for a cute game?
-- **Who else shares the garden.** The owner approves everyone, so a
-  single garden is the default. Would you rather each approved person have
-  their own garden?
+| Player | What they want | What gives it to them |
+| --- | --- | --- |
+| Nurturer | To be loved back | Creatures greet them by nickname, bring them gifts, pick them as "favourite person" |
+| Matchmaker | Reality-TV drama | Crushes, jealousy, breakups, exes, love triangles, a daily gossip paper |
+| Breeder | Rare babies, lineages | Hidden recessive traits, a family tree, their name on the lineage |
+| Troublemaker | Mischief | Bonks that matter: grudges, gossip, nicknames, redemption arcs |
+| Social player | Other people | Creatures mention other visitors; rivalry for one creature's affection |
+
+### Principles
+
+1. **Systems that collide tell stories.** Memory + gossip + jealousy + genetics
+   produce stories nobody wrote: "Pipni dumped Lonife because Lonife's kid
+   bonked her." That is the replay value.
+2. **Consequences outlive the moment.** A bonk should still matter a week and
+   a generation later.
+3. **Always a reason to come back.** Something happened while you were away,
+   and the garden tells you.
+4. **Gentle stakes.** Things can go wrong, but nothing is lost forever.
+5. **Legible, then surprising.** Learn a creature well enough to predict it,
+   then have it surprise you in a way that still fits.
+
+### Ideas, in build order
+
+**Next (biggest payoff for the effort)**
+
+1. **Garden Gazette.** A daily front page of what happened: "SCANDAL: Mibo
+   seen on a date with Miba's ex", "Welcome baby Raeku!", "Someone has been
+   bonking Pipni. Pipni wants answers." The diary already records the events,
+   so this is mostly writing headlines.
+2. **Nicknames.** Each creature names you from your history: "Snack Friend",
+   "The Bonker", "Cupid", "Stranger". It's the fastest way to make memory visible.
+3. **Wander off and come home.** The loss mechanic from Decisions.
+4. **Gifts back.** A creature that adores you leaves a pebble, flower or
+   drawing. These are collectible, and each one names who gave it and why.
+
+**Then (deeper systems)**
+
+5. **Gossip.** Creatures share opinions of people. Bonk one, and its
+   best friend is cold to you before you've met. Feed one, and a friend asks
+   for a snack too.
+6. **Romance with history.** Couples, jealousy when a partner is introduced
+   to someone else, breakups, exes who stay awkward, and rekindled sparks.
+7. **Family stories.** Babies inherit a little of their parents' feelings about
+   people. Bully a creature, and its children are born wary of you. Love one,
+   and its babies run to you first. This makes the troublemaker's choices last
+   across generations, the strongest hook on this list.
+8. **Personality drift.** Treatment reshapes temperament over time. A Sweet
+   creature bonked often turns Shy; a Grumpy one loved consistently softens.
+   This is evolution that players cause, not just genetics.
+9. **Hidden secrets.** Each creature has one secret to discover, such as a
+   fear of thunder or loving to be sung to. Discovering it is a moment.
+
+**Later (breadth)**
+
+10. **Rare recessive traits.** Sparkles, two-tone fur, tiny wings. Two plain
+    parents can surprise you. A family tree shows who carries what.
+11. **Talk to them.** Free-text chat through an LLM that's given the
+    creature's personality and memories, so its voice stays consistent.
+12. **Seasons and places.** Day/night, weather, and spots like a pond or sunny
+    rock. Where creatures hang out decides who meets whom.
+13. **Owner tools.** Rate limits, a "reset this creature" button, and an
+    activity log, so one person can't ruin the garden for everyone.
+
+## Decisions
+
+- **One shared garden.** Everyone the owner approves visits the same creatures.
+  Each person has their own relationship with each creature.
+- **Suns, Moons and Stargazers.** Creatures are Suns (`a`) or Moons (`b`).
+  Whom they fall for is a separate gene: Suns, Moons, anyone, or nobody.
+  Stargazers aren't into romance but still make close friends. Any mutually
+  attracted pair can have babies, so same-kind couples are parents too.
+- **No death; creatures can wander off.** A creature that's neglected or
+  mistreated for long enough leaves the garden and leaves a note. Anyone can
+  leave its favourite food at the garden's edge to coax it home. It comes
+  back with a story, and wary of whoever drove it away. Loss is real but
+  always recoverable, which suits a cute game. *(Not built yet; first on the roadmap.)*
 - **Pace.** Stage times are set to real hours (see `STAGE_HOURS` in `sim.js`).
   Shorten them for quick testing and lengthen them if you want a slow garden.

@@ -35,7 +35,10 @@ function el(tag, props = {}, ...children) {
 // Simple round blobs whose shape, colour, ears and eyes come from the genome.
 // Mood changes the mouth; fondness adds blush. Babies are smaller.
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+// Display names for the genome's placeholder values. Creatures are Suns or Moons;
+// whom they fall for is a separate gene, so every pairing is possible.
+const KIND_LABEL = { a: '☀️ Sun', b: '🌙 Moon' };
+const HEART_LABEL = { a: 'falls for Suns', b: 'falls for Moons', both: 'falls for anyone', none: '✨ Stargazer (not into romance)' };
 
 function creatureSVG(c) {
   const g = c.genome;
@@ -171,6 +174,7 @@ function renderCreature(c) {
     el('h2', { class: 'center', style: 'margin:0' }, c.name),
     el('p', { class: 'center muted', style: 'margin:4px 0' },
       `${c.temperament} · ${c.stage} · gen ${c.generation}${c.parents ? ` · child of ${c.parents.join(' & ')}` : ''}`),
+    el('p', { class: 'center muted', style: 'margin:0 0 4px' }, `${KIND_LABEL[c.genome.sex]} · ${HEART_LABEL[c.genome.attracts]}`),
     el('div', { class: 'bubble', id: 'bubble' }, state.lastLine || `${c.name} is ${c.mood}.`),
     el('div', { class: 'bars' },
       bar('Full', c.fullness), bar('Energy', c.energy), bar('Affection', c.affection),
