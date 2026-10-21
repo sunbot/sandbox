@@ -25,6 +25,20 @@ const GENERIC = {
   baby: ['*wobbles happily*', 'Hi! I am brand new!'],
   not_hungry: ['I am so full I might pop. Maybe later?'],
   too_tired: ['*yawns* Five more minutes...'],
+  nickname_new: ['From now on I am calling you "{nick}".', 'I have decided. You are "{nick}" now.'],
+  ran_away: ['That is it. I am leaving! *runs off into the tall grass*', '*squeaks and bolts for the woods*'],
+  // Notes left behind when wandering off, and replies to food left at the garden's edge.
+  note_hungry: ['Gone to find food. Nobody fed me. —{name}', 'My tummy said go. So I went. —{name}'],
+  note_scared: ['I do not feel safe here. Do not look for me. (But maybe leave a snack.) —{name}'],
+  lure_meh: ['*a sniff from the bushes, then nothing* Not {food}. Anything but {food}.', '*the leaves rustle, but nobody comes out for {food}*'],
+  lure_sniff: ['*a nose pokes out of the bushes* ...{food}? Keep going.', '*nibble, nibble* That was nice. I am not ready yet.'],
+  lure_blamed: ['*the bushes go very still* Not you. Not yet.', 'I can hear you out there. Go away.'],
+  came_home: [
+    'I am home! I slept under a giant mushroom and a beetle told me a joke.',
+    'I am back! I found a pond that tastes like rain. I missed you all though.',
+    'I am home. A fox chased me. I chased it back. We are friends now.',
+    'I am back! Out there the stars are much bigger. Also I am very hungry.',
+  ],
 };
 
 const VOICE = {
@@ -35,6 +49,7 @@ const VOICE = {
     greet_happy: ['Hello, my favourite! Did you bring treats?'],
   },
   grumpy: {
+    nickname_new: ['Fine. You are "{nick}" now. Do not let it go to your head.'],
     fed_disliked: ['{food} again? Honestly. Fine. I will eat it.'],
     hit: ['Hit me? HIT ME? Do not do that. I bite.'],
     pet: ['Hmph. Do not get used to this.'],
@@ -46,6 +61,7 @@ const VOICE = {
     hit: ['Bonk? That is a game, right? Right? Ow.'],
   },
   shy: {
+    nickname_new: ['...is it okay if I call you "{nick}"? I already do. In my head.'],
     greet_scared: ['*hides* ...oh, it is only you. Hi.'],
     pet: ['*goes very still, then smiles a tiny bit*'],
     hit: ['*trembles* Please do not do that again.'],
@@ -76,6 +92,7 @@ const MEMORY_CALLBACKS = {
   pet: ['You pet me last time. It was nice.'],
   play: ['You played with me before, which was fun.'],
   date: ['Last time you set me up with someone. I think I like them.'],
+  rescued: ['You brought me home. I will never forget that.'],
 };
 
 // Callback lines only fire when this user's history contains the matching memory.
@@ -108,8 +125,8 @@ export function speak(creature, situation, { memories = [], vars = {}, rng = def
     fed_liked: ['hit'],
     fed_disliked: ['fed'],
     play: ['hit'],
-    greet_happy: ['hit', 'fed', 'pet', 'play'],
-    greet_neutral: ['hit', 'fed', 'pet', 'play'],
+    greet_happy: ['hit', 'fed', 'pet', 'play', 'rescued'],
+    greet_neutral: ['hit', 'fed', 'pet', 'play', 'rescued'],
     greet_scared: ['hit'],
     date_yes: ['date'],
     date_no: ['hit'],

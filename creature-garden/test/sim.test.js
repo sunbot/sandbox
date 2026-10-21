@@ -8,10 +8,14 @@ import { accessFor, decide, requestAccess } from '../src/auth.js';
 const NOW = Date.UTC(2030, 0, 1);
 const constant = (v) => () => v;
 const sequence = (...vals) => { let i = 0; return () => vals[i++ % vals.length]; };
-const genome = (over = {}) => ({
-  hue: 200, shape: 'round', ears: 'round', sex: 'a', attracts: 'b', temperament: 'sweet',
-  traits: { curiosity: 0.5, charm: 0.5, sturdiness: 0.5, appetite: 0.5 }, ...over,
-});
+// Trait overrides (e.g. { appetite: 0 }) go into genome.traits; the rest are top-level genes.
+const TRAITS = ['curiosity', 'charm', 'sturdiness', 'appetite'];
+const genome = (over = {}) => {
+  const traits = { curiosity: 0.5, charm: 0.5, sturdiness: 0.5, appetite: 0.5 };
+  const genes = {};
+  for (const [key, value] of Object.entries(over)) (TRAITS.includes(key) ? traits : genes)[key] = value;
+  return { hue: 200, shape: 'round', ears: 'round', sex: 'a', attracts: 'b', temperament: 'sweet', ...genes, traits };
+};
 const adult = (over, now = NOW) => newCreature({ genome: genome(over), now: now - 100 * HOUR_MS, rng: constant(0.5) });
 
 test('breeding keeps traits in range and parents set the body plan', () => {

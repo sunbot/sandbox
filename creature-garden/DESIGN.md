@@ -26,6 +26,9 @@ match, and you can't buy your way past a bad reputation.
 | Orientation | `a`, `b`, `both`, `none` (asexual) | Attraction is mutual and is a hard limit on matchmaking |
 | Breeding | Traits averaged with noise, hue averaged in colour space, random mutation | Children are new creatures in the garden |
 | Art | Simple SVG blobs built from the genome; mood drives the mouth | Babies are smaller; fond creatures blush |
+| Garden Gazette | Daily front page built from a garden-wide event log | Scandals, homecomings, whodunnits; bonks and unkind nicknames stay anonymous |
+| Nicknames | Each creature names each person from their history | Temperament-flavoured; announced when they change |
+| Wandering off | Starved 8 hours, or bonked into fear ≥ 90 | Comes home after 2–3 *favourite* snacks; the bully must wait for fear to fade |
 
 ## Analysis: what makes this work, and what could sink it
 
@@ -91,15 +94,18 @@ and **drama you caused**.
 
 ### Ideas, in build order
 
-**Next (biggest payoff for the effort)**
+**Built**
 
 1. **Garden Gazette.** A daily front page of what happened: "SCANDAL: Mibo
    seen on a date with Miba's ex", "Welcome baby Raeku!", "Someone has been
    bonking Pipni. Pipni wants answers." The diary already records the events,
    so this is mostly writing headlines.
 2. **Nicknames.** Each creature names you from your history: "Snack Friend",
-   "The Bonker", "Cupid", "Stranger". It's the fastest way to make memory visible.
+   "The Bonker", "Cupid", "My Hero". It's the fastest way to make memory visible.
 3. **Wander off and come home.** The loss mechanic from Decisions.
+
+**Next (biggest payoff for the effort)**
+
 4. **Gifts back.** A creature that adores you leaves a pebble, flower or
    drawing. These are collectible, and each one names who gave it and why.
 
@@ -143,6 +149,6 @@ and **drama you caused**.
   mistreated for long enough leaves the garden and leaves a note. Anyone can
   leave its favourite food at the garden's edge to coax it home. It comes
   back with a story, and wary of whoever drove it away. Loss is real but
-  always recoverable, which suits a cute game. *(Not built yet; first on the roadmap.)*
+  always recoverable, which suits a cute game.
 - **Pace.** Stage times are set to real hours (see `STAGE_HOURS` in `sim.js`).
   Shorten them for quick testing and lengthen them if you want a slow garden.

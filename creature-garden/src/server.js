@@ -5,7 +5,8 @@ import express from 'express';
 import session from 'express-session';
 import { openStore } from './store.js';
 import { makeOAuthClient, authUrl, verifyGoogleLogin, accessFor, requestAccess, decide } from './auth.js';
-import { newCreature, act, greet, introduce, viewFor, advance, FOODS, STAGE_HOURS, HOUR_MS } from './sim.js';
+import { newCreature, act, greet, introduce, lure, tick, viewFor, FOODS, STAGE_HOURS, HOUR_MS } from './sim.js';
+import { gazette } from './gazette.js';
 import { randomGenome } from './genetics.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,7 @@ function seedGarden() {
   for (let i = 0; i < 4; i++) {
     const c = newCreature({ genome: randomGenome(), now: grownUp });
     c.lastTick = now; // age from the past, but start fed and rested
+    c.lastStage = 'adult';
     store.data.creatures[c.id] = c;
   }
   store.save();
@@ -117,30 +119,57 @@ app.get('/api/me', (req, res) => {
 
 // ---- Garden -----------------------------------------------------------------
 
-function allCreatures() {
-  return Object.values(store.data.creatures);
+const MAX_EVENTS = 500;
+
+// First name only, so other visitors never see someone's email address.
+function displayName(user) {
+  const base = user.name && user.name !== user.email ? user.name.split(' ')[0] : user.email.split('@')[0];
+  return base || 'Someone';
+}
+
+function record(events) {
+  if (!events?.length) return;
+  store.data.events.push(...events);
+  store.data.events.sort((a, b) => a.at - b.at);
+  if (store.data.events.length > MAX_EVENTS) store.data.events.splice(0, store.data.events.length - MAX_EVENTS);
+}
+
+// Bring every creature up to date, so wandering off and growing up are
+// noticed no matter which page someone opens.
+function tickAll(now) {
+  for (const c of Object.values(store.data.creatures)) record(tick(c, now));
+}
+
+function creatureView(c, req, now) {
+  return viewFor(c, req.session.user.email, now, store.data.creatures);
 }
 
 app.get('/api/garden', requireApproved, (req, res) => {
   const now = Date.now();
-  const byId = store.data.creatures;
-  const userId = req.session.user.email;
-  const creatures = allCreatures().map((c) => {
-    advance(c, now);
-    return viewFor(c, userId, now, byId);
-  });
+  tickAll(now);
+  const creatures = Object.values(store.data.creatures).map((c) => creatureView(c, req, now));
   store.save();
   res.json({ creatures, foods: FOODS });
+});
+
+app.get('/api/gazette', requireApproved, (req, res) => {
+  const now = Date.now();
+  tickAll(now);
+  const email = req.session.user.email;
+  const headlines = gazette(store.data.events, store.data.creatures, { now, lastSeen: store.data.visits[email] ?? 0 });
+  store.data.visits[email] = now;
+  store.save();
+  res.json({ date: new Date(now).toISOString(), headlines });
 });
 
 app.get('/api/creatures/:id', requireApproved, (req, res) => {
   const c = store.data.creatures[req.params.id];
   if (!c) return res.status(404).json({ error: 'No such creature.' });
   const now = Date.now();
-  advance(c, now);
+  record(tick(c, now));
   const line = greet(c, req.session.user.email, now);
   store.save();
-  res.json({ creature: viewFor(c, req.session.user.email, now, store.data.creatures), line });
+  res.json({ creature: creatureView(c, req, now), line });
 });
 
 app.post('/api/creatures/:id/act', requireApproved, (req, res) => {
@@ -149,9 +178,27 @@ app.post('/api/creatures/:id/act', requireApproved, (req, res) => {
   const { action, food } = req.body ?? {};
   const now = Date.now();
   try {
-    const result = act(c, req.session.user.email, action, { food, now });
+    record(tick(c, now));
+    const result = act(c, req.session.user.email, action, { food, now, actorName: displayName(req.session.user) });
+    record(result.events);
     store.save();
-    res.json({ line: result.line, situation: result.situation, creature: viewFor(c, req.session.user.email, now, store.data.creatures) });
+    res.json({ line: result.line, situation: result.situation, creature: creatureView(c, req, now) });
+  } catch (err) {
+    store.save();
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/creatures/:id/lure', requireApproved, (req, res) => {
+  const c = store.data.creatures[req.params.id];
+  if (!c) return res.status(404).json({ error: 'No such creature.' });
+  const now = Date.now();
+  try {
+    record(tick(c, now));
+    const result = lure(c, req.session.user.email, req.body?.food, { now, actorName: displayName(req.session.user) });
+    record(result.events);
+    store.save();
+    res.json({ line: result.line, cameHome: result.cameHome, creature: creatureView(c, req, now) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -163,13 +210,15 @@ app.post('/api/introduce', requireApproved, (req, res) => {
   if (!a || !b) return res.status(404).json({ error: 'Pick two creatures that exist.' });
   const now = Date.now();
   try {
-    const result = introduce(a, b, req.session.user.email, now);
-    if (result.baby) {
-      store.data.creatures[result.baby.id] = result.baby;
-    }
+    record(tick(a, now));
+    record(tick(b, now));
+    const result = introduce(a, b, req.session.user.email, now, undefined, displayName(req.session.user));
+    if (result.baby) store.data.creatures[result.baby.id] = result.baby;
+    record(result.events);
     store.save();
     res.json({ outcome: result.outcome, lines: result.lines, babyId: result.baby?.id ?? null });
   } catch (err) {
+    store.save();
     res.status(400).json({ error: err.message });
   }
 });

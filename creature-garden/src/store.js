@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const EMPTY = { creatures: {}, allowed: {}, requests: {} };
+const EMPTY = { creatures: {}, allowed: {}, requests: {}, events: [], visits: {} };
 
 export function openStore(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });

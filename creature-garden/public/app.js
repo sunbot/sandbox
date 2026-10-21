@@ -3,7 +3,7 @@
 
 const app = document.getElementById('app');
 const who = document.getElementById('who');
-const state = { me: null, creatures: [], foods: [], selectedId: null, lastLine: '' };
+const state = { me: null, creatures: [], foods: [], selectedId: null, lastLine: '', introResult: '', gazette: null, newHeadlines: new Set() };
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -126,34 +126,54 @@ async function logout() {
 }
 
 async function loadGarden() {
-  const data = await api('/api/garden');
+  const [data] = await Promise.all([api('/api/garden'), loadGazette()]);
   state.creatures = data.creatures;
   state.foods = data.foods;
   if (!state.selectedId && state.creatures.length) state.selectedId = state.creatures[0].id;
   renderGarden();
 }
 
+// The server marks headlines that are new since your last visit. Keep that
+// mark for the rest of this page session, even after later refreshes.
+async function loadGazette() {
+  const data = await api('/api/gazette');
+  for (const h of data.headlines) if (h.isNew) state.newHeadlines.add(h.text);
+  state.gazette = data;
+}
+
+function renderGazette() {
+  if (!state.gazette) return null;
+  const date = new Date(state.gazette.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  return el('div', { class: 'card gazette' },
+    el('div', { class: 'masthead' }, el('span', {}, 'The Garden Gazette'), el('span', { class: 'muted' }, date)),
+    el('ul', {}, state.gazette.headlines.map((h) => el('li', { class: h.kind },
+      state.newHeadlines.has(h.text) ? el('span', { class: 'pill' }, 'NEW') : null,
+      h.text))),
+  );
+}
+
 function renderGarden() {
   const selected = state.creatures.find((c) => c.id === state.selectedId);
   const grid = el('div', { class: 'garden' }, state.creatures.map((c) =>
     el('div', {
-      class: `critter${c.id === state.selectedId ? ' selected' : ''}`,
+      class: `critter${c.id === state.selectedId ? ' selected' : ''}${c.away ? ' away' : ''}`,
       role: 'button',
       tabindex: 0,
       onclick: () => { state.selectedId = c.id; state.lastLine = ''; renderGarden(); },
     },
     artNode(c),
     el('div', { class: 'name' }, c.name),
-    el('div', { class: 'sub' }, `${c.temperament} · ${c.stage}`),
+    el('div', { class: 'sub' }, c.away ? `wandered off · ${c.away.reason}` : `${c.temperament} · ${c.stage}`),
     )));
 
   app.replaceChildren(
+    renderGazette(),
     el('div', { class: 'stage' },
       el('div', {},
         el('div', { class: 'card' }, grid),
         el('div', { class: 'card' }, renderIntroduce()),
       ),
-      el('div', {}, selected ? renderCreature(selected) : el('p', { class: 'muted' }, 'No creatures yet.'),
+      el('div', {}, selected ? (selected.away ? renderAway(selected) : renderCreature(selected)) : el('p', { class: 'muted' }, 'No creatures yet.'),
         state.me.access === 'owner' ? el('div', { class: 'card', id: 'admin' }, el('h3', {}, 'Access requests (owner)'), el('p', { class: 'muted' }, 'Loading…')) : null),
     ),
   );
@@ -175,6 +195,7 @@ function renderCreature(c) {
     el('p', { class: 'center muted', style: 'margin:4px 0' },
       `${c.temperament} · ${c.stage} · gen ${c.generation}${c.parents ? ` · child of ${c.parents.join(' & ')}` : ''}`),
     el('p', { class: 'center muted', style: 'margin:0 0 4px' }, `${KIND_LABEL[c.genome.sex]} · ${HEART_LABEL[c.genome.attracts]}`),
+    el('p', { class: 'center calls-you' }, c.you.nickname ? `Calls you “${c.you.nickname}”` : 'Does not have a name for you yet'),
     el('div', { class: 'bubble', id: 'bubble' }, state.lastLine || `${c.name} is ${c.mood}.`),
     el('div', { class: 'bars' },
       bar('Full', c.fullness), bar('Energy', c.energy), bar('Affection', c.affection),
@@ -187,51 +208,78 @@ function renderCreature(c) {
       actionBtn('🍃 Let be', 'let_be'),
     ),
     c.friends.length ? el('p', { class: 'muted' }, `Friends: ${c.friends.map((f) => `${f.name} (${f.affinity})`).join(', ')}`) : null,
+    renderDiary(c),
+  );
+}
+
+function renderDiary(c) {
+  return [
     el('h4', {}, 'Diary (what they remember)'),
     c.diary.length
-      ? el('ul', { class: 'diary' }, c.diary.slice().reverse().map((d) => el('li', {}, d.text)))
+      ? el('ul', { class: 'diary' }, c.diary.slice().reverse().map((d) => el('li', {}, d.count > 1 ? `${d.text} (×${d.count})` : d.text)))
       : el('p', { class: 'muted' }, 'Nothing yet.'),
+  ];
+}
+
+// A creature that wandered off: show its note and let people leave food.
+function renderAway(c) {
+  return el('div', { class: 'card' },
+    el('div', { class: 'center away-art' }, artNode(c)),
+    el('h2', { class: 'center', style: 'margin:0' }, `${c.name} has wandered off`),
+    el('p', { class: 'center muted', style: 'margin:4px 0' }, c.away.reason === 'hungry' ? 'Left to find food.' : 'Ran away, scared.'),
+    el('div', { class: 'bubble note' }, c.away.note),
+    el('div', { class: 'bubble', id: 'bubble' }, state.lastLine || 'Leave something at the garden\'s edge. Only a favourite will tempt them.'),
+    el('p', { class: 'muted' }, `Favourite snacks left so far: ${c.away.lures} of ${c.away.needed}`),
+    el('div', { class: 'actions' },
+      state.foods.map((f) => el('button', { onclick: () => doLure(c.id, f) }, `Leave ${f}`))),
+    renderDiary(c),
   );
 }
 
 function renderIntroduce() {
-  const select = (id) => el('select', { id }, state.creatures.map((c) => el('option', { value: c.id }, `${c.name} (${c.temperament})`)));
+  const home = state.creatures.filter((c) => !c.away);
+  const select = (id) => el('select', { id }, home.map((c) => el('option', { value: c.id }, `${c.name} (${c.temperament})`)));
   const a = select('pair-a');
   const b = select('pair-b');
-  if (state.creatures[1]) b.value = state.creatures[1].id;
+  if (home[1]) b.value = home[1].id;
   return el('div', {},
     el('h3', { style: 'margin-top:0' }, 'Play matchmaker'),
     el('p', { class: 'muted' }, 'Pick two creatures and see if they hit it off. Orientation is a hard limit; their feelings for you help.'),
     el('div', { class: 'row' }, a, el('span', {}, '💞'), b, el('button', { onclick: introduceSelected }, 'Introduce')),
-    el('div', { id: 'intro-result', class: 'notice', style: 'margin-top:10px;display:none' }),
+    state.introResult ? el('div', { class: 'notice', style: 'margin-top:10px' }, state.introResult) : null,
   );
 }
 
 async function introduceSelected() {
   const a = document.getElementById('pair-a').value;
   const b = document.getElementById('pair-b').value;
-  const out = document.getElementById('intro-result');
   try {
     const data = await api('/api/introduce', { method: 'POST', body: { a, b } });
-    out.style.display = 'block';
-    out.textContent = data.lines.join(' ');
-    await loadGarden();
+    state.introResult = data.lines.join(' ');
   } catch (err) {
-    out.style.display = 'block';
-    out.textContent = err.message;
+    state.introResult = err.message;
   }
+  await loadGarden();
 }
 
 async function doAct(id, action, food) {
+  await sendAndRefresh(`/api/creatures/${id}/act`, { action, food });
+}
+
+async function doLure(id, food) {
+  await sendAndRefresh(`/api/creatures/${id}/lure`, { food });
+}
+
+// Actions can change other creatures and the Gazette too (a runaway, a
+// homecoming, a new nickname), so refresh the whole garden afterwards.
+async function sendAndRefresh(path, body) {
   try {
-    const data = await api(`/api/creatures/${id}/act`, { method: 'POST', body: { action, food } });
+    const data = await api(path, { method: 'POST', body });
     state.lastLine = data.line;
-    state.creatures = state.creatures.map((c) => (c.id === id ? data.creature : c));
-    renderGarden();
   } catch (err) {
     state.lastLine = err.message;
-    renderGarden();
   }
+  await loadGarden();
 }
 
 // ---- Owner: approve access --------------------------------------------------
