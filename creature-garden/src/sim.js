@@ -4,7 +4,6 @@
 // Functions that change the garden return `events`: structured records of what
 // happened, which the server keeps and the Gazette turns into headlines.
 
-import { randomUUID } from 'node:crypto';
 import { randomGenome, breed, attractionMatch, defaultRng } from './genetics.js';
 import { personalityOf } from './personality.js';
 import { speak } from './dialogue.js';
@@ -22,6 +21,10 @@ const MAX_DIARY = 100;
 const MAX_DECAY_HOURS = 24 * 10;
 const SYLLABLES = ['bo', 'mi', 'ku', 'fe', 'lo', 'ni', 'pip', 'zu', 'ba', 'so', 'tee', 'rae'];
 
+// randomUUID exists in Node and on https pages; getRandomValues covers the rest.
+const uuid = () =>
+  globalThis.crypto.randomUUID?.() ??
+  Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (x) => x.toString(16).padStart(2, '0')).join('');
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const hoursBetween = (a, b) => (b - a) / HOUR_MS;
 
@@ -33,7 +36,7 @@ export function makeName(rng = defaultRng) {
 
 export function newCreature({ name, genome, parents = null, generation = 0, now, rng = defaultRng }) {
   return {
-    id: `c_${randomUUID()}`,
+    id: `c_${uuid()}`,
     name: name ?? makeName(rng),
     genome: genome ?? randomGenome(rng),
     parents,

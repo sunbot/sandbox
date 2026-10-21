@@ -22,6 +22,34 @@ For local testing without Google, start with `DEV_LOGIN=true` and open
 `?email=friend@example.com` to try the approval flow as someone else.
 Never set `DEV_LOGIN` in production.
 
+## Play on claude.ai (phones included)
+
+The game is also published as a claude.ai page: https://claude.ai/artifact/WAxED1hxxATtSsfQqERnDY
+
+- It runs the same engine (`src/`) in the browser and keeps the shared garden
+  in the page's own database, so there is no server to run.
+- Access is the page's **Share** menu: people you add as **Contributor** can
+  play; **Viewers** can watch but not touch anything.
+- Rebuild after changing the engine or `artifact/`: `npm install`, then
+  `npm run build:artifact`, which writes `artifact/dist/creature-garden.html`
+  for publishing.
+- Opened outside claude.ai, the page runs a practice garden that isn't saved.
+
+## Host the Google sign-in version on Render
+
+`render.yaml` at the repo root sets everything up except the secrets.
+
+1. Set up Google sign-in (next section). For the redirect URI, use
+   `https://<your-service>.onrender.com/auth/google/callback`.
+2. In Render: **New → Blueprint**, connect this GitHub repo, and pick the branch.
+3. When asked, fill in `PUBLIC_URL` (`https://<your-service>.onrender.com`),
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+4. Deploy. The garden is saved on a 1 GB disk at `/var/data`, so it survives
+   restarts and redeploys. Disks need Render's paid Starter plan; on the free
+   plan the garden would reset whenever the service restarts.
+
+Sessions are kept in memory, so everyone is signed out after a redeploy.
+
 ## Set up Google sign-in
 
 1. In Google Cloud Console, create a project and configure the OAuth consent screen

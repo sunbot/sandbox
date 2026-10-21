@@ -42,6 +42,9 @@ function seedGarden() {
 seedGarden();
 
 const app = express();
+// Hosts like Render sit behind a proxy that ends HTTPS; trust it so secure
+// session cookies are still set.
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(session({
   secret: config.sessionSecret,

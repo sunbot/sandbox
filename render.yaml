@@ -1,0 +1,31 @@
+# Render Blueprint for the Google sign-in version of Creature Garden.
+# New > Blueprint in the Render dashboard, pick this repo, then fill in the
+# values marked "sync: false" when Render asks.
+services:
+  - type: web
+    name: creature-garden
+    runtime: node
+    rootDir: creature-garden
+    plan: starter            # persistent disks need a paid plan
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATA_FILE
+        value: /var/data/garden.json
+      - key: OWNER_EMAIL
+        value: moyler.angela@gmail.com
+      - key: PUBLIC_URL        # e.g. https://creature-garden.onrender.com
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+    disk:
+      name: garden-data
+      mountPath: /var/data   # the garden file lives here and survives redeploys
+      sizeGB: 1

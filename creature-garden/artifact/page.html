@@ -1,0 +1,141 @@
+<title>Creature Garden</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;800&family=UnifrakturMaguntia&display=swap">
+<style>
+  /* Layout: one column on phones (news, garden, creature); two columns from 760px,
+     garden and matchmaker on the left, the chosen creature on the right. */
+  :root {
+    --bg: #eef4ea;          /* pale leaf */
+    --surface: #ffffff;
+    --surface-2: #f6faf3;
+    --ink: #263322;         /* deep moss */
+    --muted: #66745f;
+    --line: #d6e2cf;
+    --accent: #d9487f;      /* berry */
+    --accent-ink: #ffffff;
+    --accent-soft: #fbe3ec;
+    --fear: #8b6fd6;        /* bruise-violet, for the fear meter */
+    --paper: #fbf8f0;       /* newsprint */
+    --paper-ink: #2b2a26;
+    --font-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+    --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+    --font-masthead: "UnifrakturMaguntia", "Old English Text MT", Georgia, serif;
+    --radius: 20px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151d13; --surface: #1f2a1c; --surface-2: #19231a; --ink: #edf3e8; --muted: #a3b29b;
+      --line: #33412f; --accent: #f17aa6; --accent-ink: #22141a; --accent-soft: #3a2230;
+      --fear: #ab97f0; --paper: #24221d; --paper-ink: #eee9dc; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151d13; --surface: #1f2a1c; --surface-2: #19231a; --ink: #edf3e8; --muted: #a3b29b;
+    --line: #33412f; --accent: #f17aa6; --accent-ink: #22141a; --accent-soft: #3a2230;
+    --fear: #ab97f0; --paper: #24221d; --paper-ink: #eee9dc; color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 var(--font-body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 16px 40px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; display: grid; gap: 16px; }
+  h1, h2 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; }
+  h1 { font-size: 1.75rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.3rem; }
+  .muted { color: var(--muted); margin: 0; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .top p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  #app { display: grid; gap: 16px; }
+  .loading, .banner { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--accent-soft); }
+  .loading { background: var(--surface); color: var(--muted); }
+
+  button {
+    font: 700 0.95rem var(--font-body);
+    border: 0; border-radius: 999px; padding: 10px 16px; min-height: 44px;
+    background: var(--accent); color: var(--accent-ink); cursor: pointer;
+  }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  button.quiet { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+  button.bonk { background: var(--ink); color: var(--bg); }
+  select {
+    font: 600 1rem var(--font-body); min-height: 44px; padding: 8px 10px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; flex: 1 1 140px;
+  }
+
+  /* The Gazette: newsprint, a blackletter masthead, the lead story set large. */
+  .gazette { background: var(--paper); color: var(--paper-ink); border-radius: 6px; padding: 14px 16px 16px; border: 1px solid var(--line); }
+  .gazette header { border-bottom: 3px double var(--paper-ink); padding-bottom: 6px; margin-bottom: 10px; text-align: center; }
+  .masthead { font-family: var(--font-masthead); font-weight: 400; font-size: clamp(1.7rem, 7vw, 2.4rem); line-height: 1.1; }
+  .dateline { margin: 2px 0 0; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; }
+  .gazette ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .story { font-family: Georgia, "Times New Roman", serif; font-size: 0.95rem; line-height: 1.4; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); }
+  .story:first-child { border-top: 0; padding-top: 0; font-size: 1.15rem; font-weight: 700; }
+  .new {
+    font: 800 0.65rem var(--font-body); letter-spacing: 0.08em; text-transform: uppercase;
+    background: var(--accent); color: var(--accent-ink); border-radius: 4px; padding: 2px 6px; margin-right: 6px; vertical-align: 2px;
+  }
+
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 760px) { .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .column { display: grid; gap: 16px; min-width: 0; }
+
+  .garden { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  @media (min-width: 520px) { .garden { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .critter {
+    display: grid; justify-items: center; gap: 2px; padding: 10px 8px 12px;
+    background: var(--surface); color: var(--ink); border-radius: var(--radius); border: 2px solid transparent; min-height: 0;
+  }
+  .critter.selected { border-color: var(--accent); }
+  .critter .art svg { width: 100%; max-width: 120px; height: auto; display: block; }
+  .critter .name { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+  .critter .sub { font-weight: 600; font-size: 0.78rem; color: var(--muted); }
+  .away .art svg, .portrait.away svg { opacity: 0.35; filter: grayscale(0.8); animation: none; }
+
+  .panel, .matchmaker, .empty { background: var(--surface); border-radius: var(--radius); padding: 16px; display: grid; gap: 10px; scroll-margin-top: 12px; }
+  .panel h2 { text-align: center; font-size: 1.6rem; }
+  .portrait svg { width: 100%; max-width: 220px; height: auto; display: block; margin: 0 auto; }
+  .facts { margin: 0; text-align: center; color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+  .calls-you { margin: 0; text-align: center; font-family: var(--font-display); color: var(--accent); font-size: 1.05rem; }
+  .bubble { margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px; }
+  .note { margin: 0; font-style: italic; border-left: 3px solid var(--line); padding: 4px 12px; color: var(--muted); }
+
+  .meters { display: grid; gap: 6px; }
+  .meter { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) 2.2em; gap: 8px; align-items: center; font-size: 0.85rem; font-weight: 600; }
+  .meter .track { height: 10px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .meter .fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.4s; }
+  .meter .fill.fear { background: var(--fear); }
+  .meter .value { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pair { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pair span { color: var(--accent); font-size: 1.2rem; }
+
+  .diary summary { font-family: var(--font-display); font-weight: 600; cursor: pointer; }
+  .diary ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 0.88rem; display: grid; gap: 2px; }
+
+  .creature-art.bob { animation: bob 2.6s ease-in-out infinite; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @media (prefers-reduced-motion: reduce) { .creature-art.bob { animation: none; } .meter .fill { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Creature Garden</h1>
+    <p>Feed them, love them, matchmake them. They remember.</p>
+  </header>
+  <main id="app" aria-live="polite"></main>
+</div>
+
+<script>
+/*BUNDLE*/
+</script>
