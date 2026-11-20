@@ -63,6 +63,10 @@ public class ParsingTests
         Assert.Equal(3, map[NutrientIds.SugarsTotal]);
         Assert.False(map.ContainsKey(NutrientIds.EnergyAtwaterGeneral));
         Assert.False(UsdaImporter.Normalize(new Dictionary<int, double> { [NutrientIds.Protein] = 3 }));
+
+        var chicken = new Dictionary<int, double> { [NutrientIds.Energy] = 132, [NutrientIds.Carbohydrate] = -0.44 };
+        UsdaImporter.Normalize(chicken);
+        Assert.Equal(0, chicken[NutrientIds.Carbohydrate]);
     }
 
     [Theory]

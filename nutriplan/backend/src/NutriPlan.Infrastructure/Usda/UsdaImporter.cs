@@ -158,6 +158,8 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         }
         if (!map.ContainsKey(NutrientIds.SugarsTotal) && map.TryGetValue(NutrientIds.SugarsTotalNlea, out var sugar))
             map[NutrientIds.SugarsTotal] = sugar;
+        // "Carbohydrate, by difference" can come out slightly negative from rounding (e.g. raw chicken): clamp.
+        foreach (var key in map.Keys.ToList()) if (map[key] < 0) map[key] = 0;
         map.Remove(NutrientIds.EnergyAtwaterGeneral);
         map.Remove(NutrientIds.EnergyAtwaterSpecific);
         map.Remove(NutrientIds.SugarsTotalNlea);

@@ -1,0 +1,19 @@
+# Local Postgres for NutriPlan. `docker compose up -d` then run the API.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: nutriplan
+      POSTGRES_PASSWORD: nutriplan
+      POSTGRES_DB: nutriplan
+    ports:
+      - "5432:5432"
+    volumes:
+      - nutriplan-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nutriplan"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  nutriplan-db:

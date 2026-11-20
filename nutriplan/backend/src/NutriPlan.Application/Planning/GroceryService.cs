@@ -90,6 +90,7 @@ public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recip
             .ToList();
 
         var aisles = items
+            .Where(i => i.Item.TotalGrams is null or >= 1) // a pinch of salt isn't a shopping item
             .GroupBy(i => i.Aisle)
             .OrderBy(g => Aisles.Order(g.Key))
             .Select(g => new GroceryAisleDto(g.Key, g.Select(x => x.Item).OrderBy(i => i.InPantry).ThenBy(i => i.Name).ToList()))
@@ -104,7 +105,7 @@ public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recip
         if (food is null) return fallback;
         if (food.Source is FoodSource.UsdaBranded or FoodSource.OpenFoodFacts or FoodSource.User) return food.DisplayName;
         var parts = food.Name.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "raw", "broilers or fryers", "meat only", "all commercial varieties", "fresh", "mature seeds", "regular" };
+        var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "nfs", "raw", "broilers or fryers", "meat only", "all commercial varieties", "fresh", "mature seeds", "regular" };
         var kept = parts.Where(p => !skip.Contains(p)).Take(2).ToList();
         return kept.Count == 0 ? food.Name : string.Join(", ", kept);
     }
