@@ -76,7 +76,7 @@ public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recip
                 var pantryGrams = pantryMatch?.Grams;
                 var need = grams is not null && pantryGrams is not null ? Math.Max(0, grams.Value - pantryGrams.Value) : grams;
                 var inPantry = pantryMatch is not null && (pantryGrams is null || need <= 0);
-                return (Aisle: food?.Category ?? "Other",
+                return (Aisle: Aisles.For(food?.Category, first.Name),
                     Item: new GroceryItemDto(
                         ShoppingName(food, first.Name),
                         first.FoodId,
@@ -91,7 +91,7 @@ public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recip
 
         var aisles = items
             .GroupBy(i => i.Aisle)
-            .OrderBy(g => g.Key == "Other" ? 1 : 0).ThenBy(g => g.Key)
+            .OrderBy(g => Aisles.Order(g.Key))
             .Select(g => new GroceryAisleDto(g.Key, g.Select(x => x.Item).OrderBy(i => i.InPantry).ThenBy(i => i.Name).ToList()))
             .ToList();
 
@@ -115,7 +115,12 @@ public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recip
         if (grams is null) return "see recipe";
         var text = grams >= 1000 ? $"{grams / 1000:0.##} kg" : $"{grams:0} g";
         var imperial = grams >= 454 ? $"{grams / Units.Pound.ToBase:0.#} lb" : grams >= 28 ? $"{grams / Units.Ounce.ToBase:0.#} oz" : null;
-        var portion = food?.Portions.FirstOrDefault(p => QuantityResolver.LeadingVolumeUnit(p.Description) is null && p.GramsPerUnit is > 15 and < 1500);
+        // Only count natural items ("≈ 6 banana", "≈ 2 medium"), not containers or odd measures.
+        var item = food is null ? null : QuantityResolver.Resolve(food, 1, null);
+        var portion = item is { Method: ResolutionMethod.DefaultPortion, Portion: { GramsPerUnit: > 15 and < 1500 } p }
+                      && !p.Description.Contains("container", StringComparison.OrdinalIgnoreCase)
+                      && !p.Description.Contains("package", StringComparison.OrdinalIgnoreCase)
+            ? p : null;
         var count = portion is null ? null : $"≈ {Math.Ceiling(grams.Value / portion.GramsPerUnit):0} {portion.Description}";
         return string.Join(" · ", new[] { text, imperial, count }.Where(s => s is not null));
     }
@@ -124,4 +129,44 @@ public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recip
         ing.Amount is null ? ing.RawText : $"{ing.Amount * factor:0.##} {ing.Unit} {ing.FoodText}".Replace("  ", " ");
 
     private sealed record Line(Guid? FoodId, string Name, string Text, double? Grams, string? RawAmount, string UsedIn);
+}
+
+/// <summary>Maps USDA food categories (and, failing that, the food name) to familiar store aisles.</summary>
+public static class Aisles
+{
+    // Checked in this order (specific before general: "Salad dressings and vegetable oils" is oils, not produce).
+    private static readonly (string Aisle, string[] Keywords)[] Rules =
+    [
+        ("Baking & Spices", ["spice", "sugar", "sweets", "baking", "leavening", "honey", "syrup", "vanilla", "salt"]),
+        ("Oils & Condiments", ["fats and oils", "oil", "dressing", "sauce", "condiment", "mayonnaise", "vinegar"]),
+        ("Produce", ["fruit", "vegetable", "banana", "apple", "berr", "citrus", "melon", "lettuce", "potato", "tomato", "onion", "garlic", "avocado", "broccoli", "spinach", "carrot"]),
+        ("Meat & Seafood", ["poultry", "chicken", "turkey", "beef", "pork", "lamb", "sausage", "meat", "fish", "seafood", "shellfish", "salmon", "tuna", "shrimp"]),
+        ("Dairy & Eggs", ["dairy", "milk", "yogurt", "cheese", "egg", "butter", "cream"]),
+        ("Bakery", ["baked product", "bread", "roll", "bagel", "tortilla", "muffin"]),
+        ("Grains, Pasta & Cereal", ["cereal", "grain", "pasta", "rice", "oat", "noodle", "flour"]),
+        ("Canned & Dry Goods", ["legume", "bean", "lentil", "soup", "canned", "nut", "seed"]),
+        ("Beverages", ["beverage", "juice", "coffee", "tea", "soda", "water"]),
+        ("Snacks", ["snack", "chip", "cracker", "cookie", "candy", "bar"]),
+    ];
+
+    /// <summary>Display order: roughly the path through a typical store.</summary>
+    public static readonly string[] OrderedAisles =
+    [
+        "Produce", "Bakery", "Meat & Seafood", "Dairy & Eggs", "Grains, Pasta & Cereal", "Canned & Dry Goods",
+        "Baking & Spices", "Oils & Condiments", "Snacks", "Beverages", "Other",
+    ];
+
+    public static string For(string? category, string name)
+    {
+        foreach (var text in new[] { category, name })
+        {
+            if (string.IsNullOrWhiteSpace(text)) continue;
+            var lower = text.ToLowerInvariant();
+            foreach (var (aisle, keywords) in Rules)
+                if (keywords.Any(lower.Contains)) return aisle;
+        }
+        return "Other";
+    }
+
+    public static int Order(string aisle) => Array.IndexOf(OrderedAisles, aisle) is var i and >= 0 ? i : OrderedAisles.Length;
 }

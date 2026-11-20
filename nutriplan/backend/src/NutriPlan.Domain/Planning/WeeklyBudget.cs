@@ -9,7 +9,8 @@ public sealed record DayBudget(
     double Consumed,
     double PlannedRemaining,
     bool IsPast,
-    bool IsToday)
+    bool IsToday,
+    bool IsUntracked = false)
 {
     /// <summary>Consumed + still planned for the day.</summary>
     public double Projected => Consumed + PlannedRemaining;
@@ -50,7 +51,8 @@ public static class WeeklyBudgetCalculator
 
         var past = ordered.Where(d => d.Date < today).ToList();
         var remainingDays = ordered.Where(d => d.Date >= today).ToList();
-        var consumedPast = past.Sum(d => d.ConsumedCalories);
+        // A past day with nothing logged wasn't tracked, not fasted: count it as on target.
+        var consumedPast = past.Sum(d => d.ConsumedCalories > 0 ? d.ConsumedCalories : baseTarget);
 
         double adjusted = baseTarget;
         double unabsorbed = 0;
@@ -75,7 +77,8 @@ public static class WeeklyBudgetCalculator
                 d.ConsumedCalories,
                 isPast ? 0 : d.PlannedRemainingCalories,
                 isPast,
-                d.Date == today);
+                d.Date == today,
+                isPast && d.ConsumedCalories <= 0);
         }).ToList();
 
         return new WeekBudget(

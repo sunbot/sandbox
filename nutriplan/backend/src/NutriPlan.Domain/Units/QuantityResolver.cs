@@ -17,6 +17,8 @@ public sealed record ResolvedQuantity(double? Grams, ResolutionMethod Method, st
 /// </summary>
 public static partial class QuantityResolver
 {
+    private static readonly HashSet<string> SizeWords = ["small", "medium", "large", "extra-large", "jumbo", "regular"];
+
     private static readonly string[] DefaultPortionHints = ["serving", "medium", "piece", "item", "each", "whole", "unit", "large"];
 
     public static ResolvedQuantity Resolve(Food food, double amount, string? unitText) =>
@@ -32,15 +34,21 @@ public static partial class QuantityResolver
 
         if (unit is { Kind: UnitKind.Volume })
         {
-            foreach (var portion in portions)
+            // Use the measure closest in size to what was asked (a cup weight for "2 cups", not a teaspoon × 96)
+            // and the plainest one ("cup" over "cup, packed"), to keep rounding error small.
+            var requestedMl = unit.ToBaseAmount(amount);
+            var best = portions
+                .Select(p => (Portion: p, Unit: LeadingVolumeUnit(p.Description)))
+                .Where(x => x.Unit is not null)
+                .OrderBy(x => Math.Abs(Math.Log(Math.Max(requestedMl, 0.01) / (x.Unit!.ToBase * Math.Max(x.Portion.Amount, 0.01)))))
+                .ThenBy(x => x.Portion.Description.Length)
+                .FirstOrDefault();
+            if (best.Unit is not null)
             {
-                var portionUnit = LeadingVolumeUnit(portion.Description);
-                if (portionUnit is null) continue;
-                var mlPerPortionUnit = portionUnit.ToBase;
-                var gramsPerMl = portion.GramsPerUnit / mlPerPortionUnit;
-                var grams = unit.ToBaseAmount(amount) * gramsPerMl;
+                var gramsPerMl = best.Portion.GramsPerUnit / best.Unit.ToBase;
+                var grams = requestedMl * gramsPerMl;
                 return new(grams, ResolutionMethod.VolumeViaPortion,
-                    $"{amount:0.##} {unit.Name} ≈ {grams:0.#} g (USDA: 1 {portion.Description} = {portion.GramsPerUnit:0.#} g)", portion);
+                    $"{amount:0.##} {unit.Name} ≈ {grams:0.#} g (USDA: 1 {best.Portion.Description} = {best.Portion.GramsPerUnit:0.#} g)", best.Portion);
             }
             return new(null, ResolutionMethod.Unresolved,
                 $"No volume measure is known for this food, so {amount:0.##} {unit.Name} can't be converted to grams accurately. Weigh it or pick a portion.");
@@ -50,11 +58,18 @@ public static partial class QuantityResolver
         if (!string.IsNullOrWhiteSpace(unitText))
         {
             var wanted = Singular(unitText.Trim().ToLowerInvariant());
-            var match = portions.FirstOrDefault(p => Words(p.Description).Contains(wanted));
+            // Several can match ("slice, snack-size", "medium or regular slice"): prefer the regular one.
+            var match = portions
+                .Where(p => Words(p.Description).Contains(wanted))
+                .OrderByDescending(p => PlainnessScore(p.Description, wanted))
+                .ThenBy(p => p.Description.Length)
+                .FirstOrDefault();
             if (match is not null)
                 return new(amount * match.GramsPerUnit, ResolutionMethod.NamedPortion,
                     $"{amount:0.##} × {match.Description} ({match.GramsPerUnit:0.#} g each)", match);
-            return new(null, ResolutionMethod.Unresolved, $"\"{unitText}\" isn't a known measure for this food. Pick a portion or enter grams.");
+            // A size word with no matching size listed ("1 medium" when USDA only has "1 banana"): use the standard item.
+            if (!SizeWords.Contains(wanted))
+                return new(null, ResolutionMethod.Unresolved, $"\"{unitText}\" isn't a known measure for this food. Pick a portion or enter grams.");
         }
 
         // No unit at all: "2 eggs" → the food's natural single item.
@@ -62,16 +77,34 @@ public static partial class QuantityResolver
         var hints = foodName is not null && foodName.StartsWith("egg", StringComparison.OrdinalIgnoreCase)
             ? DefaultPortionHints.Prepend("large")
             : DefaultPortionHints;
-        var fallback = hints
-            .Select(h => portions.FirstOrDefault(p => Words(p.Description).Contains(h) && LeadingVolumeUnit(p.Description) is null))
-            .FirstOrDefault(p => p is not null)
-            ?? portions.FirstOrDefault(p => LeadingVolumeUnit(p.Description) is null);
+        var usable = portions.Where(p => LeadingVolumeUnit(p.Description) is null && !Words(p.Description).Contains("inch")).ToList();
+
+        // Best default: a portion named after the food itself ("1 banana" for "Banana, raw").
+        var nameWord = foodName is null ? null : Singular(WordSplit().Split(foodName.ToLowerInvariant()).FirstOrDefault(w => w.Length > 2) ?? "");
+        var fallback = (nameWord is null ? null : usable.FirstOrDefault(p => Words(p.Description).Contains(nameWord)))
+            ?? hints.Select(h => usable.FirstOrDefault(p => Words(p.Description).Contains(h))).FirstOrDefault(p => p is not null)
+            ?? usable.FirstOrDefault();
 
         if (fallback is not null)
             return new(amount * fallback.GramsPerUnit, ResolutionMethod.DefaultPortion,
-                $"{amount:0.##} × {fallback.Description} ({fallback.GramsPerUnit:0.#} g each)", fallback);
+                string.IsNullOrWhiteSpace(unitText)
+                    ? $"{amount:0.##} × {fallback.Description} ({fallback.GramsPerUnit:0.#} g each)"
+                    : $"No \"{unitText}\" size listed; using {amount:0.##} × {fallback.Description} ({fallback.GramsPerUnit:0.#} g each)", fallback);
 
         return new(null, ResolutionMethod.Unresolved, "Amount has no unit and this food has no standard portion. Enter grams.");
+    }
+
+    private static readonly string[] RegularWords = ["regular", "medium", "standard", "average"];
+    private static readonly string[] OddWords = ["snack", "thin", "small", "mini", "miniature", "baby", "crust", "bite", "cocktail", "thick", "large"];
+
+    private static int PlainnessScore(string description, string wanted)
+    {
+        var words = Words(description);
+        var score = 0;
+        if (words.Count == 1) score += 4;
+        if (RegularWords.Any(words.Contains)) score += 3;
+        if (OddWords.Any(w => words.Contains(w) && w != wanted)) score -= 2;
+        return score;
     }
 
     /// <summary>Finds a volume unit at the start of a USDA portion description, e.g. "cup, chopped" or "tbsp".</summary>

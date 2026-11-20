@@ -26,9 +26,12 @@ public static class Units
     public static readonly Unit Pint = new("pint", UnitKind.Volume, 473.176473, "pint", "pints", "pt");
     public static readonly Unit Quart = new("quart", UnitKind.Volume, 946.352946, "quart", "quarts", "qt");
     public static readonly Unit Gallon = new("gallon", UnitKind.Volume, 3785.411784, "gallon", "gallons", "gal");
+    /// <summary>Kitchen conventions: a pinch is 1/16 tsp and a dash 1/8 tsp.</summary>
+    public static readonly Unit Pinch = new("pinch", UnitKind.Volume, 4.92892159375 / 16, "pinch", "pinches");
+    public static readonly Unit Dash = new("dash", UnitKind.Volume, 4.92892159375 / 8, "dash", "dashes");
 
     public static IReadOnlyList<Unit> All { get; } =
-        [Gram, Kilogram, Milligram, Ounce, Pound, Milliliter, Liter, Teaspoon, Tablespoon, FluidOunce, Cup, Pint, Quart, Gallon];
+        [Gram, Kilogram, Milligram, Ounce, Pound, Milliliter, Liter, Teaspoon, Tablespoon, FluidOunce, Cup, Pint, Quart, Gallon, Pinch, Dash];
 
     private static readonly Dictionary<string, Unit> CaseSensitive = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, Unit> CaseInsensitive = new(StringComparer.OrdinalIgnoreCase);

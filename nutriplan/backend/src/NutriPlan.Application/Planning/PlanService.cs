@@ -16,6 +16,7 @@ public sealed record PlanDayDto(
     DateOnly Date,
     bool IsPast,
     bool IsToday,
+    bool IsUntracked,
     double BaseCalorieTarget,
     double AdjustedCalorieTarget,
     NutritionDto Eaten,
@@ -81,7 +82,7 @@ public sealed class PlanService(
             var remaining = b.IsPast
                 ? NutrientProfile.Empty
                 : NutrientProfile.Sum(dayPlan.Where(p => p.Status == PlanStatus.Planned).Select(p => p.Item.Nutrients));
-            return new PlanDayDto(b.Date, b.IsPast, b.IsToday, b.BaseTarget, b.AdjustedTarget,
+            return new PlanDayDto(b.Date, b.IsPast, b.IsToday, b.IsUntracked, b.BaseTarget, b.AdjustedTarget,
                 NutritionDto.From(eaten), NutritionDto.From(remaining), NutritionDto.From(eaten + remaining),
                 dayPlan.Select(PlanEntryDto.From).ToList(), dayLog.Select(DiaryEntryDto.From).ToList());
         }).ToList();
@@ -187,6 +188,8 @@ public sealed class PlanService(
             if (plannedKcal <= 0) continue;
             var room = day.AdjustedCalorieTarget - day.Eaten.Calories;
             if (Math.Abs(room - plannedKcal) / day.AdjustedCalorieTarget < 0.05) continue;
+            // Scaling only makes sense for a mostly-planned day; for a sparse day, the gap filler is the right tool.
+            if (plannedKcal < room * 0.6) continue;
             var scale = Math.Clamp(Math.Round(room / plannedKcal, 2), 0.5, 1.5);
             proposals.Add(new RebalanceProposalDto(day.Date, day.AdjustedCalorieTarget, plannedKcal, scale, open));
         }

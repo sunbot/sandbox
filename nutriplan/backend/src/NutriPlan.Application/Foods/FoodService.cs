@@ -37,19 +37,44 @@ public sealed class FoodService(
 {
     public const int DefaultSearchLimit = 25;
 
+    /// <summary>Everyday words → how USDA names them. Only whole-query matches; add your own.</summary>
+    public static readonly Dictionary<string, string> Synonyms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["toast"] = "bread toasted",
+        ["oj"] = "orange juice",
+        ["pb"] = "peanut butter",
+        ["coffee"] = "coffee brewed",
+        ["black coffee"] = "coffee brewed",
+        ["tea"] = "tea brewed",
+        ["water"] = "water tap",
+        ["egg"] = "egg whole",
+        ["eggs"] = "egg whole",
+    };
+
     public async Task<IReadOnlyList<FoodSummaryDto>> SearchAsync(string query, int limit = DefaultSearchLimit, CancellationToken ct = default)
     {
         var ranked = await SearchRankedAsync(query, limit, ct);
         return ranked.Select(r => FoodSummaryDto.From(r.Food)).ToList();
     }
 
-    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default)
+    /// <param name="dedupe">Collapse entries with the same name (for display). Matching code passes false so it can
+    /// try each entry's measures.</param>
+    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
         var rows = await foods.SearchAsync(query.Trim(), Math.Max(limit * 12, 300), ct);
-        // Foundation data has several samples under one name; keep the best-ranked one.
+        if (!dedupe) return FoodRanker.Rank(query, rows).Take(limit).ToList();
+        // Several entries can share a name (Foundation samples, SR Legacy, Survey). Keep one per name, preferring
+        // one that has household measures (cup, slice…) so amounts like "1 cup" can be converted.
         return FoodRanker.Rank(query, rows)
-            .DistinctBy(r => (r.Food.Name.ToLowerInvariant(), r.Food.Brand?.ToLowerInvariant()))
+            .GroupBy(r => (r.Food.Name.ToLowerInvariant(), r.Food.Brand?.ToLowerInvariant()))
+            .Select(g =>
+            {
+                var best = g.First();
+                var withPortions = g.FirstOrDefault(r => r.Food.Portions.Count > 0);
+                return withPortions is not null && best.Food.Portions.Count == 0 ? withPortions with { Score = best.Score } : best;
+            })
+            .OrderByDescending(r => r.Score)
             .Take(limit)
             .ToList();
     }
@@ -116,7 +141,7 @@ public sealed class FoodService(
     public async Task<FoodMatchGroupDto> MatchAsync(
         string originalText, string foodQuery, double? amount, string? unit, string? cookedState, int limit, CancellationToken ct)
     {
-        var query = foodQuery;
+        var query = Synonyms.TryGetValue(foodQuery.Trim(), out var synonym) ? synonym : foodQuery;
         if (cookedState is not null && !query.Contains(cookedState, StringComparison.OrdinalIgnoreCase))
             query = $"{query} {cookedState}";
 

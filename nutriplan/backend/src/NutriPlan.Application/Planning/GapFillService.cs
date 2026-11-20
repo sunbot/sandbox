@@ -148,20 +148,32 @@ public sealed class GapFillService(
     private static GapCandidate RecipeCandidate(Recipe r, double bonus) =>
         new($"r:{r.Id}", ItemKind.Recipe, null, r.Id, r.Name, r.NutritionPerServing.Scale(0.5), 0.5, "serving", 1, 4, bonus);
 
-    /// <summary>Quantities move in ~quarter-portion steps up to about 2 portions.</summary>
+    /// <summary>Quantities move in ~quarter-portion steps up to 1.5 portions (and never more than 300 g).</summary>
     private static GapCandidate FoodCandidate(Food food, double usualGrams, double bonus)
     {
+        usualGrams = Math.Clamp(usualGrams, 10, 250);
         var step = Math.Max(5, Math.Round(usualGrams / 4 / 5) * 5);
-        var maxSteps = (int)Math.Clamp(Math.Ceiling(usualGrams * 2 / step), 2, 16);
+        var maxSteps = (int)Math.Clamp(Math.Floor(Math.Min(usualGrams * 1.5, 300) / step), 1, 16);
         return new GapCandidate($"f:{food.Id}", ItemKind.Food, food.Id, null, food.DisplayName, food.NutrientsFor(step), step, "g", 1, maxSteps, bonus);
     }
 
-    /// <summary>A natural single portion for a food (its first non-volume portion), else 100 g.</summary>
-    private static double TypicalGrams(Food food)
+    /// <summary>
+    /// A realistic single serving: the FDA reference amount ("NLEA serving") when USDA lists it, else a labelled
+    /// serving, the food's natural item ("1 banana"), a cup, or 100 g.
+    /// </summary>
+    public static double TypicalGrams(Food food)
     {
-        var portion = food.Portions.FirstOrDefault(p => Domain.Units.QuantityResolver.LeadingVolumeUnit(p.Description) is null && p.GramsPerUnit is >= 10 and <= 400)
-                      ?? food.Portions.FirstOrDefault(p => p.GramsPerUnit is >= 10 and <= 400);
-        return portion?.GramsPerUnit ?? 100;
+        var p = food.Portions;
+        var nlea = p.FirstOrDefault(x => x.Description.Contains("NLEA", StringComparison.OrdinalIgnoreCase))
+                   ?? p.FirstOrDefault(x => x.Description.StartsWith("serving", StringComparison.OrdinalIgnoreCase));
+        if (nlea is { GramsPerUnit: >= 5 and <= 300 }) return nlea.GramsPerUnit;
+
+        var item = Domain.Units.QuantityResolver.Resolve(food, 1, null);
+        if (item is { Method: Domain.Units.ResolutionMethod.DefaultPortion, Grams: >= 10 and <= 300 }) return item.Grams.Value;
+
+        var cup = Domain.Units.QuantityResolver.Resolve(food, 1, "cup");
+        if (cup.Grams is >= 10 and <= 250) return cup.Grams.Value;
+        return 100;
     }
 
     private static GapSuggestionDto ToDto(GapSuggestion s, IReadOnlyList<GapTarget> targets)

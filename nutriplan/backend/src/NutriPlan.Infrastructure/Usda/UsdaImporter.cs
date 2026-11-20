@@ -49,6 +49,7 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
 
         // 1) Which foods to import (by data type), with names and categories.
         var categories = ReadCategories(Path.Combine(folder, "food_category.csv"));
+        foreach (var (id, name) in ReadWweiaCategories(Path.Combine(folder, "wweia_food_category.csv"))) categories.TryAdd(id, name);
         var foods = new Dictionary<long, UsdaFoodRow>();
         using (var reader = Open(foodCsv))
         {
@@ -212,6 +213,14 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         return reader.GetRecords<UsdaCategoryRow>().ToDictionary(r => r.id, r => r.description);
     }
 
+    /// <summary>Survey (FNDDS) foods use "What We Eat in America" categories instead of food_category.csv.</summary>
+    private static Dictionary<int, string> ReadWweiaCategories(string path)
+    {
+        if (!File.Exists(path)) return [];
+        using var reader = Open(path);
+        return reader.GetRecords<UsdaWweiaRow>().ToDictionary(r => r.wweia_food_category, r => r.wweia_food_category_description);
+    }
+
     /// <summary>Legacy nutrient number (e.g. 208) → current nutrient id (e.g. 1008), from nutrient.csv.</summary>
     private static Dictionary<int, int> ReadLegacyNutrientNumbers(string path)
     {
@@ -243,6 +252,7 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
     public sealed class UsdaFoodRow { public long fdc_id { get; set; } public string data_type { get; set; } = ""; public string description { get; set; } = ""; public int? food_category_id { get; set; } }
     public sealed class UsdaFoodNutrientRow { public long? fdc_id { get; set; } public int? nutrient_id { get; set; } public double? amount { get; set; } }
     public sealed class UsdaPortionRow { public long? fdc_id { get; set; } public double? amount { get; set; } public int? measure_unit_id { get; set; } public string? portion_description { get; set; } public string? modifier { get; set; } public double? gram_weight { get; set; } }
+    public sealed class UsdaWweiaRow { public int wweia_food_category { get; set; } public string wweia_food_category_description { get; set; } = ""; }
     public sealed class UsdaNutrientRow { public int id { get; set; } public string? nutrient_nbr { get; set; } }
     public sealed class UsdaMeasureUnitRow { public int id { get; set; } public string name { get; set; } = ""; }
     public sealed class UsdaCategoryRow { public int id { get; set; } public string description { get; set; } = ""; }

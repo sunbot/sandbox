@@ -233,7 +233,7 @@ public sealed class RecipeService(
     /// </summary>
     public async Task MatchIngredientsAsync(Recipe recipe, bool onlyUnmatched, CancellationToken ct)
     {
-        var cache = new Dictionary<string, RankedFood?>(StringComparer.OrdinalIgnoreCase);
+        var cache = new Dictionary<string, List<RankedFood>>(StringComparer.OrdinalIgnoreCase);
         foreach (var ing in recipe.Ingredients)
         {
             if (ing.Status is IngredientMatchStatus.Ignored or IngredientMatchStatus.Confirmed) continue;
@@ -246,12 +246,14 @@ public sealed class RecipeService(
                 continue;
             }
 
-            if (!cache.TryGetValue(ing.FoodText, out var best))
+            var query = IngredientQuery.Clean(ing.FoodText);
+            if (!cache.TryGetValue(query, out var top))
             {
-                best = (await foodService.SearchRankedAsync(ing.FoodText, 1, ct)).FirstOrDefault();
-                cache[ing.FoodText] = best;
+                top = (await foodService.SearchRankedAsync(query, 12, ct, dedupe: false)).ToList();
+                cache[query] = top;
             }
 
+            var best = top.FirstOrDefault();
             if (best is null || best.Score < MinAutoMatchScore)
             {
                 (ing.FoodId, ing.FoodName, ing.Grams, ing.Status) = (null, null, null, IngredientMatchStatus.Unmatched);
@@ -260,7 +262,32 @@ public sealed class RecipeService(
                 continue;
             }
 
+            // Many lab-analysed foods have no cup/tbsp weights. If the top match can't convert this amount,
+            // use the next close match that can (e.g. SR Legacy "Oats" instead of a Foundation sample).
             var q = QuantityResolver.Resolve(best.Food, ing.Amount ?? 1, ing.Unit);
+            if (!q.IsResolved)
+            {
+                foreach (var alternative in top.Skip(1).Where(a => a.Score >= best.Score - 20))
+                {
+                    var altQ = QuantityResolver.Resolve(alternative.Food, ing.Amount ?? 1, ing.Unit);
+                    if (!altQ.IsResolved) continue;
+                    (best, q) = (alternative, altQ);
+                    break;
+                }
+            }
+            if (!q.IsResolved)
+            {
+                // Still nothing: borrow the measure from a nutritionally equivalent food ("Oats, raw" has a cup
+                // weight; "Oats, rolled" doesn't). Same composition ⇒ same density, so the grams are sound.
+                foreach (var alternative in top.Skip(1).Where(a => NutritionallyEquivalent(a.Food, best.Food)))
+                {
+                    var altQ = QuantityResolver.Resolve(alternative.Food, ing.Amount ?? 1, ing.Unit);
+                    if (!altQ.IsResolved) continue;
+                    q = altQ with { Explanation = $"{altQ.Explanation} — measure from \"{alternative.Food.Name}\"" };
+                    break;
+                }
+            }
+
             ing.FoodId = best.Food.Id;
             ing.FoodName = best.Food.DisplayName;
             ing.Grams = q.Grams is null ? null : Math.Round(q.Grams.Value, 2);
@@ -269,6 +296,15 @@ public sealed class RecipeService(
             ing.ResolutionNote = q.Explanation;
         }
         await RecalculateAsync(recipe, ct);
+    }
+
+    /// <summary>Within ~8 % on calories and close on each macro: effectively the same food.</summary>
+    public static bool NutritionallyEquivalent(Food a, Food b)
+    {
+        var x = a.NutrientsPer100g; var y = b.NutrientsPer100g;
+        static bool Close(double p, double q, double rel, double abs) => Math.Abs(p - q) <= Math.Max(abs, rel * Math.Max(p, q));
+        return Close(x.Calories, y.Calories, 0.08, 10) && Close(x.Protein, y.Protein, 0.15, 1.5)
+               && Close(x.Carbs, y.Carbs, 0.15, 2) && Close(x.Fat, y.Fat, 0.15, 1.5);
     }
 
     private static double Confidence(double score) => Math.Round(Math.Clamp((score - 20) / 60, 0, 1), 2);

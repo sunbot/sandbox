@@ -22,7 +22,7 @@ public static partial class FoodRanker
     private static readonly HashSet<string> CookingWords =
     [
         "cooked", "roasted", "grilled", "fried", "baked", "boiled", "steamed", "broiled", "braised", "stewed",
-        "sauteed", "poached", "scrambled", "toasted", "smoked", "microwaved", "pan-fried", "stir-fried",
+        "sauteed", "poached", "scrambled", "toasted", "smoked", "microwaved", "pan-fried", "stir-fried", "rotisserie",
     ];
 
     /// <summary>USDA puts a category first ("Nuts, almonds", "Fish, salmon, ..."): the real food is the next segment.</summary>
@@ -74,8 +74,9 @@ public static partial class FoodRanker
             score += 40.0 * found / queryTokens.Count;
             if (found == queryTokens.Count) score += 15;
 
-            // Position: a query word in the head segment ("Chicken, ...", "Nuts, almonds") is a strong signal.
-            score += 10.0 * queryTokens.Count(headTokens.Contains) / queryTokens.Count;
+            // Position: query words near the start ("Chicken, breast, ...", "Nuts, almonds") are a strong signal.
+            var leading = headTokens.Concat(Tokens(segments.Length > 1 ? segments[1] : "")).ToHashSet();
+            score += 10.0 * queryTokens.Count(leading.Contains) / queryTokens.Count;
 
             // "Almond butter", "Oat milk", "Salmon nuggets": the query word only modifies a different food.
             var lastMatch = headTokens.FindLastIndex(querySet.Contains);

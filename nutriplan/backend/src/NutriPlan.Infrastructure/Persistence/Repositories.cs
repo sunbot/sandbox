@@ -34,7 +34,8 @@ public sealed class FoodRepository(NutriPlanDbContext db) : IFoodRepository
     /// </summary>
     public async Task<IReadOnlyList<FoodSearchRow>> SearchAsync(string query, int limit, CancellationToken ct = default)
     {
-        var tokens = FoodRanker.Tokens(query).Distinct().Take(6).ToList();
+        // Substring patterns need a stem that's contained in every form: "blueberry" isn't in "blueberries".
+        var tokens = FoodRanker.Tokens(query).Select(t => t.Length > 4 && t.EndsWith('y') ? t[..^1] : t).Distinct().Take(6).ToList();
         if (tokens.Count == 0) return [];
 
         var all = db.Foods.AsNoTracking().Where(f => !f.IsArchived);
