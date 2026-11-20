@@ -22,8 +22,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        var connectionString = config.GetConnectionString("NutriPlan")
-            ?? throw new InvalidOperationException("Connection string 'NutriPlan' is missing.");
+        // DATABASE_URL (what most hosts provide) wins over appsettings so a deployment needs no config files.
+        var raw = config["DATABASE_URL"] ?? config.GetConnectionString("NutriPlan")
+            ?? throw new InvalidOperationException("Set DATABASE_URL or ConnectionStrings:NutriPlan.");
+        var connectionString = ConnectionStrings.FromUrlOrRaw(raw);
 
         services.AddDbContext<NutriPlanDbContext>(o => o.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<NutriPlanDbContext>());
@@ -34,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IPantryRepository, PantryRepository>();
         services.AddScoped<ITargetsRepository, TargetsRepository>();
         services.AddScoped<UsdaImporter>();
+        services.AddHostedService<UsdaSeeder>();
 
         services.Configure<AppOptions>(config.GetSection(AppOptions.Section));
         services.AddSingleton<IClock, SystemClock>();
@@ -63,9 +66,14 @@ public static class DependencyInjection
 
 public sealed class SystemClock(Microsoft.Extensions.Options.IOptions<AppOptions> options) : IClock
 {
-    private readonly TimeZoneInfo _zone = string.IsNullOrWhiteSpace(options.Value.TimeZone)
-        ? TimeZoneInfo.Local
-        : TimeZoneInfo.FindSystemTimeZoneById(options.Value.TimeZone);
+    private readonly TimeZoneInfo _zone = Resolve(options.Value.TimeZone);
+
+    /// <summary>Unknown or missing zone names fall back to the server's zone instead of crashing the app.</summary>
+    private static TimeZoneInfo Resolve(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return TimeZoneInfo.Local;
+        return TimeZoneInfo.TryFindSystemTimeZoneById(id.Trim(), out var zone) ? zone : TimeZoneInfo.Local;
+    }
 
     public DateTimeOffset Now => TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _zone);
     public DateOnly Today => DateOnly.FromDateTime(Now.DateTime);

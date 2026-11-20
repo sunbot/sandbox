@@ -1,0 +1,11 @@
+**/bin
+**/obj
+**/.vs
+**/.idea
+mobile/node_modules
+mobile/.expo
+mobile/dist
+mobile/android
+mobile/ios
+data
+.git

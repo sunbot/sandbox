@@ -11,6 +11,10 @@ using NutriPlan.Infrastructure.Usda;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Hosts like Render/Railway/Fly pass the port to listen on in $PORT.
+if (Environment.GetEnvironmentVariable("PORT") is { Length: > 0 } port)
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
@@ -63,6 +67,16 @@ app.UseMiddleware<ApiKeyMiddleware>();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Serve the web build of the app (mobile/dist, copied to wwwroot in the Docker image) from the same origin.
+// Any non-API path falls back to index.html so the app's own router handles it.
+if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    app.MapFallback("/api/{**rest}", () => Results.NotFound(new { title = "Unknown API route" }));
+    app.MapFallbackToFile("index.html");
+}
 var api = app.MapGroup("/api");
 api.MapFoodEndpoints();
 api.MapDiaryEndpoints();

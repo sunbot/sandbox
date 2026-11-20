@@ -126,4 +126,20 @@ public class ParsingTests
     [InlineData("151.101.1.140", false)]
     public void Recipe_fetcher_blocks_private_addresses(string ip, bool isPrivate) =>
         Assert.Equal(isPrivate, HttpWebPageFetcher.IsPrivate(System.Net.IPAddress.Parse(ip)));
+
+    [Fact]
+    public void Hosted_database_urls_become_npgsql_connection_strings()
+    {
+        var cs = new Npgsql.NpgsqlConnectionStringBuilder(Persistence.ConnectionStrings.FromUrlOrRaw(
+            "postgresql://alex:p%40ss@ep-cool-1.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"));
+        Assert.Equal("ep-cool-1.us-east-2.aws.neon.tech", cs.Host);
+        Assert.Equal(5432, cs.Port);
+        Assert.Equal("neondb", cs.Database);
+        Assert.Equal("alex", cs.Username);
+        Assert.Equal("p@ss", cs.Password);
+        Assert.Equal(Npgsql.SslMode.Require, cs.SslMode);
+
+        const string raw = "Host=localhost;Database=nutriplan;Username=u;Password=p";
+        Assert.Equal(raw, Persistence.ConnectionStrings.FromUrlOrRaw(raw));
+    }
 }

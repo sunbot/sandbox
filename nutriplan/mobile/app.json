@@ -25,7 +25,12 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "name": "NutriPlan",
+      "shortName": "NutriPlan",
+      "themeColor": "#1c5cab",
+      "backgroundColor": "#f4f4f2"
     },
     "plugins": [
       "expo-router",

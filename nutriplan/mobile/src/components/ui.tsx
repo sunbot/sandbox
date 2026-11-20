@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import { router } from 'expo-router';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
 /** Small, dependency-free UI kit. Every screen builds from these so the look stays consistent. */
@@ -63,10 +64,17 @@ export function Loading() {
 }
 
 export function ErrorView({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const status = (error as { status?: number } | null)?.status;
+  const needsSetup = status === 401 || status === 0;
   return (
     <View style={styles.center}>
-      <Text style={[font.body, { textAlign: 'center', marginBottom: spacing.md }]}>{error instanceof Error ? error.message : 'Something went wrong.'}</Text>
-      {onRetry ? <Button title="Try again" variant="secondary" onPress={onRetry} /> : null}
+      <Text style={[font.body, { textAlign: 'center', marginBottom: spacing.md }]}>
+        {status === 401 ? 'This server needs your API key. Enter it in Settings.' : error instanceof Error ? error.message : 'Something went wrong.'}
+      </Text>
+      <View style={{ gap: spacing.sm }}>
+        {needsSetup ? <Button title="Open Settings" onPress={() => router.push('/settings')} /> : null}
+        {onRetry ? <Button title="Try again" variant="secondary" onPress={onRetry} /> : null}
+      </View>
     </View>
   );
 }

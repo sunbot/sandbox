@@ -26,6 +26,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
+  if (res.status === 401) throw new ApiError('API key missing or wrong — enter it in More → Settings.', 401);
   if (!res.ok) throw new ApiError(data?.detail ?? data?.title ?? `Request failed (${res.status})`, res.status);
   return data as T;
 }

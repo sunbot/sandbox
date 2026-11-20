@@ -83,6 +83,10 @@ Server-side refusal fallback is enabled for models that support it (`Claude:UseS
 
 ## Hosting for personal use (low cost)
 
+**Step-by-step: [docs/DEPLOY.md](docs/DEPLOY.md)** covers a free Neon database, the app on Render via the Dockerfile
+(browser and Android home screen), and an optional installable APK.
+
+
 Easiest: run the API + Postgres on a home PC and reach it from your phone over Wi-Fi, or anywhere via
 [Tailscale](https://tailscale.com) (free). For always-on hosting: a small VM (~$5–6/mo) running
 `docker compose` + the API, or a managed Postgres free tier (Neon/Supabase) + any .NET host. When exposed to the
