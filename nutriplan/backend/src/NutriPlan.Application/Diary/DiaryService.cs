@@ -1,0 +1,168 @@
+using NutriPlan.Application.Abstractions;
+using NutriPlan.Application.Common;
+using NutriPlan.Domain.Diary;
+using NutriPlan.Domain.Nutrients;
+using NutriPlan.Domain.Units;
+
+namespace NutriPlan.Application.Diary;
+
+public sealed record DiaryEntryDto(Guid Id, DateOnly Date, string Meal, ItemDto Item, Guid? PlanEntryId, string? Note, DateTimeOffset LoggedAt)
+{
+    public static DiaryEntryDto From(DiaryEntry e) =>
+        new(e.Id, e.Date, e.Meal.ToString(), ItemDto.From(e.Item), e.PlanEntryId, e.Note, e.LoggedAt);
+}
+
+public sealed record MealDto(string Meal, NutritionDto Totals, IReadOnlyList<DiaryEntryDto> Entries);
+
+public sealed record NutrientProgressDto(int NutrientId, string Name, string Unit, double Amount, double? Target, double? Percent, string Kind);
+
+public sealed record DayDto(
+    DateOnly Date,
+    NutritionDto Totals,
+    IReadOnlyList<MealDto> Meals,
+    IReadOnlyList<NutrientProgressDto> Progress);
+
+/// <summary>Add a food by grams, or by amount + unit ("2 cups", "1 large").</summary>
+public sealed record LogFoodRequest(DateOnly Date, MealSlot Meal, Guid FoodId, double? Grams, double? Amount, string? Unit, Guid? PlanEntryId = null);
+
+public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings, Guid? PlanEntryId = null);
+
+public sealed record LogQuickRequest(DateOnly Date, MealSlot Meal, string Name, double Calories, double? Protein, double? Carbs, double? Fat);
+
+public sealed record QuickLogItemDto(ItemDto Item, string UsualMeal, int TimesLogged, DateTimeOffset LastLogged);
+
+/// <summary>
+/// Turns foods/recipes into diary entries (with a nutrition snapshot) and builds day views.
+/// Also the backbone of quick-logging: recents, frequents, copy meal/day.
+/// </summary>
+public sealed class DiaryService(
+    IDiaryRepository diary,
+    IFoodRepository foods,
+    IRecipeRepository recipes,
+    ITargetsRepository targetsRepo,
+    IUnitOfWork uow)
+{
+    public async Task<ItemSnapshot> BuildFoodItemAsync(Guid foodId, double? grams, double? amount, string? unit, CancellationToken ct)
+    {
+        var food = await foods.GetAsync(foodId, ct) ?? throw new NotFoundException($"Food {foodId} not found.");
+        if (grams is null)
+        {
+            if (amount is null) throw new ValidationException("Provide grams or an amount.");
+            var resolved = QuantityResolver.Resolve(food, amount.Value, unit);
+            grams = resolved.Grams ?? throw new ValidationException(resolved.Explanation);
+        }
+        if (grams <= 0) throw new ValidationException("Amount must be greater than zero.");
+        return ItemSnapshot.ForFood(food.Id, food.DisplayName, grams.Value, food.NutrientsFor(grams.Value),
+            amount ?? grams, amount is null ? "g" : unit ?? "serving");
+    }
+
+    public async Task<ItemSnapshot> BuildRecipeItemAsync(Guid recipeId, double servings, CancellationToken ct)
+    {
+        if (servings <= 0) throw new ValidationException("Servings must be greater than zero.");
+        var recipe = await recipes.GetAsync(recipeId, ct) ?? throw new NotFoundException($"Recipe {recipeId} not found.");
+        return ItemSnapshot.ForRecipe(recipe.Id, recipe.Name, servings, recipe.NutritionPerServing);
+    }
+
+    public async Task<DiaryEntryDto> LogFoodAsync(LogFoodRequest r, CancellationToken ct = default)
+    {
+        var item = await BuildFoodItemAsync(r.FoodId, r.Grams, r.Amount, r.Unit, ct);
+        return await AddAsync(new DiaryEntry(r.Date, r.Meal, item, r.PlanEntryId), ct);
+    }
+
+    public async Task<DiaryEntryDto> LogRecipeAsync(LogRecipeRequest r, CancellationToken ct = default)
+    {
+        var item = await BuildRecipeItemAsync(r.RecipeId, r.Servings, ct);
+        return await AddAsync(new DiaryEntry(r.Date, r.Meal, item, r.PlanEntryId), ct);
+    }
+
+    public Task<DiaryEntryDto> LogQuickAsync(LogQuickRequest r, CancellationToken ct = default) =>
+        AddAsync(new DiaryEntry(r.Date, r.Meal, ItemSnapshot.QuickCalories(r.Name, r.Calories, r.Protein, r.Carbs, r.Fat)), ct);
+
+    /// <summary>Re-logs a previous entry (quick log "again", or from the recents list) on a new date/meal.</summary>
+    public async Task<DiaryEntryDto> RelogAsync(Guid entryId, DateOnly date, MealSlot? meal, CancellationToken ct = default)
+    {
+        var source = await diary.GetAsync(entryId, ct) ?? throw new NotFoundException($"Entry {entryId} not found.");
+        return await AddAsync(new DiaryEntry(date, meal ?? source.Meal, source.Item), ct);
+    }
+
+    /// <summary>Copies a whole meal (or every meal when <paramref name="meal"/> is null) from one day to another.</summary>
+    public async Task<IReadOnlyList<DiaryEntryDto>> CopyAsync(DateOnly from, DateOnly to, MealSlot? meal, MealSlot? toMeal, CancellationToken ct = default)
+    {
+        var entries = (await diary.GetRangeAsync(from, from, ct)).Where(e => meal is null || e.Meal == meal).ToList();
+        var copies = entries.Select(e => new DiaryEntry(to, toMeal ?? e.Meal, e.Item)).ToList();
+        copies.ForEach(diary.Add);
+        await uow.SaveChangesAsync(ct);
+        return copies.Select(DiaryEntryDto.From).ToList();
+    }
+
+    public async Task<DiaryEntryDto> UpdateAsync(Guid id, double? scale, DateOnly? date, MealSlot? meal, string? note, CancellationToken ct = default)
+    {
+        var entry = await diary.GetAsync(id, ct) ?? throw new NotFoundException($"Entry {id} not found.");
+        if (scale is not null)
+        {
+            if (scale <= 0) throw new ValidationException("Scale must be greater than zero.");
+            entry.Rescale(scale.Value);
+        }
+        if (date is not null || meal is not null) entry.Move(date ?? entry.Date, meal ?? entry.Meal);
+        if (note is not null) entry.Note = note.Length == 0 ? null : note;
+        await uow.SaveChangesAsync(ct);
+        return DiaryEntryDto.From(entry);
+    }
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var entry = await diary.GetAsync(id, ct) ?? throw new NotFoundException($"Entry {id} not found.");
+        diary.Remove(entry);
+        await uow.SaveChangesAsync(ct);
+    }
+
+    public async Task<DayDto> GetDayAsync(DateOnly date, CancellationToken ct = default)
+    {
+        var entries = await diary.GetRangeAsync(date, date, ct);
+        var targets = await targetsRepo.GetAsync(ct);
+        var totals = NutrientProfile.Sum(entries.Select(e => e.Item.Nutrients));
+
+        var meals = Enum.GetValues<MealSlot>().Select(slot =>
+        {
+            var inMeal = entries.Where(e => e.Meal == slot).OrderBy(e => e.LoggedAt).ToList();
+            return new MealDto(slot.ToString(), NutritionDto.From(NutrientProfile.Sum(inMeal.Select(e => e.Item.Nutrients))),
+                inMeal.Select(DiaryEntryDto.From).ToList());
+        }).ToList();
+
+        var progressIds = new[] { NutrientIds.Energy, NutrientIds.Protein, NutrientIds.Carbohydrate, NutrientIds.Fat }
+            .Concat(targets.EffectiveFocusNutrients)
+            .Concat(NutrientCatalog.All.Where(n => n.DefaultTarget is not null).Select(n => n.Id))
+            .Distinct();
+
+        var progress = progressIds.Select(id =>
+        {
+            var def = NutrientCatalog.Get(id);
+            var target = targets.TargetFor(id);
+            var amount = totals.Get(id);
+            return new NutrientProgressDto(id, def.Name, def.Unit, Math.Round(amount, 2), target,
+                target is > 0 ? Math.Round(amount / target.Value * 100, 1) : null, def.TargetKind.ToString());
+        }).ToList();
+
+        return new DayDto(date, NutritionDto.From(totals), meals, progress);
+    }
+
+    /// <summary>Your usual foods for one-tap logging, optionally narrowed to a meal (breakfast regulars at breakfast).</summary>
+    public async Task<IReadOnlyList<QuickLogItemDto>> GetQuickLogAsync(MealSlot? meal, int limit = 20, CancellationToken ct = default)
+    {
+        var frequent = await diary.GetFrequentItemsAsync(days: 60, limit: limit * 3, ct);
+        return frequent
+            .OrderByDescending(f => meal is not null && f.Meal == meal ? 1 : 0)
+            .ThenByDescending(f => f.Count)
+            .ThenByDescending(f => f.LastLogged)
+            .Take(limit)
+            .Select(f => new QuickLogItemDto(ItemDto.From(f.Item), f.Meal.ToString(), f.Count, f.LastLogged))
+            .ToList();
+    }
+
+    private async Task<DiaryEntryDto> AddAsync(DiaryEntry entry, CancellationToken ct)
+    {
+        diary.Add(entry);
+        await uow.SaveChangesAsync(ct);
+        return DiaryEntryDto.From(entry);
+    }
+}

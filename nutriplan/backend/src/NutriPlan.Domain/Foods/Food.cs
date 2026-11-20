@@ -110,8 +110,12 @@ public sealed class Food
 
     public void Archive() { IsArchived = true; Touch(); }
 
+    /// <summary>USDA lab data uses food-specific energy factors, so a 4/4/9 mismatch there isn't an error.</summary>
+    public bool IsLabAnalyzed => Source is FoodSource.UsdaFoundation or FoodSource.UsdaSrLegacy or FoodSource.UsdaSurvey;
+
     private void ReassessQuality()
     {
+        if (IsLabAnalyzed) return;
         var check = EnergyConsistency.Check(NutrientsPer100g);
         if (check.Status == ConsistencyStatus.Inconsistent)
         {
@@ -133,8 +137,8 @@ public sealed class Food
 
     public static DataQuality DefaultQualityFor(FoodSource source) => source switch
     {
-        FoodSource.UsdaFoundation or FoodSource.UsdaSrLegacy => DataQuality.Verified,
-        FoodSource.UsdaSurvey or FoodSource.UsdaBranded or FoodSource.User or FoodSource.Recipe => DataQuality.Standard,
+        FoodSource.UsdaFoundation or FoodSource.UsdaSrLegacy or FoodSource.UsdaSurvey => DataQuality.Verified,
+        FoodSource.UsdaBranded or FoodSource.User or FoodSource.Recipe => DataQuality.Standard,
         _ => DataQuality.Unverified,
     };
 

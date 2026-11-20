@@ -22,13 +22,23 @@ public static class EnergyConsistency
     public static double ComputeAtwaterCalories(NutrientProfile p) =>
         p.Protein * 4 + p.Carbs * 4 + p.Fat * 9 + p.Get(NutrientIds.Alcohol) * 7;
 
+    /// <summary>Same, but counting fiber at ~2 kcal/g (it's only partly digested), as many labels and USDA do.</summary>
+    public static double ComputeFiberAdjustedCalories(NutrientProfile p)
+    {
+        var fiber = Math.Min(p.Fiber, p.Carbs);
+        return p.Protein * 4 + (p.Carbs - fiber) * 4 + fiber * 2 + p.Fat * 9 + p.Get(NutrientIds.Alcohol) * 7;
+    }
+
     public static EnergyConsistencyResult Check(NutrientProfile per100g)
     {
         if (!per100g.Has(NutrientIds.Energy))
             return new(ConsistencyStatus.Unknown, 0, 0, 0, "No calorie value listed.");
 
         var listed = per100g.Calories;
-        var computed = ComputeAtwaterCalories(per100g);
+        // Accept whichever convention the source used: plain 4/4/9 or fiber-adjusted.
+        var standard = ComputeAtwaterCalories(per100g);
+        var adjusted = ComputeFiberAdjustedCalories(per100g);
+        var computed = Math.Abs(listed - adjusted) < Math.Abs(listed - standard) ? adjusted : standard;
 
         // Very low-energy foods (water, spices, diet soda): absolute difference matters more than relative.
         if (listed < 20 && computed < 20)
