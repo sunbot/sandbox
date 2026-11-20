@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NutriPlan.Api/NutriPlan.Api.csproj" />
+    <Project Path="src/NutriPlan.Application/NutriPlan.Application.csproj" />
+    <Project Path="src/NutriPlan.Domain/NutriPlan.Domain.csproj" />
+    <Project Path="src/NutriPlan.Infrastructure/NutriPlan.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NutriPlan.Application.Tests/NutriPlan.Application.Tests.csproj" />
+    <Project Path="tests/NutriPlan.Domain.Tests/NutriPlan.Domain.Tests.csproj" />
+    <Project Path="tests/NutriPlan.Infrastructure.Tests/NutriPlan.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

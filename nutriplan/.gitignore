@@ -1,0 +1,14 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+node_modules/
+.expo/
+dist/
+*.log
+appsettings.Development.local.json
+.env
+.env.*
+!.env.example
+data/usda/
