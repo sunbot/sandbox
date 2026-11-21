@@ -74,6 +74,8 @@ jobs:
           cache-dependency-path: nutriplan/mobile/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
+      - name: Unit tests (Node test runner)
+        run: npm test
       - run: npx expo lint
       - name: Web export (same build the Docker image uses)
         run: npx expo export --platform web

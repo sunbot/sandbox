@@ -25,6 +25,11 @@ public sealed record DayDto(
 /// <summary>Add a food by grams, or by amount + unit ("2 cups", "1 large").</summary>
 public sealed record LogFoodRequest(DateOnly Date, MealSlot Meal, Guid FoodId, double? Grams, double? Amount, string? Unit, Guid? PlanEntryId = null);
 
+public sealed record FoodAmount(Guid FoodId, double? Grams, double? Amount, string? Unit);
+
+/// <summary>Several foods for one meal (Ask's "Log all"): every item is saved, or none is.</summary>
+public sealed record LogFoodsRequest(DateOnly Date, MealSlot Meal, IReadOnlyList<FoodAmount> Items);
+
 public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings, Guid? PlanEntryId = null);
 
 public sealed record LogQuickRequest(DateOnly Date, MealSlot Meal, string Name, double Calories, double? Protein, double? Carbs, double? Fat);
@@ -67,6 +72,36 @@ public sealed class DiaryService(
     {
         var item = await BuildFoodItemAsync(r.FoodId, r.Grams, r.Amount, r.Unit, ct);
         return await AddAsync(new DiaryEntry(r.Date, r.Meal, item, r.PlanEntryId), ct);
+    }
+
+    /// <summary>
+    /// Logs several foods in one go. Every item is checked (food exists, amount converts) before anything is saved,
+    /// and all entries are saved together, so a bad item never leaves half a meal in your diary.
+    /// </summary>
+    public async Task<IReadOnlyList<DiaryEntryDto>> LogFoodsAsync(LogFoodsRequest r, CancellationToken ct = default)
+    {
+        var items = await BuildFoodItemsAsync(r.Items, ct);
+        var entries = items.Select(i => new DiaryEntry(r.Date, r.Meal, i)).ToList();
+        entries.ForEach(diary.Add);
+        await uow.SaveChangesAsync(ct);
+        return entries.Select(DiaryEntryDto.From).ToList();
+    }
+
+    /// <summary>Validates and builds every item first; throws (naming the item) before anything is written.</summary>
+    public async Task<IReadOnlyList<ItemSnapshot>> BuildFoodItemsAsync(IReadOnlyList<FoodAmount> items, CancellationToken ct)
+    {
+        if (items is null || items.Count == 0) throw new ValidationException("Add at least one food.");
+        if (items.Count > 30) throw new ValidationException("That's more than 30 foods at once. Split it into meals.");
+        var built = new List<ItemSnapshot>(items.Count);
+        for (var i = 0; i < items.Count; i++)
+        {
+            try { built.Add(await BuildFoodItemAsync(items[i].FoodId, items[i].Grams, items[i].Amount, items[i].Unit, ct)); }
+            catch (Exception ex) when (ex is ValidationException or NotFoundException)
+            {
+                throw new ValidationException($"Item {i + 1}: {ex.Message} Nothing was saved.");
+            }
+        }
+        return built;
     }
 
     public async Task<DiaryEntryDto> LogRecipeAsync(LogRecipeRequest r, CancellationToken ct = default)

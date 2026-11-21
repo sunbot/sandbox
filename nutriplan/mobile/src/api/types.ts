@@ -152,7 +152,16 @@ export type Targets = {
   nutrients: NutrientTarget[];
 };
 
-export type FoodMatch = { food: Food; score: number; quantity: { grams?: number | null; method: string; explanation: string }; nutrition?: Nutrition | null };
+/** Given: the amount you said. Assumed: no amount, a standard USDA portion to confirm. NeedsAmount: you must choose one. */
+export type QuantityStatus = 'Given' | 'Assumed' | 'NeedsAmount';
+export type FoodMatch = {
+  food: Food;
+  score: number;
+  quantity: { grams?: number | null; method: string; explanation: string; status: QuantityStatus };
+  nutrition?: Nutrition | null;
+  /** 0–1; below 0.5 the match deserves a look. */
+  confidence: number;
+};
 export type FoodMatchGroup = { text: string; amount?: number | null; unit?: string | null; foodQuery: string; matches: FoodMatch[] };
 export type RecipeIdea = { name: string; description: string; servings: number; ingredients: string[]; directions: string; perServing: Nutrition; coverage: number; warnings: string[] };
 
@@ -168,3 +177,6 @@ export type AssistantResponse = {
   cookable: Cookable[];
   gaps?: GapReport | null;
 };
+
+/** One food for a multi-food log/plan request. */
+export type FoodAmount = { foodId: string; grams?: number; amount?: number; unit?: string };

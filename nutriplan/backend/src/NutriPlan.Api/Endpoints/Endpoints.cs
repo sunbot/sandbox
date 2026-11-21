@@ -52,6 +52,7 @@ public static class DiaryEndpoints
         g.MapGet("/{date}", (DateOnly date, DiaryService s, CancellationToken ct) => s.GetDayAsync(date, ct));
         g.MapGet("/quick-log", (MealSlot? meal, int? limit, DiaryService s, CancellationToken ct) => s.GetQuickLogAsync(meal, Math.Clamp(limit ?? 20, 1, 50), ct));
         g.MapPost("/food", (LogFoodRequest r, DiaryService s, CancellationToken ct) => s.LogFoodAsync(r, ct));
+        g.MapPost("/foods", (LogFoodsRequest r, DiaryService s, CancellationToken ct) => s.LogFoodsAsync(r, ct));
         g.MapPost("/recipe", (LogRecipeRequest r, DiaryService s, CancellationToken ct) => s.LogRecipeAsync(r, ct));
         g.MapPost("/quick", (LogQuickRequest r, DiaryService s, CancellationToken ct) => s.LogQuickAsync(r, ct));
         g.MapPost("/copy", (CopyRequest r, DiaryService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, r.ToMeal, ct));
@@ -68,6 +69,7 @@ public static class PlanEndpoints
         var g = api.MapGroup("/plan").WithTags("Plan");
         g.MapGet("/week", (DateOnly date, PlanService s, CancellationToken ct) => s.GetWeekAsync(date, ct));
         g.MapPost("/food", (AddPlanFoodRequest r, PlanService s, CancellationToken ct) => s.AddFoodAsync(r, ct));
+        g.MapPost("/foods", (AddPlanFoodsRequest r, PlanService s, CancellationToken ct) => s.AddFoodsAsync(r, ct));
         g.MapPost("/recipe", (AddPlanRecipeRequest r, PlanService s, CancellationToken ct) => s.AddRecipeAsync(r, ct));
         g.MapPost("/batch", (AddBatchRequest r, PlanService s, CancellationToken ct) => s.AddBatchAsync(r, ct));
         g.MapPost("/{id:guid}/move", (Guid id, MoveRequest r, PlanService s, CancellationToken ct) => s.MoveAsync(id, r.Date, r.Meal, ct));

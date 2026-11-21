@@ -14,21 +14,24 @@ import { colors } from '@/lib/theme';
  * `onUnavailable`: called with a plain-language reason for any other failure (no microphone, offline, …).
  * Screens should pass both: alerts don't display in the web version.
  */
-export function VoiceButton({ onText, onFinal, autoStart, onPermissionDenied, onUnavailable }: {
+export function VoiceButton({ onText, onFinal, autoStart, onPermissionDenied, onUnavailable, onListeningChange }: {
   onText: (text: string) => void;
   onFinal: (text: string) => void;
   autoStart?: boolean;
   onPermissionDenied?: () => void;
   onUnavailable?: (reason: string) => void;
+  /** Told when listening starts and stops, so the screen can show it (e.g. "Listening…"). */
+  onListeningChange?: (listening: boolean) => void;
 }) {
-  const [listening, setListening] = useState(false);
+  const [listening, setListeningState] = useState(false);
+  const setListening = useCallback((v: boolean) => { setListeningState(v); onListeningChange?.(v); }, [onListeningChange]);
   const started = useRef(false);
 
   const denied = useCallback(() => {
     setListening(false);
     if (onPermissionDenied) onPermissionDenied();
     else Alert.alert('Microphone needed', 'Allow microphone and speech recognition to speak your food.');
-  }, [onPermissionDenied]);
+  }, [onPermissionDenied, setListening]);
 
   useSpeechRecognitionEvent('start', () => setListening(true));
   useSpeechRecognitionEvent('end', () => setListening(false));

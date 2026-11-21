@@ -120,7 +120,7 @@ public sealed class AssistantService(
                 var groups = new List<FoodMatchGroupDto>();
                 foreach (var item in interpreted.Items.Take(12))
                 {
-                    var label = $"{item.Amount?.ToString("0.##")} {item.Unit} {item.FoodQuery}".Trim();
+                    var label = string.Join(' ', new[] { item.Amount?.ToString("0.##"), item.Unit, item.FoodQuery }.Where(p => !string.IsNullOrWhiteSpace(p)));
                     var query = item.Brand is null ? item.FoodQuery : $"{item.Brand} {item.FoodQuery}";
                     groups.Add(await foodService.MatchAsync(label, query, item.Amount, item.Unit, item.CookedState, 6, ct));
                 }
@@ -133,15 +133,15 @@ public sealed class AssistantService(
                     var planReply = (groups.Count, saved.Count) switch
                     {
                         (0, 0) => "I didn't catch what to plan. Try \"plan turkey chili for Friday dinner\".",
-                        _ => $"Planning for {when}{(meal is null ? "" : $", {meal.ToLowerInvariant()}")}. Pick a match and tap Plan — it goes on your plan, not your diary.",
+                        _ => $"Planning for {when}{(meal is null ? "" : $", {meal.ToLowerInvariant()}")}. It goes on your plan, not your diary.",
                     };
                     return Response(interpreted, planReply, usedModel, meal, date, foods: groups, saved: saved);
                 }
                 var reply = interpreted.Reply ?? (groups.Count switch
                 {
                     0 => "I didn't catch a food. Try something like \"2 eggs and toast\".",
-                    1 => groups[0].Matches.Count == 0 ? $"No match for \"{groups[0].FoodQuery}\"." : "Pick the best match:",
-                    _ => $"Found {groups.Count} items — check each match, then add them.",
+                    1 => groups[0].Matches.Count == 0 ? $"No match for \"{groups[0].FoodQuery}\"." : "Here's what I found. Check it, then log it.",
+                    _ => $"Found {groups.Count} foods. Check them, then log them all at once.",
                 });
                 return Response(interpreted, reply, usedModel, meal, date, foods: groups);
             }

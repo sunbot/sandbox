@@ -8,11 +8,13 @@ using NutriPlan.Domain.Units;
 namespace NutriPlan.Application.Foods;
 
 /// <summary>A food match for a piece of text, with the amount already converted to grams when possible.</summary>
+/// <param name="Confidence">0–1 from the ranking score; below 0.5 the match deserves a look.</param>
 public sealed record FoodMatchDto(
     FoodSummaryDto Food,
     double Score,
     QuantityDto Quantity,
-    NutritionDto? Nutrition);
+    NutritionDto? Nutrition,
+    double Confidence);
 
 public sealed record FoodMatchGroupDto(
     string Text,
@@ -138,6 +140,9 @@ public sealed class FoodService(
         return MatchAsync(text, parsed.FoodText, parsed.Amount, parsed.Unit, cookedState: null, limit, ct);
     }
 
+    /// <summary>Same scale as recipe ingredient matching: 0 at score 20, 1 at score 80.</summary>
+    public static double MatchConfidence(double score) => Math.Round(Math.Clamp((score - 20) / 60, 0, 1), 2);
+
     public async Task<FoodMatchGroupDto> MatchAsync(
         string originalText, string foodQuery, double? amount, string? unit, string? cookedState, int limit, CancellationToken ct)
     {
@@ -148,11 +153,14 @@ public sealed class FoodService(
         var ranked = await SearchRankedAsync(query, limit, ct);
         var matches = ranked.Select(r =>
         {
+            // No amount: offer the food's standard USDA portion as an assumption to confirm. If there isn't one,
+            // the amount stays unknown — never a made-up default weight.
             var q = QuantityResolver.Resolve(r.Food, amount ?? 1, amount is null ? null : unit);
             if (amount is null && !q.IsResolved)
-                q = new ResolvedQuantity(100, ResolutionMethod.Mass, "No amount given, showing 100 g.");
+                q = new ResolvedQuantity(null, ResolutionMethod.Unresolved, "No amount given. Choose how much.");
             var nutrition = q.Grams is null ? null : NutritionDto.From(r.Food.NutrientsFor(q.Grams.Value));
-            return new FoodMatchDto(FoodSummaryDto.From(r.Food), Math.Round(r.Score, 1), QuantityDto.From(q), nutrition);
+            return new FoodMatchDto(FoodSummaryDto.From(r.Food), Math.Round(r.Score, 1), QuantityDto.From(q, amountGiven: amount is not null),
+                nutrition, MatchConfidence(r.Score));
         }).ToList();
 
         return new FoodMatchGroupDto(originalText, amount, unit, foodQuery, matches);

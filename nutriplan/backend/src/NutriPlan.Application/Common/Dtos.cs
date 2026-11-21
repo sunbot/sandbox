@@ -58,9 +58,23 @@ public sealed record ItemDto(
         s.Kind.ToString(), s.FoodId, s.RecipeId, s.Name, s.Quantity, s.QuantityUnit, s.Grams, NutritionDto.From(s.Nutrients));
 }
 
-public sealed record QuantityDto(double? Grams, string Method, string Explanation)
+/// <param name="Status">
+/// <c>Given</c>: the amount you said, converted from USDA data. <c>Assumed</c>: you gave no amount, so a standard USDA portion
+/// is shown (e.g. "1 medium") for you to confirm. <c>NeedsAmount</c>: nothing to go on — you must choose an amount
+/// (no weight is ever invented).
+/// </param>
+public sealed record QuantityDto(double? Grams, string Method, string Explanation, string Status = QuantityStatus.Given)
 {
-    public static QuantityDto From(ResolvedQuantity q) => new(q.Grams is null ? null : Math.Round(q.Grams.Value, 2), q.Method.ToString(), q.Explanation);
+    public static QuantityDto From(ResolvedQuantity q, bool amountGiven = true) => new(
+        q.Grams is null ? null : Math.Round(q.Grams.Value, 2), q.Method.ToString(), q.Explanation,
+        q.Grams is null ? QuantityStatus.NeedsAmount : amountGiven ? QuantityStatus.Given : QuantityStatus.Assumed);
+}
+
+public static class QuantityStatus
+{
+    public const string Given = "Given";
+    public const string Assumed = "Assumed";
+    public const string NeedsAmount = "NeedsAmount";
 }
 
 public sealed class NotFoundException(string message) : Exception(message);

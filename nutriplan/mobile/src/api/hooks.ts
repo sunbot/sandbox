@@ -55,6 +55,15 @@ export const useDay = (date: string) => useQuery({ queryKey: keys.day(date), que
 export const useQuickLog = (meal?: Meal) =>
   useQuery({ queryKey: keys.quickLog(meal), queryFn: () => get<T.QuickLogItem[]>(`/diary/quick-log?${q({ meal, limit: 12 })}`) });
 
+/** Several foods for one meal, saved together (all or nothing). */
+export function useLogFoods() {
+  const invalidate = useInvalidateNutrition();
+  return useMutation({
+    mutationFn: (r: { date: string; meal: Meal; items: T.FoodAmount[] }) => post<T.DiaryEntry[]>('/diary/foods', r),
+    onSuccess: invalidate,
+  });
+}
+
 export function useLogFood() {
   const invalidate = useInvalidateNutrition();
   return useMutation({
@@ -112,6 +121,10 @@ export function usePlanMutations() {
   return {
     addFood: useMutation({
       mutationFn: (r: { date: string; meal: Meal; foodId: string; grams?: number; amount?: number; unit?: string }) => post<T.PlanEntry>('/plan/food', r),
+      ...opts,
+    }),
+    addFoods: useMutation({
+      mutationFn: (r: { date: string; meal: Meal; items: T.FoodAmount[] }) => post<T.PlanEntry[]>('/plan/foods', r),
       ...opts,
     }),
     addRecipe: useMutation({

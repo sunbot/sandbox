@@ -36,7 +36,8 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "doctor": "expo-doctor"
+    "doctor": "expo-doctor",
+    "test": "node --experimental-strip-types --no-warnings --test \"src/**/*.test.ts\""
   },
   "private": true
 }

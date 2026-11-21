@@ -6,6 +6,7 @@
 /* eslint-disable no-restricted-imports */
 export type { LucideIcon, LucideProps } from 'lucide-react-native';
 
+export { default as ArrowUp } from 'lucide-react-native/icons/arrow-up';
 export { default as BadgeCheck } from 'lucide-react-native/icons/badge-check';
 export { default as CalendarClock } from 'lucide-react-native/icons/calendar-clock';
 export { default as CalendarDays } from 'lucide-react-native/icons/calendar-days';
@@ -41,5 +42,6 @@ export { default as Star } from 'lucide-react-native/icons/star';
 export { default as Target } from 'lucide-react-native/icons/target';
 export { default as Trash2 } from 'lucide-react-native/icons/trash-2';
 export { default as TriangleAlert } from 'lucide-react-native/icons/triangle-alert';
+export { default as Undo2 } from 'lucide-react-native/icons/undo-2';
 export { default as Utensils } from 'lucide-react-native/icons/utensils';
 export { default as X } from 'lucide-react-native/icons/x';

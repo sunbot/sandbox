@@ -92,7 +92,7 @@ public static partial class RuleBasedInterpreter
     [GeneratedRegex(@"what (can|could|should) i (make|cook)|with what i have|from my pantry|in my pantry")]
     private static partial Regex WhatCanIMake();
 
-    [GeneratedRegex(@"\b(fill|round out|close)\b.*\b(gap|gaps|day|macros|calories)\b|what should i eat|hit my (protein|macros|calories|goal)|still need|left (for|to eat)")]
+    [GeneratedRegex(@"\b(fill|round out|close)\b.*\b(gap|gaps|day|macros|calories)\b|what (should|could|can) i (eat|have)|hit my (protein|macros|calories|goal)|still need|left (for|to eat)")]
     private static partial Regex FillGaps();
 
     [GeneratedRegex(@"\brecipes?\b|\bideas?\b|\bmeal prep\b|\bsomething to (make|cook)\b")]

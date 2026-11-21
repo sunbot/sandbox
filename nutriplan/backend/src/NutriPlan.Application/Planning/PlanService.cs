@@ -38,6 +38,9 @@ public sealed record WeekDto(
 
 public sealed record AddPlanFoodRequest(DateOnly Date, MealSlot Meal, Guid FoodId, double? Grams, double? Amount, string? Unit);
 
+/// <summary>Several foods planned for one meal (Ask's "Plan all"): all are planned, or none.</summary>
+public sealed record AddPlanFoodsRequest(DateOnly Date, MealSlot Meal, IReadOnlyList<Diary.FoodAmount> Items);
+
 public sealed record AddPlanRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings);
 
 /// <summary>Cook once, eat several times: one portion per (date, meal) slot, all linked by a batch id.</summary>
@@ -95,6 +98,16 @@ public sealed class PlanService(
     {
         var item = await diaryService.BuildFoodItemAsync(r.FoodId, r.Grams, r.Amount, r.Unit, ct);
         return await AddAsync(new PlanEntry(r.Date, r.Meal, item), ct);
+    }
+
+    /// <summary>Plans several foods together; nothing is planned if any item is invalid. Planned food never counts as eaten.</summary>
+    public async Task<IReadOnlyList<PlanEntryDto>> AddFoodsAsync(AddPlanFoodsRequest r, CancellationToken ct = default)
+    {
+        var items = await diaryService.BuildFoodItemsAsync(r.Items, ct);
+        var entries = items.Select(i => new PlanEntry(r.Date, r.Meal, i)).ToList();
+        entries.ForEach(plan.Add);
+        await uow.SaveChangesAsync(ct);
+        return entries.Select(PlanEntryDto.From).ToList();
     }
 
     public async Task<PlanEntryDto> AddRecipeAsync(AddPlanRecipeRequest r, CancellationToken ct = default)
