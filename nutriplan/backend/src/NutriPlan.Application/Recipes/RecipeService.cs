@@ -68,25 +68,17 @@ public sealed partial class RecipeService(
         var oldLines = recipe.Ingredients.Select(i => i.RawText).ToList();
         recipe.Rename(request.Name);
         recipe.SetServings(request.Servings);
+        recipe.ServingDescription = $"{request.Servings:0.##} (set by you)";
+        recipe.Directions = request.Directions;
+        recipe.Description = request.Description;
+        recipe.Notes = request.Notes;
+        recipe.CookedWeightGrams = request.CookedWeightGrams;
+        if (request.Categories is not null) recipe.SetCategories(request.Categories);
         if (!oldLines.SequenceEqual(request.Ingredients.Select(l => l.Trim()).Where(l => l.Length > 0)))
         {
-            // Keep confirmed matches for lines that didn't change.
-            var previous = recipe.Ingredients.Where(i => i.Status == IngredientMatchStatus.Confirmed).ToDictionary(i => i.RawText, i => i);
-            Apply(recipe, request);
-            foreach (var ing in recipe.Ingredients)
-            {
-                if (!previous.TryGetValue(ing.RawText, out var old)) continue;
-                (ing.FoodId, ing.FoodName, ing.Grams, ing.Status, ing.MatchConfidence) = (old.FoodId, old.FoodName, old.Grams, old.Status, 1);
-            }
+            // Unchanged lines you confirmed or excluded keep their choice (even if lines moved); new or edited lines are matched.
+            recipe.ReparseIngredients(request.Ingredients);
             await MatchIngredientsAsync(recipe, onlyUnmatched: true, ct);
-        }
-        else
-        {
-            recipe.Directions = request.Directions;
-            recipe.Description = request.Description;
-            recipe.Notes = request.Notes;
-            recipe.CookedWeightGrams = request.CookedWeightGrams;
-            if (request.Categories is not null) recipe.SetCategories(request.Categories);
         }
         await RecalculateAsync(recipe, ct);
         await uow.SaveChangesAsync(ct);

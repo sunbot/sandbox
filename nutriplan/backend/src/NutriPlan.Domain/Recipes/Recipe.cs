@@ -145,12 +145,18 @@ public sealed class Recipe
     /// </summary>
     public void ReparseIngredients(IEnumerable<string>? lines = null)
     {
+        // Matched by text, so a confirmed line keeps its choice even when lines are added or reordered.
         var keep = _ingredients
             .Where(i => i.Status is IngredientMatchStatus.Confirmed || (i.Status is IngredientMatchStatus.Ignored && i.ResolutionNote == "Excluded by you"))
-            .ToDictionary(i => i.Position);
-        var source = (lines ?? _ingredients.OrderBy(i => i.Position).Select(i => i.RawText)).Select(l => l.Trim()).Where(l => l.Length > 0);
+            .GroupBy(i => i.RawText)
+            .ToDictionary(g => g.Key, g => new Queue<RecipeIngredient>(g.OrderBy(i => i.Position)));
+        var source = (lines ?? _ingredients.OrderBy(i => i.Position).Select(i => i.RawText)).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
         _ingredients = source
-            .Select((l, i) => keep.TryGetValue(i, out var old) && old.RawText == l ? old : RecipeIngredient.FromText(l, i))
+            .Select((l, i) =>
+            {
+                if (keep.TryGetValue(l, out var q) && q.Count > 0) { var old = q.Dequeue(); old.Position = i; return old; }
+                return RecipeIngredient.FromText(l, i);
+            })
             .ToList();
         Touch();
     }

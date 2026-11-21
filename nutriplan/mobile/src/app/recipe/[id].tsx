@@ -124,6 +124,8 @@ export default function RecipeScreen() {
         </View>
       </Card>
 
+      <Button title="Edit recipe" variant="secondary" onPress={() => router.push({ pathname: '/recipe/edit', params: { id: s.id } })} />
+
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm, flexWrap: 'wrap' }}>
           <Text style={font.heading}>Ingredients</Text>

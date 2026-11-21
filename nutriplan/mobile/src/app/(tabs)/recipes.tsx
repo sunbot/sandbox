@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRecipeMutations, useRecipes } from '@/api/hooks';
+import { AppCard, AppText, Badge, EmptyState, PrimaryButton, SearchField, SecondaryButton, Skeleton } from '@/components/ds';
+import { ChefHat, ChevronRight, Download, Plus, Star, Utensils } from '@/components/ds/icons';
 import { loadSettings } from '@/lib/settings';
-import { MacroLine } from '@/components/charts';
-import { Button, Card, Empty, ErrorView, Field, Loading } from '@/components/ui';
-import { Star, Utensils } from '@/components/ds/icons';
-import { colors, font, radius, spacing } from '@/lib/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 
-/** Your recipe box. Import from Paprika (export file) or any recipe page link. */
+const r0 = (n: number) => Math.round(n);
+
+/** Your recipe box: search, import from Paprika or a link, or write one yourself. */
 export default function RecipesScreen() {
+  const t = useTheme();
   const { planDate } = useLocalSearchParams<{ planDate?: string }>();
   const [search, setSearch] = useState('');
   const [url, setUrl] = useState('');
@@ -57,67 +59,76 @@ export default function RecipesScreen() {
     }
   };
 
+  const list = recipes.data ?? [];
+
   return (
     <FlatList
-      contentContainerStyle={styles.page}
-      data={recipes.data ?? []}
+      style={{ flex: 1, backgroundColor: t.colors.background }}
+      contentContainerStyle={{ padding: t.screenPadding, gap: t.space.sm, paddingBottom: t.space.huge }}
+      data={list}
       keyExtractor={(r) => r.id}
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={
-        <View style={{ gap: spacing.md, marginBottom: spacing.md }}>
-          {planDate ? <Text style={[font.small, { color: colors.primary }]}>Pick a recipe to plan</Text> : null}
-          <Field value={search} onChangeText={setSearch} placeholder="Search recipes or categories" />
-          <Card style={{ gap: spacing.sm }}>
-            <Text style={font.heading}>Import</Text>
-            <Button title="Import Paprika export (.paprikarecipes)" variant="secondary" onPress={importPaprika} loading={m.importPaprika.isPending} />
-            {m.importPaprika.isPending ? (
-              <Text style={font.small}>Importing and matching ingredients… a large export can take a minute or two.</Text>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-              <View style={{ flex: 1 }}><Field value={url} onChangeText={setUrl} placeholder="https://… recipe link" autoCapitalize="none" keyboardType="url" /></View>
-              <Button title="Import" compact onPress={importUrl} disabled={!url.trim()} loading={m.importUrl.isPending} />
+        <View style={{ gap: t.space.md, marginBottom: t.space.sm }}>
+          {planDate ? <AppText variant="label" tone="primary">Pick a recipe to plan</AppText> : null}
+          <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} placeholder="Search recipes or categories" accessibilityLabel="Search recipes" />
+          <AppCard style={{ gap: t.space.md }}>
+            <View style={{ flexDirection: 'row', gap: t.space.sm, flexWrap: 'wrap' }}>
+              <PrimaryButton label="New recipe" icon={Plus} onPress={() => router.push('/recipe/edit')} />
+              <SecondaryButton label="Import Paprika file" icon={Download} onPress={importPaprika} loading={m.importPaprika.isPending} />
+            </View>
+            {m.importPaprika.isPending ? <AppText variant="secondary" tone="secondary">Importing and matching ingredients… a large export can take a minute or two.</AppText> : null}
+            <View style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'center' }}>
+              <TextInput value={url} onChangeText={setUrl} placeholder="Or paste a recipe link" autoCapitalize="none" keyboardType="url" placeholderTextColor={t.colors.textMuted}
+                accessibilityLabel="Recipe link" onSubmitEditing={() => url.trim() && importUrl()}
+                style={[t.type.body, { flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: t.space.md, borderRadius: t.radii.button, borderWidth: 1, borderColor: t.colors.border, backgroundColor: t.colors.surfaceMuted, color: t.colors.text }]} />
+              <SecondaryButton label="Import" onPress={importUrl} disabled={!url.trim()} loading={m.importUrl.isPending} />
             </View>
             {notice ? (
-              <View accessibilityLiveRegion="polite" style={[styles.notice, notice.kind === 'error' && styles.noticeError]}>
-                <Text style={[font.body, { fontWeight: '600', color: notice.kind === 'error' ? colors.high : colors.text }]}>{notice.title}</Text>
-                {notice.lines.map((l, i) => <Text key={i} style={font.small}>{l}</Text>)}
+              <View accessibilityLiveRegion="polite" style={{ gap: 4, padding: t.space.md, borderRadius: t.radii.button, backgroundColor: notice.kind === 'error' ? t.colors.errorLight : t.colors.primaryLight }}>
+                <AppText variant="bodyStrong" tone={notice.kind === 'error' ? 'error' : 'default'}>{notice.title}</AppText>
+                {notice.lines.map((l, i) => <AppText key={i} variant="secondary" tone="secondary">{l}</AppText>)}
               </View>
             ) : null}
-            <Text style={font.tiny}>In Paprika: select recipes → Share/Export → Paprika Recipe Format. Links work when the page publishes structured recipe data (most recipe sites do).</Text>
-          </Card>
+            <AppText variant="caption" tone="muted">In Paprika: select recipes → Share/Export → Paprika Recipe Format. Links work when the page publishes structured recipe data (most recipe sites do).</AppText>
+          </AppCard>
         </View>
       }
-      ListEmptyComponent={recipes.isLoading ? <Loading /> : recipes.error ? <ErrorView error={recipes.error} onRetry={() => recipes.refetch()} /> : <Empty title="No recipes yet" hint="Import from Paprika or a link, or ask the assistant for ideas." />}
+      ListEmptyComponent={recipes.isLoading ? <View style={{ gap: t.space.sm }}>{[0, 1, 2].map((i) => <Skeleton key={i} width="100%" height={88} radius={20} />)}</View>
+        : <EmptyState icon={ChefHat} title={search ? 'No recipes match' : 'No recipes yet'} body={search ? 'Try another word or category.' : 'Import from Paprika or a link, write one, or ask for ideas on the Ask tab.'} />}
       renderItem={({ item: r }) => (
-        <Pressable onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: r.id, planDate } })}>
-          <Card style={styles.row}>
-            {r.hasPhoto || r.imageUrl ? (
-              <Image source={r.hasPhoto ? { uri: `${server.apiUrl}/api/recipes/${r.id}/photo`, headers: server.apiKey ? { 'X-Api-Key': server.apiKey } : undefined } : { uri: r.imageUrl! }} style={styles.photo} />
-            ) : (
-              <View style={[styles.photo, styles.placeholder]}><Utensils size={22} strokeWidth={1.6} color={colors.textMuted} /></View>
-            )}
-            <View style={{ flex: 1, gap: 2 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {r.isFavorite ? <Star size={16} strokeWidth={1.8} color={colors.accent} fill={colors.accent} accessibilityLabel="Favorite" /> : null}
-                <Text style={[font.heading, { flexShrink: 1 }]} numberOfLines={2}>{r.name}</Text>
+        <Pressable onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: r.id, planDate } })} accessibilityRole="button"
+          accessibilityLabel={`${r.isFavorite ? 'Favorite. ' : ''}${r.name}, ${r0(r.perServing.calories)} calories per serving`}>
+          {({ pressed }) => (
+            <AppCard padded={false} style={pressed ? { backgroundColor: t.colors.surfaceMuted } : undefined}>
+              <View style={{ flexDirection: 'row', gap: t.space.md, alignItems: 'center', padding: t.space.md }}>
+                {r.hasPhoto || r.imageUrl ? (
+                  <Image source={r.hasPhoto ? { uri: `${server.apiUrl}/api/recipes/${r.id}/photo`, headers: server.apiKey ? { 'X-Api-Key': server.apiKey } : undefined } : { uri: r.imageUrl! }}
+                    style={{ width: 64, height: 64, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted }} />
+                ) : (
+                  <View style={{ width: 64, height: 64, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+                    <Utensils size={22} strokeWidth={1.6} color={t.colors.textMuted} />
+                  </View>
+                )}
+                <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {r.isFavorite ? <Star size={16} strokeWidth={1.8} color={t.colors.accent} fill={t.colors.accent} /> : null}
+                    <AppText variant="cardTitle" numberOfLines={2} style={{ flexShrink: 1 }}>{r.name}</AppText>
+                  </View>
+                  <AppText variant="secondary" tone="secondary" numeric>
+                    {r0(r.perServing.calories)} kcal · P {r0(r.perServing.protein)} · C {r0(r.perServing.carbs)} · F {r0(r.perServing.fat)}
+                  </AppText>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
+                    <AppText variant="caption" tone="muted" numberOfLines={1}>per serving · makes {r.servings}{r.categories.length ? ` · ${r.categories.slice(0, 2).join(', ')}` : ''}</AppText>
+                    {r.coverage < 0.9 ? <Badge label={`${Math.round(r.coverage * 100)}% matched`} tone="warning" /> : null}
+                  </View>
+                </View>
+                <ChevronRight size={18} color={t.colors.textMuted} />
               </View>
-              <MacroLine n={r.perServing} compact />
-              <Text style={font.tiny}>
-                per serving · {r.servings} servings{r.coverage < 1 ? ` · ${Math.round(r.coverage * 100)}% matched` : ''}{r.categories.length ? ` · ${r.categories.slice(0, 2).join(', ')}` : ''}
-              </Text>
-            </View>
-          </Card>
+            </AppCard>
+          )}
         </Pressable>
       )}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  page: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxl },
-  row: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', padding: spacing.md },
-  photo: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.surfaceMuted },
-  placeholder: { alignItems: 'center', justifyContent: 'center' },
-  notice: { gap: 4, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceMuted },
-  noticeError: { borderWidth: 1, borderColor: colors.high },
-});

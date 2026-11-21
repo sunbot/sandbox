@@ -186,6 +186,11 @@ export function useRecipeMutations() {
         post<T.RecipeDetail>('/recipes', r),
       onSuccess: refresh,
     }),
+    edit: useMutation({
+      mutationFn: ({ id, ...r }: { id: string; name: string; servings: number; ingredients: string[]; directions?: string | null; description?: string | null; categories?: string[]; notes?: string | null }) =>
+        put<T.RecipeDetail>(`/recipes/${id}`, r),
+      onSuccess: refresh,
+    }),
     favorite: useMutation({ mutationFn: ({ id, favorite }: { id: string; favorite: boolean }) => post(`/recipes/${id}/favorite`, { favorite }), onSuccess: refresh }),
     updateIngredient: useMutation({
       mutationFn: ({ id, position, ...r }: { id: string; position: number; foodId?: string; grams?: number; amount?: number; unit?: string; ignore?: boolean }) =>
@@ -208,6 +213,10 @@ export function usePantryMutations() {
   return {
     add: useMutation({ mutationFn: (r: { name: string; foodId?: string; grams?: number; expiresOn?: string; isStaple?: boolean }) => post<T.PantryItem>('/pantry', r), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: string) => del(`/pantry/${id}`), onSuccess: refresh }),
+    update: useMutation({
+      mutationFn: ({ id, ...r }: { id: string; name: string; foodId?: string | null; grams?: number | null; expiresOn?: string | null; isStaple: boolean }) => put<T.PantryItem>(`/pantry/${id}`, r),
+      onSuccess: refresh,
+    }),
   };
 }
 
@@ -219,7 +228,7 @@ export const useTargets = () => useQuery({ queryKey: keys.targets, queryFn: () =
 export function useUpdateTargets() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (r: Partial<Pick<T.Targets, 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams' | 'budgetMode'>> & { nutrientOverrides?: Record<number, number | null> }) =>
+    mutationFn: (r: Partial<Pick<T.Targets, 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams' | 'budgetMode' | 'weekStartsOn' | 'maxDailyAdjustment'>> & { nutrientOverrides?: Record<number, number | null>; focusNutrients?: number[] }) =>
       put<T.Targets>('/targets', r),
     onSuccess: () => Promise.all(['targets', 'day', 'week', 'gaps', 'heatmap'].map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });

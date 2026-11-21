@@ -109,4 +109,25 @@ public class FoodAndQuantityTests
         Assert.Equal(125, Units.QuantityResolver.Resolve(tomato, 1, "medium", "Tomatoes, raw").Grams);
         Assert.Equal(250, Units.QuantityResolver.Resolve(tomato, 2, null, "Tomatoes, raw").Grams);
     }
+
+    [Fact]
+    public void Editing_ingredient_lines_keeps_your_choices_even_when_lines_move()
+    {
+        var r = new Recipes.Recipe("Soup", 4, Recipes.RecipeOrigin.Manual);
+        r.SetIngredientLines(["1 cup rice", "2 carrots", "salt"]);
+        var carrots = r.Ingredients[1];
+        carrots.Status = Recipes.IngredientMatchStatus.Confirmed;
+        carrots.Grams = 123;
+        r.Ingredients[2].Status = Recipes.IngredientMatchStatus.Ignored;
+        r.Ingredients[2].ResolutionNote = "Excluded by you";
+
+        r.ReparseIngredients(["1 onion", "1 cup rice", "2 carrots", "salt", "1 cup rice"]);
+
+        Assert.Equal(5, r.Ingredients.Count);
+        var kept = r.Ingredients.Single(i => i.RawText == "2 carrots");
+        Assert.Equal(2, kept.Position);
+        Assert.Equal(123, kept.Grams);
+        Assert.Equal(Recipes.IngredientMatchStatus.Ignored, r.Ingredients.Single(i => i.RawText == "salt").Status);
+        Assert.Equal(Recipes.IngredientMatchStatus.Unmatched, r.Ingredients[0].Status);
+    }
 }
