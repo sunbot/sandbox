@@ -50,7 +50,7 @@ public static class PaprikaImporter
                 }
                 catch (Exception ex) when (ex is InvalidDataException or JsonException)
                 {
-                    errors.Add($"{entry.FullName}: couldn't be read ({ex.Message})");
+                    errors.Add($"{Path.GetFileNameWithoutExtension(entry.FullName)}: skipped, the file is damaged or isn't a Paprika recipe");
                 }
             }
             return (recipes, errors);

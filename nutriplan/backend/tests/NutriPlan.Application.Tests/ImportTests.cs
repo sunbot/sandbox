@@ -48,7 +48,7 @@ public class ImportTests
 
         Assert.Equal(["Muffins", "Plain JSON"], recipes.Select(r => r.Name).ToArray());
         Assert.Single(errors);
-        Assert.Contains("Broken.paprikarecipe", errors[0]);
+        Assert.StartsWith("Broken:", errors[0]);
     }
 
     [Fact]
