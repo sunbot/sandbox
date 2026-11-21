@@ -1,4 +1,4 @@
-# NutriPlan — Application Handoff (for UI/UX & product collaborators)
+# Intake Grid (formerly NutriPlan) — Application Handoff (for UI/UX & product collaborators)
 
 > **Purpose.** A factual description of the NutriPlan codebase as it exists on branch `claude/nutrition-meal-planning-app-9e9qj9`
 > (repo folder `nutriplan/`), written for another AI or designer who will help with UI/UX and product work.

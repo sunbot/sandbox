@@ -1,8 +1,8 @@
 # Builds an installable Android APK in GitHub's cloud and publishes it to a Release you can open on your phone:
 #   https://github.com/<owner>/<repo>/releases/tag/android-latest
-# Start it from the Actions tab → "NutriPlan Android APK" → Run workflow (optionally paste your server address),
+# Start it from the Actions tab → "Intake Grid Android APK" → Run workflow (optionally paste your server address),
 # or it runs when this file changes. No computer and no Google Play needed.
-name: NutriPlan Android APK
+name: Intake Grid Android APK
 
 on:
   workflow_dispatch:
@@ -71,20 +71,20 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p dist-apk
-          cp android/app/build/outputs/apk/release/app-release.apk dist-apk/NutriPlan.apk
+          cp android/app/build/outputs/apk/release/app-release.apk dist-apk/IntakeGrid.apk
           ls -la dist-apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: NutriPlan-apk
-          path: nutriplan/mobile/dist-apk/NutriPlan.apk
+          name: IntakeGrid-apk
+          path: nutriplan/mobile/dist-apk/IntakeGrid.apk
 
       - name: Publish Release (stable link for your phone)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete android-latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create android-latest dist-apk/NutriPlan.apk \
+          gh release create android-latest dist-apk/IntakeGrid.apk \
             --target "$GITHUB_SHA" --prerelease \
-            --title "NutriPlan Android (build ${GITHUB_RUN_NUMBER})" \
-            --notes "Open this page on your phone, tap NutriPlan.apk, install (allow 'install unknown apps' for your browser if asked). Built from ${GITHUB_SHA::7}. Server: ${EXPO_PUBLIC_API_URL:-set in the app under More → Settings}."
+            --title "Intake Grid for Android (build ${GITHUB_RUN_NUMBER})" \
+            --notes "Open this page on your phone, tap IntakeGrid.apk, install (it updates the app you have) (allow 'install unknown apps' for your browser if asked). Built from ${GITHUB_SHA::7}. Server: ${EXPO_PUBLIC_API_URL:-set in the app under More → Settings}."

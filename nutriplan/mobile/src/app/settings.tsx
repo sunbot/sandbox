@@ -6,7 +6,7 @@ import { Button, Card, Field } from '@/components/ui';
 import { loadSettings, saveSettings } from '@/lib/settings';
 import { font, spacing } from '@/lib/theme';
 
-/** Where the app finds your NutriPlan server. */
+/** Where Intake Grid finds your server. */
 export default function SettingsScreen() {
   const [apiUrl, setApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');

@@ -1,7 +1,7 @@
 import { Platform, type TextStyle } from 'react-native';
 
 /**
- * NutriPlan design tokens (UI/UX spec v1).
+ * Intake Grid design tokens (UI/UX spec v1).
  *
  * Every redesigned screen reads colors, type, spacing and motion from here via `useTheme()`.
  * Screens not yet redesigned still use `src/lib/theme.ts`; delete that file once they're migrated.
@@ -155,7 +155,7 @@ const dark: Palette = {
 export const palettes: Record<ColorScheme, Palette> = { light, dark };
 
 /**
- * NutriPlan is dark by design ("Hearth"). Screens not yet on the new components get the same colors through
+ * Intake Grid is dark by design ("Hearth"). Screens not yet on the new components get the same colors through
  * `src/lib/theme.ts`. Set to `null` to follow the device setting (and app.json `userInterfaceStyle` "automatic").
  */
 export const FORCED_COLOR_SCHEME: ColorScheme | null = 'dark';

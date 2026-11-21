@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "NutriPlan",
+    "name": "Intake Grid",
     "slug": "nutriplan",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -27,8 +27,8 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "output": "single",
-      "name": "NutriPlan",
-      "shortName": "NutriPlan",
+      "name": "Intake Grid",
+      "shortName": "Intake Grid",
       "themeColor": "#121514",
       "backgroundColor": "#121514"
     },

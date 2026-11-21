@@ -1,4 +1,6 @@
-# NutriPlan
+# Intake Grid
+
+> Formerly "NutriPlan". Code, folders and the Android package id (`com.nutriplan.app`) keep the old name so installs update in place.
 
 A personal nutrition tracker in the spirit of Cronometer, plus the parts Cronometer doesn't have:
 **meal planning with recipes, a week view that adapts when you stray, and suggestions that fill the
