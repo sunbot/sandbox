@@ -440,8 +440,8 @@ with "Open settings". Large text (≥ 130 % font scale) switches rows to stacked
 ### 7.2 UX limitations
 
 - Only Today follows the new design spec; other screens are visually inconsistent with it (two color systems, emoji in places).
-- Legacy flows rely on `Alert.alert` menus: **on the web build these menus do not appear**, so e.g. Week entry actions ("I ate this", Skip, Remove)
-  and ("Ate a bit more ×1.25"), recipe ingredient "Choose food / Exclude", pantry "Remove" and "Delete recipe" confirmations are not usable
+- Legacy flows rely on `Alert.alert` menus: **on the web build these menus do not appear**, so e.g. Week entry actions ("I ate this", "Ate a bit more ×1.25", Skip, Remove),
+  recipe ingredient "Choose food / Exclude", pantry "Remove" and "Delete recipe" confirmations are not usable
   on web, and success/error messages ("Saved", "Could not save", "Added to plan") are silent there. (Today's equivalents use bottom sheets
   and an Undo bar, and work on web.)
 - Today's Recent chips and Fill Gaps "Add to plan" use the **current time-of-day meal**, even when viewing another date.
