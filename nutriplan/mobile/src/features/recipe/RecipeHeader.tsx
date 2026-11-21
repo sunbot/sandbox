@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
 import type { RecipeDetail } from '@/api/types';
 import { AppText, IconButton } from '@/components/ds';
-import { Clock, Pencil, Star, Utensils } from '@/components/ds/icons';
+import { Clock, Pencil, Star } from '@/components/ds/icons';
+import { RecipeThumb } from './RecipeThumb';
 import { loadSettings } from '@/lib/settings';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -15,22 +16,11 @@ export function RecipeHeader({ recipe, onFavorite, onEdit }: { recipe: RecipeDet
   const s = recipe.summary;
   const [server, setServer] = useState({ apiUrl: '', apiKey: '' });
   useEffect(() => { loadSettings().then(setServer); }, []);
-  const [failed, setFailed] = useState(false);
-  const hasImage = (s.hasPhoto || !!s.imageUrl) && !failed;
-  const size = 84;
   const time = s.totalTime || [recipe.prepTime && `Prep ${recipe.prepTime}`, recipe.cookTime && `Cook ${recipe.cookTime}`].filter(Boolean).join(' · ');
 
   return (
     <View style={{ flexDirection: 'row', gap: t.space.lg, alignItems: 'flex-start' }}>
-      {hasImage ? (
-        <Image accessibilityIgnoresInvertColors accessibilityLabel="" onError={() => setFailed(true)}
-          source={s.hasPhoto ? { uri: `${server.apiUrl}/api/recipes/${s.id}/photo`, headers: server.apiKey ? { 'X-Api-Key': server.apiKey } : undefined } : { uri: s.imageUrl! }}
-          style={{ width: size, height: size, borderRadius: t.radii.card, backgroundColor: t.colors.surfaceMuted }} />
-      ) : (
-        <View importantForAccessibility="no-hide-descendants" style={{ width: size, height: size, borderRadius: t.radii.card, backgroundColor: t.colors.surfaceMuted, borderWidth: 1, borderColor: t.colors.border, alignItems: 'center', justifyContent: 'center' }}>
-          <Utensils size={30} strokeWidth={1.5} color={t.colors.textMuted} />
-        </View>
-      )}
+      <RecipeThumb recipe={s} server={server} size={84} radius={t.radii.card} iconSize={30} />
       <View style={{ flex: 1, minWidth: 0, gap: t.space.xs }}>
         <AppText variant="sectionTitle" accessibilityRole="header">{s.name}</AppText>
         {time ? (
