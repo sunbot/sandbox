@@ -1,6 +1,7 @@
 using NutriPlan.Application.Abstractions;
 using NutriPlan.Application.Common;
 using NutriPlan.Domain.Diary;
+using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Nutrients;
 using NutriPlan.Domain.Units;
 
@@ -45,7 +46,8 @@ public sealed class DiaryService(
     IFoodRepository foods,
     IRecipeRepository recipes,
     ITargetsRepository targetsRepo,
-    IUnitOfWork uow)
+    IUnitOfWork uow,
+    IPlanRepository plans)
 {
     public async Task<ItemSnapshot> BuildFoodItemAsync(Guid foodId, double? grams, double? amount, string? unit, CancellationToken ct)
     {
@@ -148,6 +150,9 @@ public sealed class DiaryService(
     {
         var entry = await diary.GetAsync(id, ct) ?? throw new NotFoundException($"Entry {id} not found.");
         diary.Remove(entry);
+        // Un-logging a planned meal puts it back on the plan, so it isn't left marked eaten with no diary entry.
+        if (entry.PlanEntryId is { } planId && await plans.GetAsync(planId, ct) is { Status: PlanStatus.Eaten } planned)
+            planned.Reopen();
         await uow.SaveChangesAsync(ct);
     }
 

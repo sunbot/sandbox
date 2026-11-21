@@ -6,8 +6,10 @@
 /* eslint-disable no-restricted-imports */
 export type { LucideIcon, LucideProps } from 'lucide-react-native';
 
+export { default as ArrowLeftRight } from 'lucide-react-native/icons/arrow-left-right';
 export { default as ArrowUp } from 'lucide-react-native/icons/arrow-up';
 export { default as BadgeCheck } from 'lucide-react-native/icons/badge-check';
+export { default as CalendarArrowDown } from 'lucide-react-native/icons/calendar-arrow-down';
 export { default as CalendarClock } from 'lucide-react-native/icons/calendar-clock';
 export { default as CalendarDays } from 'lucide-react-native/icons/calendar-days';
 export { default as Check } from 'lucide-react-native/icons/check';
@@ -21,6 +23,7 @@ export { default as CircleCheck } from 'lucide-react-native/icons/circle-check';
 export { default as CircleDashed } from 'lucide-react-native/icons/circle-dashed';
 export { default as Clock } from 'lucide-react-native/icons/clock';
 export { default as CloudOff } from 'lucide-react-native/icons/cloud-off';
+export { default as Copy } from 'lucide-react-native/icons/copy';
 export { default as Download } from 'lucide-react-native/icons/download';
 export { default as Flame } from 'lucide-react-native/icons/flame';
 export { default as Grid3x3 } from 'lucide-react-native/icons/grid-3x3';

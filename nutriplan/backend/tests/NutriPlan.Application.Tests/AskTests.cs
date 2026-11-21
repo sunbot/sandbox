@@ -12,7 +12,7 @@ namespace NutriPlan.Application.Tests;
 public class AskTests
 {
     private readonly InMemoryStore _store = new();
-    private DiaryService Diary() => new(_store, _store, _store, _store, _store);
+    private DiaryService Diary() => new(_store, _store, _store, _store, _store, _store);
     private PlanService Plan() => new(_store, _store, _store, Diary(), _store, _store);
     private FoodService Foods() => new(_store, [], _store);
 

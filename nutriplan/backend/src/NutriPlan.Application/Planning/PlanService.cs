@@ -172,10 +172,38 @@ public sealed class PlanService(
         if (scale <= 0) throw new ValidationException("Scale must be greater than zero.");
         var entry = await GetEntry(id, ct);
         if (entry.Status == PlanStatus.Eaten) throw new ValidationException("This meal is already logged.");
+        // Planned food is never counted as eaten ahead of time.
+        if (entry.Date > clock.Today) throw new ValidationException("That meal is planned for a later day. Log it on the day you eat it.");
         var logged = entry.ToDiaryEntry(scale);
         diary.Add(logged);
         await uow.SaveChangesAsync(ct);
         return DiaryEntryDto.From(logged);
+    }
+
+    /// <summary>Undo a skip: the meal is planned again. (A logged meal is un-logged by deleting its diary entry.)</summary>
+    public async Task<PlanEntryDto> ReopenAsync(Guid id, CancellationToken ct = default)
+    {
+        var entry = await GetEntry(id, ct);
+        if (entry.Status == PlanStatus.Eaten) throw new ValidationException("This meal is logged. Delete it from the diary to plan it again.");
+        entry.Reopen();
+        await uow.SaveChangesAsync(ct);
+        return PlanEntryDto.From(entry);
+    }
+
+    /// <summary>
+    /// Copies the still-planned meals of one day (or one meal) to another day, as new plan entries. Eaten and skipped
+    /// entries aren't copied, and nothing is logged.
+    /// </summary>
+    public async Task<IReadOnlyList<PlanEntryDto>> CopyAsync(DateOnly from, DateOnly to, MealSlot? meal, CancellationToken ct = default)
+    {
+        if (from == to && meal is null) throw new ValidationException("Choose a different day to copy to.");
+        var source = (await plan.GetRangeAsync(from, from, ct))
+            .Where(e => e.Status == PlanStatus.Planned && (meal is null || e.Meal == meal)).ToList();
+        if (source.Count == 0) throw new ValidationException("There's nothing planned to copy.");
+        var copies = source.Select(e => new PlanEntry(to, e.Meal, e.Item)).ToList();
+        copies.ForEach(plan.Add);
+        await uow.SaveChangesAsync(ct);
+        return copies.Select(PlanEntryDto.From).ToList();
     }
 
     public async Task<PlanEntryDto> MarkSkippedAsync(Guid id, CancellationToken ct = default)

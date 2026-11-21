@@ -15,6 +15,7 @@ namespace NutriPlan.Api.Endpoints;
 // Business rules live in NutriPlan.Application / NutriPlan.Domain.
 
 public sealed record MoveRequest(DateOnly Date, MealSlot Meal);
+public sealed record PlanCopyRequest(DateOnly From, DateOnly To, MealSlot? Meal);
 public sealed record ScaleRequest(double Scale);
 public sealed record SwapRecipeRequest(Guid RecipeId, double Servings = 1);
 public sealed record SwapFoodRequest(Guid FoodId, double? Grams, double? Amount, string? Unit);
@@ -78,6 +79,8 @@ public static class PlanEndpoints
         g.MapPost("/{id:guid}/rescale", (Guid id, ScaleRequest r, PlanService s, CancellationToken ct) => s.RescaleAsync(id, r.Scale, ct));
         g.MapPost("/{id:guid}/eaten", (Guid id, EatenRequest? r, PlanService s, CancellationToken ct) => s.MarkEatenAsync(id, r?.Scale ?? 1, ct));
         g.MapPost("/{id:guid}/skip", (Guid id, PlanService s, CancellationToken ct) => s.MarkSkippedAsync(id, ct));
+        g.MapPost("/{id:guid}/reopen", (Guid id, PlanService s, CancellationToken ct) => s.ReopenAsync(id, ct));
+        g.MapPost("/copy", (PlanCopyRequest r, PlanService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, ct));
         g.MapDelete("/{id:guid}", async (Guid id, PlanService s, CancellationToken ct) => { await s.DeleteAsync(id, ct); return Results.NoContent(); });
         g.MapGet("/rebalance", (DateOnly date, PlanService s, CancellationToken ct) => s.ProposeRebalanceAsync(date, ct));
         g.MapPost("/rebalance", (RebalanceApplyRequest r, PlanService s, CancellationToken ct) => s.ApplyRebalanceAsync(r.Date, r.Scale, ct));

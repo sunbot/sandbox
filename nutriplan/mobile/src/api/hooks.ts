@@ -141,6 +141,12 @@ export function usePlanMutations() {
     move: useMutation({ mutationFn: ({ id, date, meal }: { id: string; date: string; meal: Meal }) => post<T.PlanEntry>(`/plan/${id}/move`, { date, meal }), ...opts }),
     rescale: useMutation({ mutationFn: ({ id, scale }: { id: string; scale: number }) => post<T.PlanEntry>(`/plan/${id}/rescale`, { scale }), ...opts }),
     applyRebalance: useMutation({ mutationFn: (r: { date: string; scale: number }) => post<T.PlanEntry[]>('/plan/rebalance', r), ...opts }),
+    reopen: useMutation({ mutationFn: (id: string) => post<T.PlanEntry>(`/plan/${id}/reopen`), ...opts }),
+    copy: useMutation({ mutationFn: (r: { from: string; to: string; meal?: Meal }) => post<T.PlanEntry[]>('/plan/copy', r), ...opts }),
+    swapRecipe: useMutation({
+      mutationFn: ({ id, recipeId, servings }: { id: string; recipeId: string; servings: number }) => post<T.PlanEntry>(`/plan/${id}/swap-recipe`, { recipeId, servings }),
+      ...opts,
+    }),
   };
 }
 

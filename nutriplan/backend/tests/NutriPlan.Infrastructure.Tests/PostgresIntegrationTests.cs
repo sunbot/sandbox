@@ -76,7 +76,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             Assert.Equal("Egg, whole, raw, fresh", results[0].Name);
             Assert.Equal(50, results[0].Portions.Single(p => p.Description == "large").Grams);
 
-            var diary = new DiaryService(new DiaryRepository(db), foods, new RecipeRepository(db), new TargetsRepository(db), db);
+            var diary = new DiaryService(new DiaryRepository(db), foods, new RecipeRepository(db), new TargetsRepository(db), db, new PlanRepository(db));
             var egg = results[0];
             await diary.LogFoodAsync(new LogFoodRequest(new DateOnly(2026, 11, 18), MealSlot.Breakfast, egg.Id, null, 2, "large"));
             await diary.LogFoodAsync(new LogFoodRequest(new DateOnly(2026, 11, 19), MealSlot.Breakfast, egg.Id, null, 3, null));
@@ -84,7 +84,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
 
         await using (var db = NewContext())
         {
-            var day = await new DiaryService(new DiaryRepository(db), new FoodRepository(db), new RecipeRepository(db), new TargetsRepository(db), db)
+            var day = await new DiaryService(new DiaryRepository(db), new FoodRepository(db), new RecipeRepository(db), new TargetsRepository(db), db, new PlanRepository(db))
                 .GetDayAsync(new DateOnly(2026, 11, 18));
             Assert.Equal(143, day.Totals.Calories, 1); // 100 g of egg
 
