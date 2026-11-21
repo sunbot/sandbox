@@ -64,8 +64,12 @@ public sealed class RecipeIngredient
     }
 }
 
-public sealed class Recipe
+public sealed class Recipe : Users.IOwned
 {
+    /// <summary>The user this record belongs to (set by the repository from the signed-in user).</summary>
+    public Guid OwnerId { get; private set; }
+    public void AssignOwner(Guid ownerId) => OwnerId = Users.Ownership.Assign(OwnerId, ownerId);
+
     private List<RecipeIngredient> _ingredients = [];
     private List<string> _categories = [];
 

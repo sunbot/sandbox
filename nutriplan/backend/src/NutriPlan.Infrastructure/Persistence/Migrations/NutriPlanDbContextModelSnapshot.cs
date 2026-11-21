@@ -53,6 +53,10 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<Guid?>("PlanEntryId")
                         .HasColumnType("uuid")
                         .HasColumnName("plan_entry_id");
@@ -60,13 +64,13 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_diary_entries");
 
-                    b.HasIndex("Date")
-                        .HasDatabaseName("ix_diary_entries_date");
-
                     b.HasIndex("PlanEntryId")
                         .IsUnique()
                         .HasDatabaseName("ux_diary_entries_plan_entry_id")
                         .HasFilter("plan_entry_id IS NOT NULL");
+
+                    b.HasIndex("OwnerId", "Date")
+                        .HasDatabaseName("ix_diary_entries_owner_id_date");
 
                     b.ToTable("diary_entries", (string)null);
                 });
@@ -120,6 +124,10 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("nutrients_per100g");
 
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<string>("Quality")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -162,6 +170,9 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_foods_owner_id");
 
                     b.HasIndex("SourceId")
                         .IsUnique()
@@ -207,17 +218,24 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.HasKey("Id")
                         .HasName("pk_pantry_items");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_pantry_items_owner_id");
 
                     b.ToTable("pantry_items", (string)null);
                 });
 
             modelBuilder.Entity("NutriPlan.Domain.Planning.NutritionTargets", b =>
                 {
-                    b.Property<int>("Id")
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
 
                     b.Property<string>("BudgetMode")
                         .IsRequired()
@@ -261,7 +279,7 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("week_starts_on");
 
-                    b.HasKey("Id")
+                    b.HasKey("OwnerId")
                         .HasName("pk_targets");
 
                     b.ToTable("targets", (string)null);
@@ -297,6 +315,10 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("meal");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -309,8 +331,8 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                     b.HasIndex("BatchId")
                         .HasDatabaseName("ix_plan_entries_batch_id");
 
-                    b.HasIndex("Date")
-                        .HasDatabaseName("ix_plan_entries_date");
+                    b.HasIndex("OwnerId", "Date")
+                        .HasDatabaseName("ix_plan_entries_owner_id_date");
 
                     b.ToTable("plan_entries", (string)null);
                 });
@@ -380,6 +402,10 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("origin");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<byte[]>("Photo")
                         .HasColumnType("bytea")
                         .HasColumnName("photo");
@@ -439,10 +465,223 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
 
-                    b.HasIndex("Origin", "ExternalId")
-                        .HasDatabaseName("ix_recipes_origin_external_id");
+                    b.HasIndex("OwnerId", "Origin", "ExternalId")
+                        .HasDatabaseName("ix_recipes_owner_id_origin_external_id");
 
                     b.ToTable("recipes", (string)null);
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Users.AppUser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("email");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_login_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("role");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_app_users");
+
+                    b.ToTable("app_users", (string)null);
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Users.ExternalIdentity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_external_identities");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_external_identities_user_id");
+
+                    b.HasIndex("Provider", "Subject")
+                        .IsUnique()
+                        .HasDatabaseName("ux_external_identities_provider_subject");
+
+                    b.ToTable("external_identities", (string)null);
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Users.Invitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid?>("AcceptedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_by");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EmailHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("email_hash");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("InvitedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invited_by");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_invitations");
+
+                    b.HasIndex("EmailHash")
+                        .HasDatabaseName("ix_invitations_email_hash");
+
+                    b.HasIndex("InvitedBy")
+                        .HasDatabaseName("ix_invitations_invited_by");
+
+                    b.ToTable("invitations", (string)null);
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Diary.DiaryEntry", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_diary_entries_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Foods.Food", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_foods_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Pantry.PantryItem", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_pantry_items_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Planning.NutritionTargets", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_targets_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Planning.PlanEntry", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_plan_entries_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Recipes.Recipe", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_recipes_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Users.ExternalIdentity", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_external_identities_app_users_user_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Users.Invitation", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("InvitedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_invitations_app_users_invited_by");
                 });
 #pragma warning restore 612, 618
         }

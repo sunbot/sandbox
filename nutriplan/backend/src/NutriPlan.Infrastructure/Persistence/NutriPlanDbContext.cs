@@ -9,6 +9,7 @@ using NutriPlan.Domain.Nutrients;
 using NutriPlan.Domain.Pantry;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
+using NutriPlan.Domain.Users;
 
 namespace NutriPlan.Infrastructure.Persistence;
 
@@ -16,8 +17,17 @@ namespace NutriPlan.Infrastructure.Persistence;
 /// One Postgres database. Nested value objects (nutrients, portions, ingredients, item snapshots) are stored
 /// as jsonb: they're always read with their parent, which keeps the schema small and easy to change.
 /// </summary>
-public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> options) : DbContext(options), IUnitOfWork
+public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> options, ICurrentUser? currentUser = null) : DbContext(options), IUnitOfWork
 {
+    /// <summary>
+    /// The owner every user-owned query is filtered to: the signed-in user, or no one (an empty id matches no rows)
+    /// when there is none. Repositories also filter explicitly; this is the second line of defence.
+    /// </summary>
+    internal Guid CurrentOwner => currentUser is { IsAuthenticated: true } u ? u.Id : Guid.Empty;
+
+    public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<ExternalIdentity> ExternalIdentities => Set<ExternalIdentity>();
+    public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<Food> Foods => Set<Food>();
     public DbSet<Recipe> Recipes => Set<Recipe>();
     public DbSet<DiaryEntry> DiaryEntries => Set<DiaryEntry>();
@@ -31,6 +41,7 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasPostgresExtension("pg_trgm");
+        Identity(b);
 
         b.Entity<Food>(e =>
         {
@@ -51,6 +62,11 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.Ignore(x => x.DisplayName);
             e.Ignore(x => x.IsLabAnalyzed);
             e.Ignore(x => x.IsVolume);
+            e.Ignore(x => x.IsShared);
+            e.HasIndex(x => x.OwnerId);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);
+            // Shared catalog foods (no owner) are visible to everyone; private foods only to their owner.
+            e.HasQueryFilter(x => x.OwnerId == null || x.OwnerId == CurrentOwner);
             e.Ignore(x => x.BaseUnit);
             e.Property(x => x.Basis).HasConversion<string>().HasMaxLength(8).HasDefaultValue(NutrientBasis.Mass).HasSentinel((NutrientBasis)(-1));
             e.HasIndex(x => x.Barcode);
@@ -75,7 +91,8 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.Ignore(x => x.Ingredients);
             e.Ignore(x => x.Categories);
             e.Ignore(x => x.GramsPerServing);
-            e.HasIndex(x => new { x.Origin, x.ExternalId });
+            e.HasIndex(x => new { x.OwnerId, x.Origin, x.ExternalId });
+            Owned(e);
             e.HasIndex(x => x.Name).HasMethod("gin").HasOperators("gin_trgm_ops").HasDatabaseName("ix_recipes_name_trgm");
         });
 
@@ -85,7 +102,8 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.HasKey(x => x.Id);
             e.Property(x => x.Meal).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Item).HasColumnType("jsonb").HasConversion(Json.Of<ItemSnapshot>(), Json.Comparer<ItemSnapshot>());
-            e.HasIndex(x => x.Date);
+            e.HasIndex(x => new { x.OwnerId, x.Date });
+            Owned(e);
             // A planned meal is logged at most once, even if two requests race (double tap, retry).
             e.HasIndex(x => x.PlanEntryId).IsUnique().HasFilter("plan_entry_id IS NOT NULL").HasDatabaseName("ux_diary_entries_plan_entry_id");
         });
@@ -97,8 +115,9 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.Property(x => x.Meal).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Item).HasColumnType("jsonb").HasConversion(Json.Of<ItemSnapshot>(), Json.Comparer<ItemSnapshot>());
-            e.HasIndex(x => x.Date);
+            e.HasIndex(x => new { x.OwnerId, x.Date });
             e.HasIndex(x => x.BatchId);
+            Owned(e);
         });
 
         b.Entity<PantryItem>(e =>
@@ -106,13 +125,17 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.ToTable("pantry_items");
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            e.HasIndex(x => x.OwnerId);
+            Owned(e);
         });
 
         b.Entity<NutritionTargets>(e =>
         {
             e.ToTable("targets");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasKey(x => x.OwnerId); // one row per user
+            e.Property(x => x.OwnerId).ValueGeneratedNever();
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OwnerId == CurrentOwner);
             e.Property(x => x.BudgetMode).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.WeekStartsOn).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.NutrientOverrides).HasColumnType("jsonb")
@@ -120,6 +143,45 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.Property(x => x.FocusNutrients).HasColumnType("jsonb")
                 .HasConversion(Json.Of<List<int>>(), Json.ListComparer<int>());
             e.Ignore(x => x.EffectiveFocusNutrients);
+        });
+    }
+
+    /// <summary>A user-owned table: required owner, foreign key to the user, and a filter to the current owner.</summary>
+    private void Owned<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> e) where T : class, IOwned
+    {
+        e.Property(x => x.OwnerId).IsRequired();
+        e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);
+        e.HasQueryFilter(x => x.OwnerId == CurrentOwner);
+    }
+
+    private static void Identity(ModelBuilder b)
+    {
+        b.Entity<AppUser>(e =>
+        {
+            e.ToTable("app_users");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Email).HasMaxLength(320);
+            e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+        });
+        b.Entity<ExternalIdentity>(e =>
+        {
+            e.ToTable("external_identities");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Provider).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Subject).HasMaxLength(256).IsRequired();
+            e.HasIndex(x => new { x.Provider, x.Subject }).IsUnique().HasDatabaseName("ux_external_identities_provider_subject");
+            e.HasIndex(x => x.UserId);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<Invitation>(e =>
+        {
+            e.ToTable("invitations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.EmailHash).HasMaxLength(64).IsRequired();
+            e.HasIndex(x => x.EmailHash);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.InvitedBy).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

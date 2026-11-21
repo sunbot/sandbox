@@ -14,6 +14,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<FoodService>();
+        services.AddScoped<Accounts.AccountService>();
         services.AddScoped<BrandedFoodService>();
         services.AddSingleton<RemoteSearchCache>();
         services.AddScoped<DiaryService>();

@@ -11,11 +11,11 @@ public enum BudgetMode
 }
 
 /// <summary>The user's daily goals. Single row for a personal app; add an owner id to go multi-user.</summary>
-public sealed class NutritionTargets
+public sealed class NutritionTargets : Users.IOwned
 {
-    public const int SingletonId = 1;
-
-    public int Id { get; set; } = SingletonId;
+    /// <summary>Each user has their own targets: the owner is the key.</summary>
+    public Guid OwnerId { get; private set; }
+    public void AssignOwner(Guid ownerId) => OwnerId = Users.Ownership.Assign(OwnerId, ownerId);
     public double Calories { get; set; } = 2000;
     public double ProteinGrams { get; set; } = 120;
     public double CarbGrams { get; set; } = 200;

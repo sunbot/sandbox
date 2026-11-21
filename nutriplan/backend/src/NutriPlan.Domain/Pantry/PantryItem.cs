@@ -1,8 +1,12 @@
 namespace NutriPlan.Domain.Pantry;
 
 /// <summary>Something you have at home. Quantity is optional: "I have eggs" is useful on its own.</summary>
-public sealed class PantryItem
+public sealed class PantryItem : Users.IOwned
 {
+    /// <summary>The user this record belongs to (set by the repository from the signed-in user).</summary>
+    public Guid OwnerId { get; private set; }
+    public void AssignOwner(Guid ownerId) => OwnerId = Users.Ownership.Assign(OwnerId, ownerId);
+
     private PantryItem() { } // EF
 
     public PantryItem(string name, Guid? foodId = null, double? grams = null, DateOnly? expiresOn = null)

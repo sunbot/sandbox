@@ -83,6 +83,14 @@ public sealed class Food
     public bool IsArchived { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
+    /// <summary>
+    /// Null = the shared catalog (USDA, cached public products), visible to everyone. Set = a private food (made from
+    /// a label), visible only to its owner.
+    /// </summary>
+    public Guid? OwnerId { get; private set; }
+    public bool IsShared => OwnerId is null;
+    public bool VisibleTo(Guid userId) => OwnerId is null || OwnerId == userId;
+    public void MakePrivateTo(Guid ownerId) => OwnerId = Users.Ownership.Assign(OwnerId ?? Guid.Empty, ownerId);
 
     public string DisplayName => Brand is null ? Name : $"{Name} ({Brand})";
 

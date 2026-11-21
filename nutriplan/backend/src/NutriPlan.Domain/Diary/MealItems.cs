@@ -50,8 +50,12 @@ public sealed record ItemSnapshot(
     };
 }
 
-public sealed class DiaryEntry
+public sealed class DiaryEntry : Users.IOwned
 {
+    /// <summary>The user this record belongs to (set by the repository from the signed-in user).</summary>
+    public Guid OwnerId { get; private set; }
+    public void AssignOwner(Guid ownerId) => OwnerId = Users.Ownership.Assign(OwnerId, ownerId);
+
     private DiaryEntry() { } // EF
 
     public DiaryEntry(DateOnly date, MealSlot meal, ItemSnapshot item, Guid? planEntryId = null)
