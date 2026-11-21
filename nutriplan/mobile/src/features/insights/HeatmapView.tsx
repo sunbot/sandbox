@@ -100,7 +100,7 @@ export function HeatmapLegend() {
     [t.colors.successLight, t.colors.successText, '90% of goal or more, or within limit'],
     [t.colors.surfaceMuted, t.colors.text, '50–89% of goal'],
     [t.colors.warningLight, t.colors.warningText, 'Under 50% of goal'],
-    [t.colors.errorLight, t.colors.errorText, 'Over limit (or calories over 110%)'],
+    [t.colors.errorLight, t.colors.errorText, 'Over limit, or calories, carbs or fat over 110%'],
   ];
   return (
     <View style={{ gap: 6 }}>

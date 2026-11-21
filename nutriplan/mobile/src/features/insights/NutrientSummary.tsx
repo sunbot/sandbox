@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { AppText } from '@/components/ds';
-import { CircleCheck, CircleDashed, CircleHelp, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
+import { CircleAlert, CircleCheck, CircleDashed, CircleHelp, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { Summary } from './insights';
 
@@ -19,6 +19,7 @@ export function NutrientSummary({ summary: s, openWord }: { summary: Summary; op
     { icon: CircleDashed, color: t.colors.primary, label: openWord, value: String(s.open) },
     { icon: TriangleAlert, color: t.colors.error, label: 'Over a limit', value: `${s.over} of ${s.limits}` },
   ];
+  if (s.overTarget > 0) rows.push({ icon: CircleAlert, color: t.colors.warning, label: 'Over target', value: String(s.overTarget) });
   if (s.incomplete > 0) rows.push({ icon: CircleHelp, color: t.colors.textMuted, label: 'Some data missing', value: String(s.incomplete) });
 
   return (

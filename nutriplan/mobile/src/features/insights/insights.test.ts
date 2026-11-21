@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Day, Heatmap } from '../../api/types';
-import { cellText, classify, dayViews, percentOf, percentText, rowLabel, sourcesFor, summarize, weekViews } from './insights.ts';
+import { cellText, classify, dayViews, percentOf, percentText, rowLabel, sourcesFor, statusWord, summarize, weekViews } from './insights.ts';
 
 const base = { logged: true, inProgress: false, missing: 0 };
 
@@ -99,7 +99,7 @@ test('summary counts goals and limits separately and leaves calories out', () =>
     { nutrientId: 1093, name: 'Sodium', unit: 'mg', kind: 'Limit', target: 2300, averageAmount: 2600, completedDays: 3 },
     { nutrientId: 1087, name: 'Calcium', unit: 'mg', target: 1000, averageAmount: 300, completedDays: 3, incompleteDays: 2 },
   ]));
-  assert.deepEqual(summarize(views), { goals: 3, met: 1, open: 1, incomplete: 1, limits: 1, over: 1, noData: false });
+  assert.deepEqual(summarize(views), { goals: 3, met: 1, open: 1, incomplete: 1, limits: 1, over: 1, overTarget: 0, noData: false });
 });
 
 test('food sources come from the saved entries; unknown values are counted, not zero', () => {
@@ -115,4 +115,27 @@ test('heatmap cells show the number, a dash when unlogged, and ≥ when data is 
   assert.equal(cellText({ percent: 64.6 }), '65');
   assert.equal(cellText({ percent: null }), '–');
   assert.equal(cellText({ percent: 40, missingFrom: 2 }), '≥40');
+});
+
+test('carbs and fat well past the target are "over target", not "goal met"; other goals are unaffected', () => {
+  assert.equal(classify({ ...base, amount: 215, target: 190, kind: 'Goal', overAt: 1.1 }), 'overTarget');  // 113%
+  assert.equal(classify({ ...base, amount: 205, target: 190, kind: 'Goal', overAt: 1.1 }), 'met');         // 108%
+  assert.equal(classify({ ...base, amount: 215, target: 190, kind: 'Goal', overAt: 1.1, missing: 3 }), 'overTarget'); // known amount already over
+  assert.equal(classify({ ...base, amount: 300, target: 130, kind: 'Goal' }), 'met');                     // protein: more is fine
+  const views = weekViews(heat([
+    { nutrientId: 1005, name: 'Carbohydrates', target: 190, averageAmount: 215, completedDays: 3 },
+    { nutrientId: 1004, name: 'Fat', target: 65, averageAmount: 70, completedDays: 3 },
+    { nutrientId: 1003, name: 'Protein', target: 130, averageAmount: 200, completedDays: 3 },
+  ]));
+  assert.deepEqual(views.map((v) => v.status), ['overTarget', 'met', 'met']);
+  assert.equal(summarize(views).overTarget, 1);
+  assert.equal(statusWord('overTarget', 'Goal'), 'Over target');
+});
+
+test('missing data: the collapsed row reads "In progress" today or "May be higher", and the label explains it', () => {
+  assert.equal(statusWord('incomplete', 'Goal', true), 'In progress');
+  assert.equal(statusWord('incomplete', 'Goal', false), 'May be higher');
+  assert.equal(statusWord('incomplete', 'Limit', false), 'May be higher');
+  const [v] = weekViews(heat([{ averageAmount: 10, completedDays: 3, incompleteDays: 2 }]));
+  assert.match(rowLabel(v), /at least 10 of 28 g.*May be higher.*real amount may be higher/);
 });
