@@ -66,11 +66,11 @@ public sealed class ClaudeInterpreter(ClaudeJsonClient claude, IOptions<ClaudeOp
                   "unit": { "type": ["string", "null"] },
                   "preparation": { "type": ["string", "null"] },
                   "brand": { "type": ["string", "null"] },
-                  "cooked_state": { "type": ["string", "null"], "enum": ["raw", "cooked", null] }
+                  "cooked_state": { "anyOf": [ { "type": "string", "enum": ["raw", "cooked"] }, { "type": "null" } ] }
                 }
               }
             },
-            "meal": { "type": ["string", "null"], "enum": ["breakfast", "lunch", "dinner", "snack", null] },
+            "meal": { "anyOf": [ { "type": "string", "enum": ["breakfast", "lunch", "dinner", "snack"] }, { "type": "null" } ] },
             "date": { "type": ["string", "null"] },
             "recipe_query": { "type": ["string", "null"] },
             "recipe_count": { "type": ["integer", "null"] },
