@@ -94,3 +94,19 @@ go to repo → Settings → Secrets and variables → Actions → **New reposito
 The workflow does nothing for deploys until that secret exists, so it's safe to leave as is.
 
 Copilot: with a Copilot plan, ask it for a review on a pull request, or use the Copilot chat in GitHub to extend this workflow.
+
+## Android app without a computer (GitHub builds the APK)
+
+`.github/workflows/nutriplan-android.yml` builds an installable APK in GitHub's cloud and publishes it at
+`https://github.com/<owner>/<repo>/releases/tag/android-latest`.
+
+1. (Optional) Repo → Settings → Secrets and variables → Actions → **Variables** → add `NUTRIPLAN_API_URL` = your Render address,
+   so the app already knows its server. Or skip it and type the address in the app under More → Settings.
+2. Repo → **Actions** → "NutriPlan Android APK" → **Run workflow** (it can also take the address as an input).
+   The workflow file has to be on the repo's default branch for the Run button to appear; it also runs by itself when the file changes.
+3. When it finishes (about 10–20 minutes), open the Release page **on your phone**, tap `NutriPlan.apk`, and install
+   (allow "install unknown apps" for your browser when asked). Then enter your API key under More → Settings.
+
+Each build gets a higher version number, so a new APK installs over the old one and keeps your settings.
+The APK is signed with the standard Expo template key, which is fine for a personal sideloaded app but not for publishing
+to the Play Store. For Play, create your own upload key.
