@@ -29,6 +29,9 @@ public sealed class InsightsService(IDiaryRepository diary, ITargetsRepository t
     /// </summary>
     public const int MinDaysForPatterns = 3;
 
+    /// <summary>Targets where going well past is worth noting (carbs, fat): over 110% reads "over target", not "goal met".</summary>
+    public static readonly HashSet<int> OverTargetMatters = [NutrientIds.Carbohydrate, NutrientIds.Fat];
+
     public async Task<HeatmapDto> GetHeatmapAsync(DateOnly? weekContaining, DateOnly? clientToday = null, CancellationToken ct = default)
     {
         var today = clientToday ?? clock.Today;
@@ -74,6 +77,7 @@ public sealed class InsightsService(IDiaryRepository diary, ITargetsRepository t
     {
         if (kind == TargetKind.Limit) return percent <= 100 ? "good" : percent <= 130 ? "high" : "veryHigh";
         if (nutrientId == NutrientIds.Energy) return percent < 85 ? "low" : percent <= 110 ? "good" : "high";
+        if (OverTargetMatters.Contains(nutrientId) && percent > 110) return "high";
         return percent < 50 ? "low" : percent < 90 ? "fair" : "good";
     }
 
@@ -81,7 +85,7 @@ public sealed class InsightsService(IDiaryRepository diary, ITargetsRepository t
     /// Plain notes about the finished days of the week. Patterns need at least <see cref="MinDaysForPatterns"/> finished
     /// logged days; a nutrient with missing data on any of them is never called low (its total is only a minimum).
     /// </summary>
-    internal static IReadOnlyList<string> Highlights(IReadOnlyList<HeatmapRowDto> rows, int loggedDays, int finishedDays)
+    public static IReadOnlyList<string> Highlights(IReadOnlyList<HeatmapRowDto> rows, int loggedDays, int finishedDays)
     {
         if (loggedDays == 0) return ["Nothing logged this week yet."];
         if (finishedDays < MinDaysForPatterns)
@@ -97,7 +101,11 @@ public sealed class InsightsService(IDiaryRepository diary, ITargetsRepository t
         var overs = rows.Where(r => r.Kind == nameof(TargetKind.Limit) && r.CompletedDays > 0 && r.WeeklyAveragePercent > 100).ToList();
         if (overs.Count > 0)
             notes.Add("Over the limit on average: " + string.Join(", ", overs.Select(r => $"{r.Name} ({r.WeeklyAveragePercent:0}%)")));
-        var wins = rows.Where(r => r.Kind == nameof(TargetKind.Goal) && r.NutrientId != NutrientIds.Energy && r.CompletedDays > 0 && r.WeeklyAveragePercent >= 100).Select(r => r.Name).Take(4).ToList();
+        var overTarget = rows.Where(r => OverTargetMatters.Contains(r.NutrientId) && r.CompletedDays > 0 && r.WeeklyAveragePercent > 110).ToList();
+        if (overTarget.Count > 0)
+            notes.Add("Over target on average: " + string.Join(", ", overTarget.Select(r => $"{r.Name} ({r.WeeklyAveragePercent:0}%)")));
+        var wins = rows.Where(r => r.Kind == nameof(TargetKind.Goal) && r.NutrientId != NutrientIds.Energy && r.CompletedDays > 0 && r.WeeklyAveragePercent >= 100
+                && !(OverTargetMatters.Contains(r.NutrientId) && r.WeeklyAveragePercent > 110)).Select(r => r.Name).Take(4).ToList();
         if (wins.Count > 0) notes.Add("Goal met on average: " + string.Join(", ", wins));
         return notes;
     }

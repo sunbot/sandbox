@@ -44,10 +44,11 @@ recipe's own calories; when the two differ noticeably the screen says so (fiber,
 - **Overview** shows one day (today by default) or **Week average**: the average per *finished* logged day; today is never
   averaged because it is still under way. The heatmap's "avg" column uses the same finished days.
 - Goal statuses: **Goal met** (100%+), **Nearly met** (90–99%, finished day), **Below goal** (under 90%, finished day),
-  **In progress** / **Behind pace** (today). Limit statuses: **Within limit** or **Over limit**; reaching a limit is never shown as an
+  **In progress** / **Behind pace** (today). Carbohydrate and fat above 110% of target read **Over target** (more isn't better there). Limit statuses: **Within limit** or **Over limit**; reaching a limit is never shown as an
   achievement, and limit bars carry a marker at 100%.
 - **Some data missing**: at least one entry has no value for the nutrient (unknown, not zero). The amount is shown as "≥" and the
-  nutrient is never called below goal or within limit, because the real amount may be higher. A known amount that already
+  nutrient is never called below goal or within limit, because the real amount may be higher. The summary counts these; a
+  collapsed row just reads "In progress" (today) or "May be higher", and opening it explains which entries lack the value. A known amount that already
   reaches a goal or exceeds a limit still counts.
 - Weekly notes ("Below goal on average…") need at least 3 finished logged days and skip nutrients with missing data.
 - **From** (food sources) is shown for a single day only, from each entry's saved nutrition snapshot.

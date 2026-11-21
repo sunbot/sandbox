@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { AppText } from '@/components/ds';
-import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, CircleHelp, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
+import { ChevronDown, ChevronUp, CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import { amountText, percentText, rowLabel, statusWord, type InsightStatus, type NutrientView } from './insights';
 
@@ -20,7 +20,8 @@ export function NutrientBar({ view: v, expanded, onToggle, children }: { view: N
     behind: { icon: Clock, color: t.colors.warning, tone: 'warning' },
     below: { icon: CircleAlert, color: t.colors.warning, tone: 'warning' },
     over: { icon: TriangleAlert, color: t.colors.error, tone: 'error' },
-    incomplete: { icon: CircleHelp, color: t.colors.textMuted, tone: 'secondary' },
+    overTarget: { icon: CircleAlert, color: t.colors.warning, tone: 'warning' },
+    incomplete: { icon: CircleDashed, color: t.colors.textMuted, tone: 'secondary' },
     noData: { icon: CircleDashed, color: t.colors.textMuted, tone: 'muted' },
   };
   const m = meta[v.status];
@@ -57,7 +58,7 @@ export function NutrientBar({ view: v, expanded, onToggle, children }: { view: N
         </View>
       </View>
       <AppText variant="caption" tone={m.tone} style={{ paddingLeft: 26 }}>
-        {statusWord(v.status, v.kind)}{v.status === 'incomplete' ? ` · ${v.missing} ${v.missing === 1 ? 'entry' : 'entries'} without this value` : ''}
+        {statusWord(v.status, v.kind, v.inProgress)}
       </AppText>
     </View>
   );

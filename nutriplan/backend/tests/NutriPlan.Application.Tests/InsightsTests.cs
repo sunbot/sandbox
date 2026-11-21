@@ -99,4 +99,22 @@ public class InsightsTests
         var h = await Insights().GetHeatmapAsync(_store.Today, thursday);
         Assert.Contains(h.Highlights, n => n.StartsWith("Below goal on average over 3 finished days") && n.Contains("Fiber"));
     }
+
+    [Theory]
+    [InlineData(NutrientIds.Carbohydrate, 115, "high")]
+    [InlineData(NutrientIds.Carbohydrate, 105, "good")]
+    [InlineData(NutrientIds.Fat, 120, "high")]
+    [InlineData(NutrientIds.Protein, 150, "good")]
+    public void Carbs_and_fat_well_past_target_are_marked_high(int id, double pct, string level) =>
+        Assert.Equal(level, InsightsService.Level(pct, TargetKind.Goal, id));
+
+    [Fact]
+    public void Over_target_carbs_are_reported_as_over_not_as_a_win()
+    {
+        HeatmapRowDto Make(int id, string name, double pct) => new(id, name, "g", "Goal", 100, pct, [], 100, 3, 0);
+        var notes = InsightsService.Highlights([Make(NutrientIds.Carbohydrate, "Carbohydrates", 120), Make(NutrientIds.Protein, "Protein", 105)], 3, 3);
+        Assert.Contains(notes, n => n.StartsWith("Over target on average: Carbohydrates (120%)"));
+        Assert.Contains(notes, n => n.StartsWith("Goal met on average: Protein"));
+        Assert.DoesNotContain(notes, n => n.StartsWith("Goal met") && n.Contains("Carbohydrates"));
+    }
 }

@@ -17,11 +17,14 @@ export type InsightStatus =
   | 'behind'     // today, well behind the share of calories already eaten
   | 'within'     // limit, complete data, not exceeded
   | 'over'       // limit exceeded (known amounts alone exceed it)
+  | 'overTarget' // carbs/fat well past the target (over 110%): not an achievement
   | 'incomplete' // some entries have no value: can't say below goal / within limit
   | 'noData';    // nothing logged
 
 export const ENERGY = 1008;
 export const MACROS = new Set([1008, 1003, 1005, 1004]);
+/** Targets where going well past isn't "goal met" (carbohydrate, fat): over 110% is "over target". Same as the server. */
+export const OVER_TARGET_AT: Record<number, number> = { 1005: 1.1, 1004: 1.1 };
 
 export type NutrientView = {
   nutrientId: number;
@@ -36,11 +39,15 @@ export type NutrientView = {
   /** Entries (day) or days (week) where the nutrient was unknown. */
   missing: number;
   status: InsightStatus;
+  /** Today, still under way: unfinished goals and missing data read as "in progress". */
+  inProgress: boolean;
 };
 
-export function classify(input: { amount: number; target: number; kind: Kind; missing: number; logged: boolean; inProgress: boolean; dayProgress?: number }): InsightStatus {
+export function classify(input: { amount: number; target: number; kind: Kind; missing: number; logged: boolean; inProgress: boolean; dayProgress?: number; overAt?: number }): InsightStatus {
   const { amount, target, kind, missing, logged, inProgress } = input;
   if (!logged) return 'noData';
+  // Known amounts alone already past the point where more isn't better: true whatever is missing.
+  if (kind === 'Goal' && input.overAt && amount > target * input.overAt) return 'overTarget';
   if (kind === 'Limit') {
     if (amount > target) return 'over';
     return missing > 0 ? 'incomplete' : 'within';
@@ -66,7 +73,8 @@ export function dayViews(day: Day, inProgress: boolean): NutrientView[] {
       amount: logged ? p.amount : null,
       percent: logged ? percentOf(p.amount, p.target) : null,
       missing: p.missingFrom ?? 0,
-      status: classify({ amount: p.amount, target: p.target, kind: p.kind, missing: p.missingFrom ?? 0, logged, inProgress, dayProgress }),
+      status: classify({ amount: p.amount, target: p.target, kind: p.kind, missing: p.missingFrom ?? 0, logged, inProgress, dayProgress, overAt: OVER_TARGET_AT[p.nutrientId] }),
+      inProgress,
     }));
 }
 
@@ -80,16 +88,17 @@ export function weekViews(h: Heatmap): NutrientView[] {
       nutrientId: r.nutrientId, name: r.name, unit: r.unit, kind, target: r.target,
       amount, percent: amount == null ? null : percentOf(amount, r.target),
       missing: r.incompleteDays ?? 0,
-      status: classify({ amount: amount ?? 0, target: r.target, kind, missing: r.incompleteDays ?? 0, logged: days > 0, inProgress: false }),
+      status: classify({ amount: amount ?? 0, target: r.target, kind, missing: r.incompleteDays ?? 0, logged: days > 0, inProgress: false, overAt: OVER_TARGET_AT[r.nutrientId] }),
+      inProgress: false,
     };
   });
 }
 
-export type Summary = { goals: number; met: number; open: number; incomplete: number; limits: number; over: number; noData: boolean };
+export type Summary = { goals: number; met: number; open: number; incomplete: number; limits: number; over: number; overTarget: number; noData: boolean };
 
 /** Counts for the summary ring. Calories are left out: they have their own place on Today and Week. */
 export function summarize(views: NutrientView[]): Summary {
-  const s: Summary = { goals: 0, met: 0, open: 0, incomplete: 0, limits: 0, over: 0, noData: views.every((v) => v.status === 'noData') };
+  const s: Summary = { goals: 0, met: 0, open: 0, incomplete: 0, limits: 0, over: 0, overTarget: 0, noData: views.every((v) => v.status === 'noData') };
   for (const v of views) {
     if (v.nutrientId === ENERGY || v.status === 'noData') continue;
     if (v.kind === 'Limit') {
@@ -100,6 +109,7 @@ export function summarize(views: NutrientView[]): Summary {
       s.goals += 1;
       if (v.status === 'met') s.met += 1;
       else if (v.status === 'incomplete') s.incomplete += 1;
+      else if (v.status === 'overTarget') s.overTarget += 1;
       else s.open += 1;
     }
   }
@@ -137,9 +147,13 @@ export function sourcesFor(day: Day, nutrientId: number, top = 5): { sources: So
 
 /* ───────── Words ───────── */
 
-export const statusWord = (s: InsightStatus, kind: Kind): string => ({
+/**
+ * The status word on a row. Missing data is explained only when the row is opened (the "≥" on the amount already
+ * says it's a minimum), so collapsed rows read "In progress" today and "May be higher" on finished days.
+ */
+export const statusWord = (s: InsightStatus, kind: Kind, inProgress = false): string => ({
   met: 'Goal met', near: 'Nearly met', below: 'Below goal', progress: 'In progress', behind: 'Behind pace', within: 'Within limit', over: 'Over limit',
-  incomplete: kind === 'Limit' ? 'Some data missing' : 'Some data missing', noData: 'Nothing logged',
+  overTarget: 'Over target', incomplete: inProgress ? 'In progress' : kind === 'Limit' ? 'May be higher' : 'May be higher', noData: 'Nothing logged',
 } as const)[s];
 
 /** "66% of goal" / "120% of limit"; whole numbers, never "NaN%". */
@@ -152,7 +166,8 @@ export const amountText = (n: number) => (n === 0 ? '0' : n >= 10 ? Math.round(n
 export function rowLabel(v: NutrientView): string {
   if (v.amount == null) return `${v.name}: nothing logged. ${v.kind === 'Limit' ? 'Limit' : 'Goal'} ${amountText(v.target)} ${v.unit}.`;
   const min = v.missing > 0 ? 'at least ' : '';
-  return `${v.name}: ${min}${amountText(v.amount)} of ${amountText(v.target)} ${v.unit}, ${percentText(v)}. ${statusWord(v.status, v.kind)}.`;
+  const note = v.status === 'incomplete' ? ' Some entries have no value for it, so the real amount may be higher.' : '';
+  return `${v.name}: ${min}${amountText(v.amount)} of ${amountText(v.target)} ${v.unit}, ${percentText(v)}. ${statusWord(v.status, v.kind, v.inProgress)}.${note}`;
 }
 
 /* ───────── Heatmap helpers ───────── */
