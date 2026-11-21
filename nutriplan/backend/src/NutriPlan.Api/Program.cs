@@ -28,6 +28,7 @@ if (Environment.GetEnvironmentVariable("PORT") is { Length: > 0 } port)
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
+builder.Services.AddSingleton<NutriPlan.Application.Common.IdempotencyStore>();
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
@@ -37,6 +38,7 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
+app.Logger.LogInformation("Ask interpreter: {Mode}", app.Services.GetRequiredService<NutriPlan.Application.Abstractions.ILanguageInterpreter>().IsAvailable ? "Claude (with built-in rules as fallback)" : "built-in rules only (no Claude key configured)");
 
 // ── CLI: `dotnet run -- import-usda <folder> [<folder> ...]` loads USDA CSV downloads, then exits. ──
 if (args.Length > 0 && args[0] == "import-usda")
@@ -63,12 +65,15 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     {
         NotFoundException => (StatusCodes.Status404NotFound, "Not found"),
         ValidationException or ArgumentException => (StatusCodes.Status400BadRequest, "Invalid request"),
+        // The unique index that allows a planned meal to be logged only once.
+        Microsoft.EntityFrameworkCore.DbUpdateException { InnerException: Npgsql.PostgresException { SqlState: "23505" } } =>
+            (StatusCodes.Status409Conflict, "Already saved"),
         _ => (StatusCodes.Status500InternalServerError, "Something went wrong"),
     };
     context.Response.StatusCode = status;
     await Results.Problem(
         title: title,
-        detail: status == 500 && !app.Environment.IsDevelopment() ? null : error?.Message,
+        detail: status == StatusCodes.Status409Conflict ? "That meal is already logged." : status == 500 && !app.Environment.IsDevelopment() ? null : error?.Message,
         statusCode: status).ExecuteAsync(context);
 }));
 

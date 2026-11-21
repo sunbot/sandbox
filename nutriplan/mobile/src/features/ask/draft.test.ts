@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FoodMatch, FoodMatchGroup } from '../../api/types';
-import { amountOptions, blockers, draftFrom, needsLook, preview, replaceItem, selectMatch, setAmount, setRemoved, toRequest, totals, withPickedFood } from './draft.ts';
+import { amountOptions, blockers, draftFrom, needsLook, otherPreparationIndex, preview, replaceItem, selectMatch, setAmount, setRemoved, toRequest, totals, withPickedFood } from './draft.ts';
 
 const per100 = (calories: number, protein = 0, carbs = 0, fat = 0) => ({ calories, protein, carbs, fat, fiber: 0, nutrients: {} });
 
@@ -116,3 +116,40 @@ test('a food picked from search needs an amount, and keeps grams you already cho
   assert.deepEqual(toRequest([mine]), [{ foodId: 'oats', grams: 80 }]);
   assert.equal(withPickedFood(egg, egg.group.matches[1].food).matchIndex, 1); // already a choice → just select it
 });
+
+const chicken: FoodMatchGroup = {
+  text: '4 oz chicken breast', amount: 4, unit: 'oz', foodQuery: 'chicken breast',
+  matches: [
+    { ...match('chk-raw', 'Chicken, breast, meat only, raw', per100(120, 22.5, 0, 2.6), { grams: 113.4, method: 'Mass', explanation: '4 oz = 113.4 g', status: 'Given' }),
+      preparation: { state: 'Raw', note: 'Raw weight (120 kcal per 100 g).', otherFoodId: 'chk-cooked', otherState: 'Cooked' } },
+    { ...match('chk-cooked', 'Chicken, breast, meat only, cooked, roasted', per100(165, 31, 0, 3.6), { grams: 113.4, method: 'Mass', explanation: '4 oz = 113.4 g', status: 'Given' }),
+      preparation: { state: 'Cooked', note: 'Cooked weight.', otherFoodId: 'chk-raw', otherState: 'Raw' } },
+  ],
+};
+
+test('4 oz of chicken needs no manual amount and keeps 113.4 g on either version', () => {
+  const [item] = draftFrom([chicken]);
+  assert.equal(item.grams, 113.4);
+  assert.equal(item.amountLabel, '4 oz');
+  assert.equal(blockers([item]).length, 0);
+  const cooked = selectMatch(item, otherPreparationIndex(item));
+  assert.equal(cooked.grams, 113.4);
+  assert.equal(selectedFoodId(cooked), 'chk-cooked');
+  assert.ok(preview(cooked)!.calories > preview(item)!.calories); // the states are never silently converted
+});
+
+test('switching raw/cooked keeps an amount you set yourself', () => {
+  const [item] = draftFrom([chicken]);
+  const edited = setAmount(item, 150, { label: 'g', grams: 1 });
+  assert.equal(selectMatch(edited, 1).grams, 150);
+});
+
+test('no counterpart means no switch offered', () => {
+  assert.equal(otherPreparationIndex(draftFrom([toast])[0]), -1);
+});
+
+test('the save request carries only food ids and grams', () => {
+  assert.deepEqual(toRequest(draftFrom([chicken])), [{ foodId: 'chk-raw', grams: 113.4 }]);
+});
+
+function selectedFoodId(i: ReturnType<typeof draftFrom>[number]) { return i.group.matches[i.matchIndex].food.id; }

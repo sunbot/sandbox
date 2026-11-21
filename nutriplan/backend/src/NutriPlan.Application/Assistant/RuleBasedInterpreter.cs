@@ -40,7 +40,7 @@ public static partial class RuleBasedInterpreter
         var isPlan = wantsPlan || date > today;
 
         var cleaned = PlanWords().Replace(t, " ");
-        cleaned = MealPhrase().Replace(cleaned, " ");
+        cleaned = ExplicitMeal().Replace(cleaned, " ");
         cleaned = DatePhrase().Replace(cleaned, " ");
         cleaned = WeekdayPhrase().Replace(cleaned, " ");
         cleaned = MultiSpace().Replace(cleaned, " ").Trim();
@@ -55,11 +55,24 @@ public static partial class RuleBasedInterpreter
         return new InterpretedRequest(intent, items, meal, date, null, null, null);
     }
 
-    public static MealSlot? MealFrom(string lower) =>
-        lower.Contains("breakfast") ? MealSlot.Breakfast :
-        lower.Contains("lunch") ? MealSlot.Lunch :
-        lower.Contains("dinner") || lower.Contains("supper") ? MealSlot.Dinner :
-        lower.Contains("snack") ? MealSlot.Snack : null;
+    /// <summary>
+    /// A meal only when the person named one as a meal: "for lunch", "at dinner", "breakfast: …" or a meal word ending the
+    /// sentence. A meal word inside a food ("breakfast burrito") isn't a meal reference. Otherwise null, and the app picks
+    /// a predictable default from the time of day that you can change.
+    /// </summary>
+    public static MealSlot? MealFrom(string lower)
+    {
+        var m = ExplicitMeal().Match(lower);
+        if (!m.Success) return null;
+        return m.Groups["meal"].Value.TrimEnd('s') switch
+        {
+            "breakfast" => MealSlot.Breakfast,
+            "lunch" => MealSlot.Lunch,
+            "dinner" or "supper" => MealSlot.Dinner,
+            "snack" => MealSlot.Snack,
+            _ => null,
+        };
+    }
 
     public static DateOnly? DateFrom(string lower, DateOnly today) =>
         lower.Contains("yesterday") ? today.AddDays(-1) :
@@ -107,8 +120,8 @@ public static partial class RuleBasedInterpreter
     [GeneratedRegex(@"^(i\s+(had|ate|drank|just)|log|add|track|ate|had)\b")]
     private static partial Regex LogVerbs();
 
-    [GeneratedRegex(@"\b(for|at|with|during)?\s*(my\s+)?(breakfast|lunch|dinner|supper|snack)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex MealPhrase();
+    [GeneratedRegex(@"\b(?:for|at|during|as|after|before)\s+(?:my\s+|the\s+|a\s+)?(?<meal>breakfast|lunch|dinner|supper|snacks?)\b|^\s*(?<meal>breakfast|lunch|dinner|supper|snacks?)\s*[:,-]\s*|\s(?<meal>breakfast|lunch|dinner|supper|snacks?)\s*[.!]?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex ExplicitMeal();
 
     [GeneratedRegex(@"\b(yesterday|today|tomorrow|this morning|tonight)\b", RegexOptions.IgnoreCase)]
     private static partial Regex DatePhrase();

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, patch, post, put, q, api } from './client';
+import { NUTRITION_KEYS } from './invalidation';
 import type * as T from './types';
-import type { Meal } from '@/lib/format';
+import { today, type Meal } from '@/lib/format';
 
 // Query keys in one place so invalidation stays consistent.
 export const keys = {
@@ -24,11 +25,11 @@ export const keys = {
 /** Anything that changes what was eaten or planned invalidates the views that summarise it. */
 function useInvalidateNutrition() {
   const qc = useQueryClient();
-  return () =>
-    Promise.all(
-      ['day', 'week', 'quickLog', 'gaps', 'heatmap', 'grocery', 'rebalance'].map((k) => qc.invalidateQueries({ queryKey: [k] })),
-    );
+  return () => Promise.all(NUTRITION_KEYS.map((k) => qc.invalidateQueries({ queryKey: [k] })));
 }
+
+/** Header that makes a retried "Log all" / "Plan all" safe: the server returns the first result instead of saving twice. */
+const once = (key?: string) => (key ? { 'Idempotency-Key': key } : undefined);
 
 // ── Foods ─────────────────────────────────────────────────────────────
 export const useFoodSearch = (text: string) =>
@@ -59,7 +60,7 @@ export const useQuickLog = (meal?: Meal) =>
 export function useLogFoods() {
   const invalidate = useInvalidateNutrition();
   return useMutation({
-    mutationFn: (r: { date: string; meal: Meal; items: T.FoodAmount[] }) => post<T.DiaryEntry[]>('/diary/foods', r),
+    mutationFn: ({ key, ...r }: { date: string; meal: Meal; items: T.FoodAmount[]; key?: string }) => post<T.DiaryEntry[]>('/diary/foods', r, once(key)),
     onSuccess: invalidate,
   });
 }
@@ -110,10 +111,10 @@ export function useCopyMeal() {
 }
 
 // ── Plan ──────────────────────────────────────────────────────────────
-export const useWeek = (date: string) => useQuery({ queryKey: keys.week(date), queryFn: () => get<T.Week>(`/plan/week?date=${date}`) });
+export const useWeek = (date: string) => useQuery({ queryKey: keys.week(date), queryFn: () => get<T.Week>(`/plan/week?${q({ date, today: today() })}`) });
 
 export const useRebalance = (date: string) =>
-  useQuery({ queryKey: keys.rebalance(date), queryFn: () => get<T.RebalanceProposal[]>(`/plan/rebalance?date=${date}`) });
+  useQuery({ queryKey: keys.rebalance(date), queryFn: () => get<T.RebalanceProposal[]>(`/plan/rebalance?${q({ date, today: today() })}`) });
 
 export function usePlanMutations() {
   const invalidate = useInvalidateNutrition();
@@ -124,7 +125,7 @@ export function usePlanMutations() {
       ...opts,
     }),
     addFoods: useMutation({
-      mutationFn: (r: { date: string; meal: Meal; items: T.FoodAmount[] }) => post<T.PlanEntry[]>('/plan/foods', r),
+      mutationFn: ({ key, ...r }: { date: string; meal: Meal; items: T.FoodAmount[]; key?: string }) => post<T.PlanEntry[]>('/plan/foods', r, once(key)),
       ...opts,
     }),
     addRecipe: useMutation({
@@ -135,7 +136,7 @@ export function usePlanMutations() {
       mutationFn: (r: { recipeId: string; servingsPerPortion: number; slots: { date: string; meal: Meal }[] }) => post<T.PlanEntry[]>('/plan/batch', r),
       ...opts,
     }),
-    eaten: useMutation({ mutationFn: ({ id, scale }: { id: string; scale?: number }) => post<T.DiaryEntry>(`/plan/${id}/eaten`, { scale: scale ?? 1 }), ...opts }),
+    eaten: useMutation({ mutationFn: ({ id, scale }: { id: string; scale?: number }) => post<T.DiaryEntry>(`/plan/${id}/eaten`, { scale: scale ?? 1, today: today() }), ...opts }),
     skip: useMutation({ mutationFn: (id: string) => post<T.PlanEntry>(`/plan/${id}/skip`), ...opts }),
     remove: useMutation({ mutationFn: (id: string) => del(`/plan/${id}`), ...opts }),
     move: useMutation({ mutationFn: ({ id, date, meal }: { id: string; date: string; meal: Meal }) => post<T.PlanEntry>(`/plan/${id}/move`, { date, meal }), ...opts }),

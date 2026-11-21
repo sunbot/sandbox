@@ -111,6 +111,12 @@ export function preview(item: DraftItem): Preview | null {
   return { calories: n.calories * f, protein: n.protein * f, carbs: n.carbs * f, fat: n.fat * f };
 }
 
+/** Index of this food's other raw/cooked version among its matches, or -1 when it isn't offered. */
+export function otherPreparationIndex(item: DraftItem): number {
+  const other = selectedMatch(item)?.preparation?.otherFoodId;
+  return other ? item.group.matches.findIndex((m) => m.food.id === other) : -1;
+}
+
 export const active = (items: DraftItem[]) => items.filter((i) => !i.removed);
 
 export function totals(items: DraftItem[]): Preview {

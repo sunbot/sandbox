@@ -24,7 +24,11 @@ public sealed record AssistantResponse(
     IReadOnlyList<RecipeSummaryDto> SavedRecipes,
     IReadOnlyList<RecipeIdeaDto> RecipeIdeas,
     IReadOnlyList<CookableRecipeDto> Cookable,
-    GapReportDto? Gaps);
+    GapReportDto? Gaps,
+    /// <summary>Which interpreter handled this request: "Claude", "Rules" (Claude isn't configured) or "RulesFallback" (Claude is configured but failed).</summary>
+    string Interpreter = "Rules",
+    /// <summary>A plain, secret-free sentence saying why the rules were used, when they were.</summary>
+    string? InterpreterNote = null);
 
 /// <summary>
 /// The chat / voice entry point. Understands the request (Claude if configured, otherwise rules),
@@ -46,21 +50,25 @@ public sealed class AssistantService(
         var today = request.Date ?? clock.Today;
 
         InterpretedRequest interpreted;
-        var usedModel = false;
+        var info = new InterpreterInfo("Rules", "Claude isn't configured on this server, so the built-in rules were used.");
         if (interpreter.IsAvailable)
         {
             try
             {
                 interpreted = await interpreter.InterpretAsync(request.Text, today, ct);
-                usedModel = true;
+                info = new InterpreterInfo("Claude", null);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // Only the exception's type is reported (never its message), so nothing sensitive can leak into a response.
                 logger.LogWarning(ex, "Language model unavailable, falling back to rules.");
                 interpreted = RuleBasedInterpreter.Interpret(request.Text, today);
+                info = new InterpreterInfo("RulesFallback", $"Claude is configured but the request failed ({ex.GetType().Name}), so the built-in rules were used.");
             }
         }
         else interpreted = RuleBasedInterpreter.Interpret(request.Text, today);
+        // Whoever interpreted it, quantities and preparation words must survive into the lookup.
+        interpreted = interpreted with { Items = ItemNormalizer.Normalize(interpreted.Items) };
 
         var date = interpreted.Date ?? today;
         var meal = interpreted.Meal?.ToString();
@@ -74,7 +82,7 @@ public sealed class AssistantService(
                 var reply = cookable.Count == 0
                     ? "I couldn't find a saved recipe you can make from your pantry. Add pantry items or import recipes."
                     : $"You can make {cookable.Count(c => c.Missing.Count == 0)} recipes now; {cookable.Count(c => c.Missing.Count > 0)} more need a few items.";
-                return Response(interpreted, reply, usedModel, meal, date, cookable: cookable);
+                return Response(interpreted, reply, info, meal, date, cookable: cookable);
             }
 
             case AssistantIntent.FillGaps:
@@ -83,7 +91,7 @@ public sealed class AssistantService(
                 var reply = gaps.Suggestions.Count == 0
                     ? "You're on target for the day — nothing to fill."
                     : $"Here are {gaps.Suggestions.Count} ways to round out {(date == clock.Today ? "today" : date.ToString("ddd MMM d"))}.";
-                return Response(interpreted, reply, usedModel, meal, date, gaps: gaps);
+                return Response(interpreted, reply, info, meal, date, gaps: gaps);
             }
 
             case AssistantIntent.FindRecipes:
@@ -112,7 +120,7 @@ public sealed class AssistantService(
                     (0, 0) => "I couldn't find recipes for that.",
                     _ => $"{(saved.Count > 0 ? $"{saved.Count} from your recipes" : "")}{(saved.Count > 0 && ideas.Count > 0 ? " and " : "")}{(ideas.Count > 0 ? $"{ideas.Count} new ideas (nutrition calculated from USDA data)" : "")}.",
                 };
-                return Response(interpreted, reply, usedModel, meal, date, saved: saved, ideas: ideas);
+                return Response(interpreted, reply, info, meal, date, saved: saved, ideas: ideas);
             }
 
             default:
@@ -135,7 +143,7 @@ public sealed class AssistantService(
                         (0, 0) => "I didn't catch what to plan. Try \"plan turkey chili for Friday dinner\".",
                         _ => $"Planning for {when}{(meal is null ? "" : $", {meal.ToLowerInvariant()}")}. It goes on your plan, not your diary.",
                     };
-                    return Response(interpreted, planReply, usedModel, meal, date, foods: groups, saved: saved);
+                    return Response(interpreted, planReply, info, meal, date, foods: groups, saved: saved);
                 }
                 var reply = interpreted.Reply ?? (groups.Count switch
                 {
@@ -143,7 +151,7 @@ public sealed class AssistantService(
                     1 => groups[0].Matches.Count == 0 ? $"No match for \"{groups[0].FoodQuery}\"." : "Here's what I found. Check it, then log it.",
                     _ => $"Found {groups.Count} foods. Check them, then log them all at once.",
                 });
-                return Response(interpreted, reply, usedModel, meal, date, foods: groups);
+                return Response(interpreted, reply, info, meal, date, foods: groups);
             }
         }
     }
@@ -168,8 +176,11 @@ public sealed class AssistantService(
     }
 
     private static AssistantResponse Response(
-        InterpretedRequest i, string reply, bool usedModel, string? meal, DateOnly date,
+        InterpretedRequest i, string reply, InterpreterInfo info, string? meal, DateOnly date,
         IReadOnlyList<FoodMatchGroupDto>? foods = null, IReadOnlyList<RecipeSummaryDto>? saved = null,
         IReadOnlyList<RecipeIdeaDto>? ideas = null, IReadOnlyList<CookableRecipeDto>? cookable = null, GapReportDto? gaps = null) =>
-        new(i.Intent.ToString(), reply, usedModel, meal, date, foods ?? [], saved ?? [], ideas ?? [], cookable ?? [], gaps);
+        new(i.Intent.ToString(), reply, info.Mode == "Claude", meal, date, foods ?? [], saved ?? [], ideas ?? [], cookable ?? [], gaps, info.Mode, info.Note);
+
+    /// <summary>Which interpreter handled a request, and (for the fallback) a secret-free reason.</summary>
+    private sealed record InterpreterInfo(string Mode, string? Note);
 }

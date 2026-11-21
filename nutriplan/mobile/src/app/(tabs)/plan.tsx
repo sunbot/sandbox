@@ -137,11 +137,11 @@ export default function WeekScreen() {
           <AppText variant="label" tone="muted">{w.budgetMode === 'Weekly' ? 'WEEKLY BUDGET' : 'DAILY TARGETS'}</AppText>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
             <AppText variant="display" numeric>{k(w.projectedTotal)}</AppText>
-            <AppText variant="secondary" tone="secondary" numeric>/ {k(w.weeklyCalorieTarget)} kcal projected</AppText>
+            <AppText variant="secondary" tone="secondary" numeric>/ {k(w.weeklyCalorieTarget)} kcal eaten + planned</AppText>
           </View>
           <Bar eaten={w.eatenSoFar} planned={Math.max(0, w.projectedTotal - w.eatenSoFar)} target={w.weeklyCalorieTarget} height={8} />
           <AppText variant="secondary" tone="secondary" numeric>
-            {k(w.eatenSoFar)} eaten so far · {projectedRatio > 1.02 ? `${k(w.projectedTotal - w.weeklyCalorieTarget)} over if you follow the plan` : projectedRatio < 0.98 ? `${k(w.weeklyCalorieTarget - w.projectedTotal)} kcal unplanned` : 'right on budget'}
+            {k(w.eatenSoFar)} eaten so far · {projectedRatio > 1.02 ? `${k(w.projectedTotal - w.weeklyCalorieTarget)} over if you follow the plan` : projectedRatio < 0.98 ? `${k(w.weeklyCalorieTarget - w.projectedTotal)} kcal not planned yet` : 'right on budget'}
           </AppText>
           {w.unabsorbedCarryover !== 0 ? (
             <AppText variant="caption" tone="muted">
@@ -220,7 +220,7 @@ function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
   const adjusted = Math.round(day.adjustedCalorieTarget) !== Math.round(day.baseCalorieTarget);
   const status = day.isUntracked ? 'Nothing logged'
     : day.isPast ? `Ate ${k(day.eaten.calories)} kcal`
-    : left >= 0 ? `${k(left)} kcal unplanned` : `${k(-left)} kcal over the plan`;
+    : left >= 0 ? `${k(left)} kcal not planned yet` : `${k(-left)} kcal over target`;
   const logged = day.logged.filter((l) => !l.planEntryId);
   const planned = [...day.planned].sort((a, b) => ['Breakfast', 'Lunch', 'Dinner', 'Snack'].indexOf(a.meal) - ['Breakfast', 'Lunch', 'Dinner', 'Snack'].indexOf(b.meal));
   const hasPlanned = day.planned.some((p) => p.status === 'Planned');

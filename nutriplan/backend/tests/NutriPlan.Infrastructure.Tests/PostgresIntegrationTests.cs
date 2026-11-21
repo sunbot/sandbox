@@ -108,6 +108,58 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         Assert.Equal("My granola", found!.Name);
     }
 
+    [PostgresFact]
+    public async Task A_planned_meal_can_be_logged_only_once_and_deleting_the_log_restores_the_plan()
+    {
+        await using (var db = NewContext())
+        {
+            db.Foods.Add(new Food("Oats", FoodSource.User, new(new Dictionary<int, double> { [1008] = 379, [1003] = 13, [1005] = 68, [1004] = 6.5 })));
+            await db.SaveChangesAsync();
+        }
+
+        var date = new DateOnly(2026, 11, 21);
+        Guid planId, foodId;
+        await using (var db = NewContext())
+        {
+            foodId = db.Foods.Single().Id;
+            var plans = new Application.Planning.PlanService(new PlanRepository(db), new DiaryRepository(db), new TargetsRepository(db),
+                new DiaryService(new DiaryRepository(db), new FoodRepository(db), new RecipeRepository(db), new TargetsRepository(db), db, new PlanRepository(db)),
+                new FixedClock(date), db);
+            var planned = await plans.AddFoodAsync(new Application.Planning.AddPlanFoodRequest(date, MealSlot.Dinner, foodId, 100, null, null));
+            planId = planned.Id;
+            await plans.MarkEatenAsync(planId);
+        }
+
+        // The database itself refuses a second diary entry for the same plan entry (a double tap or racing retry).
+        await using (var db = NewContext())
+        {
+            var plan = await new PlanRepository(db).GetAsync(planId);
+            db.DiaryEntries.Add(plan!.ToDiaryEntry(1));
+            var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            Assert.Equal("23505", (ex.InnerException as PostgresException)?.SqlState);
+        }
+
+        await using (var db = NewContext())
+        {
+            Assert.Single(db.DiaryEntries);
+            var entry = db.DiaryEntries.Single();
+            var diary = new DiaryService(new DiaryRepository(db), new FoodRepository(db), new RecipeRepository(db), new TargetsRepository(db), db, new PlanRepository(db));
+            await diary.DeleteAsync(entry.Id);
+        }
+
+        await using (var db = NewContext())
+        {
+            Assert.Empty(db.DiaryEntries);
+            Assert.Equal(Domain.Planning.PlanStatus.Planned, (await new PlanRepository(db).GetAsync(planId))!.Status);
+        }
+    }
+
+    private sealed class FixedClock(DateOnly today) : Application.Abstractions.IClock
+    {
+        public DateOnly Today => today;
+        public DateTimeOffset Now => new(today.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
+    }
+
     /// <summary>A tiny SR-Legacy-shaped download: 3 foods, a few nutrients and portions.</summary>
     private static string WriteUsdaFixture()
     {

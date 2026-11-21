@@ -14,15 +14,15 @@ public static class Units
     public static readonly Unit Gram = new("g", UnitKind.Mass, 1, "g", "gram", "grams", "gr", "gm", "gms");
     public static readonly Unit Kilogram = new("kg", UnitKind.Mass, 1000, "kg", "kilo", "kilos", "kilogram", "kilograms");
     public static readonly Unit Milligram = new("mg", UnitKind.Mass, 0.001, "mg", "milligram", "milligrams");
-    public static readonly Unit Ounce = new("oz", UnitKind.Mass, 28.349523125, "oz", "ounce", "ounces", "onz");
+    public static readonly Unit Ounce = new("oz", UnitKind.Mass, 28.349523125, "oz", "ounce", "ounces", "onz", "ozs");
     public static readonly Unit Pound = new("lb", UnitKind.Mass, 453.59237, "lb", "lbs", "pound", "pounds", "#");
 
     public static readonly Unit Milliliter = new("ml", UnitKind.Volume, 1, "ml", "mls", "milliliter", "milliliters", "millilitre", "millilitres", "cc");
     public static readonly Unit Liter = new("l", UnitKind.Volume, 1000, "l", "liter", "liters", "litre", "litres");
-    public static readonly Unit Teaspoon = new("tsp", UnitKind.Volume, 4.92892159375, "tsp", "tsps", "t", "teaspoon", "teaspoons", "tspn");
+    public static readonly Unit Teaspoon = new("tsp", UnitKind.Volume, 4.92892159375, "tsp", "tsps", "t", "teaspoon", "teaspoons", "teaspoonful", "tspn");
     public static readonly Unit Tablespoon = new("tbsp", UnitKind.Volume, 14.78676478125, "tbsp", "tbsps", "tbs", "tbl", "tbl.", "T", "tablespoon", "tablespoons", "tblsp");
     public static readonly Unit FluidOunce = new("fl oz", UnitKind.Volume, 29.5735295625, "fl oz", "floz", "fl. oz", "fl. oz.", "fluid ounce", "fluid ounces");
-    public static readonly Unit Cup = new("cup", UnitKind.Volume, 236.5882365, "cup", "cups", "c", "c.");
+    public static readonly Unit Cup = new("cup", UnitKind.Volume, 236.5882365, "cup", "cups", "cupful", "cupfuls", "c", "c.");
     public static readonly Unit Pint = new("pint", UnitKind.Volume, 473.176473, "pint", "pints", "pt");
     public static readonly Unit Quart = new("quart", UnitKind.Volume, 946.352946, "quart", "quarts", "qt");
     public static readonly Unit Gallon = new("gallon", UnitKind.Volume, 3785.411784, "gallon", "gallons", "gal");

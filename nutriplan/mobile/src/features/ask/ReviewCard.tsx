@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useDeleteEntry, useFoodSearch, useLogFoods, usePlanMutations } from '@/api/hooks';
@@ -10,9 +10,12 @@ import { dayLabel, mealForNow, meals, today, type Meal } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import {
-  amountOptions, blockers, draftFrom, preview, replaceItem, selectMatch, selectedMatch, setAmount, setRemoved, toRequest, totals, withPickedFood,
+  amountOptions, blockers, draftFrom, otherPreparationIndex, preview, replaceItem, selectMatch, selectedMatch, setAmount, setRemoved, toRequest, totals, withPickedFood,
   type AmountOption, type DraftItem,
 } from './draft';
+
+/** A fresh random key per review; computed once, in a state initializer, so renders stay pure. */
+const newSubmitKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 const mealLabel = (m: Meal) => (m === 'Snack' ? 'Snacks' : m);
 const r0 = (n: number) => Math.round(n);
@@ -34,6 +37,9 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
   const logFoods = useLogFoods();
   const plan = usePlanMutations();
   const delEntry = useDeleteEntry();
+  // One key per review: a double tap or a retry after a dropped connection returns the first result instead of saving twice.
+  const [submitKey] = useState(newSubmitKey);
+  const submitting = useRef(false);
 
   const sum = useMemo(() => totals(items), [items]);
   const blocked = blockers(items);
@@ -46,9 +52,11 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
   const update = (next: DraftItem) => setItems((xs) => replaceItem(xs, next));
 
   const commit = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
     setError(null);
     try {
-      const body = { date, meal, items: toRequest(items) };
+      const body = { date, meal, items: toRequest(items), key: submitKey };
       const ids = planning ? (await plan.addFoods.mutateAsync(body)).map((e) => e.id) : (await logFoods.mutateAsync(body)).map((e) => e.id);
       haptic.success();
       setSaved({ count: ids.length, ids });
@@ -63,6 +71,8 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
     } catch (e) {
       // Nothing was saved: the server saves all foods together or none.
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      submitting.current = false;
     }
   };
 
@@ -99,12 +109,16 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
       </View>
 
       <View>
-        {items.map((item) => <ReviewRow key={item.key} item={item} onPress={() => { haptic.select(); setEditing(item.key); }} onRestore={() => update(setRemoved(item, false))} />)}
+        {items.map((item) => (
+          <ReviewRow key={item.key} item={item} onPress={() => { haptic.select(); setEditing(item.key); }} onRestore={() => update(setRemoved(item, false))}
+            onSwitchPreparation={() => { const i = otherPreparationIndex(item); if (i >= 0) { haptic.select(); update(selectMatch(item, i)); } }} />
+        ))}
       </View>
 
       <View style={{ padding: t.space.lg, gap: t.space.md }}>
         <View style={{ gap: t.space.xs }}>
           <AppText variant="label" tone="secondary">{planning ? `Meal on ${when}` : 'Meal'}</AppText>
+          {!response.meal ? <AppText variant="caption" tone="muted">No meal was mentioned, so this is chosen from the time of day. Tap another to change it.</AppText> : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.space.sm }}>
             {meals.map((m) => <FilterChip key={m} label={mealLabel(m)} selected={m === meal} onPress={() => { haptic.select(); setMeal(m); }} />)}
           </View>
@@ -153,7 +167,7 @@ function MacroSummary({ protein, carbs, fat }: { protein: number; carbs: number;
   );
 }
 
-function ReviewRow({ item, onPress, onRestore }: { item: DraftItem; onPress: () => void; onRestore: () => void }) {
+function ReviewRow({ item, onPress, onRestore, onSwitchPreparation }: { item: DraftItem; onPress: () => void; onRestore: () => void; onSwitchPreparation: () => void }) {
   const t = useTheme();
   const m = selectedMatch(item);
   const p = preview(item);
@@ -174,11 +188,16 @@ function ReviewRow({ item, onPress, onRestore }: { item: DraftItem; onPress: () 
     : item.status === 'Assumed' ? { label: 'Assumed amount', tone: 'neutral' as const }
     : null;
 
+  const prep = m?.preparation;
+  const otherIndex = otherPreparationIndex(item);
+  const switchLabel = prep?.otherState === 'Cooked' ? 'Use cooked instead' : prep?.otherState === 'Raw' ? 'Use raw instead' : 'Switch version';
+
   return (
+    <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border }}>
     <Pressable onPress={onPress} accessibilityRole="button"
       accessibilityLabel={`${name}, ${item.amountLabel ?? 'no amount'}, ${p ? `${r0(p.calories)} calories` : 'calories unknown'}${status ? `, ${status.label}` : ''}`}
       accessibilityHint="Change the match or the amount"
-      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 64, paddingVertical: t.space.sm, paddingLeft: t.space.lg, paddingRight: t.space.sm, borderTopWidth: 1, borderTopColor: t.colors.border }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 64, paddingVertical: t.space.sm, paddingLeft: t.space.lg, paddingRight: t.space.sm }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
       <View style={{ flex: 1, gap: 2 }}>
         <AppText variant="body" numberOfLines={2}>{name}</AppText>
         <AppText variant="secondary" tone="secondary" numberOfLines={1}>
@@ -190,6 +209,13 @@ function ReviewRow({ item, onPress, onRestore }: { item: DraftItem; onPress: () 
       <AppText variant="bodyStrong" numeric>{p ? r0(p.calories) : '—'}</AppText>
       <ChevronRight size={18} strokeWidth={1.8} color={t.colors.textMuted} />
     </Pressable>
+    {prep?.note ? (
+      <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm, gap: 2 }}>
+        <AppText variant="caption" tone="secondary">{prep.note}</AppText>
+        {otherIndex >= 0 ? <View style={{ flexDirection: 'row' }}><TextButton label={switchLabel} onPress={onSwitchPreparation} /></View> : null}
+      </View>
+    ) : null}
+    </View>
   );
 }
 

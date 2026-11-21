@@ -29,6 +29,9 @@ public static partial class QuantityTextParser
         ["a"] = 1, ["an"] = 1, ["one"] = 1, ["two"] = 2, ["three"] = 3, ["four"] = 4, ["five"] = 5,
         ["six"] = 6, ["seven"] = 7, ["eight"] = 8, ["nine"] = 9, ["ten"] = 10, ["eleven"] = 11, ["twelve"] = 12,
         ["half"] = 0.5, ["quarter"] = 0.25, ["third"] = 1.0 / 3, ["dozen"] = 12, ["couple"] = 2, ["few"] = 3,
+        ["thirteen"] = 13, ["fourteen"] = 14, ["fifteen"] = 15, ["sixteen"] = 16, ["seventeen"] = 17, ["eighteen"] = 18,
+        ["nineteen"] = 19, ["twenty"] = 20, ["thirty"] = 30, ["forty"] = 40, ["fifty"] = 50, ["sixty"] = 60,
+        ["seventy"] = 70, ["eighty"] = 80, ["ninety"] = 90, ["hundred"] = 100,
     };
 
     private static readonly Dictionary<char, double> UnicodeFractions = new()
@@ -62,6 +65,9 @@ public static partial class QuantityTextParser
     };
 
     private static readonly string[] NoQuantityPhrases = ["to taste", "as needed", "for garnish", "for serving", "optional"];
+
+    [GeneratedRegex(@"^(?:bowl|plate|serving|portion|helping|handful|glass|mug)s?\s+of\s+", RegexOptions.IgnoreCase)]
+    private static partial Regex Container();
 
     public static ParsedFoodText Parse(string raw)
     {
@@ -166,6 +172,26 @@ public static partial class QuantityTextParser
             unit = innerQty.Unit;
         }
 
+        // "chicken breast 4 oz": an amount said after the food. Only real units count, so "chicken 65" stays a food.
+        // "a bowl of quinoa 200 g": a stated weight or volume beats a vague container word like bowl/piece.
+        if ((amount is null || (amount == 1 && (unit is null || CountUnits.Contains(unit)))) && tokens.Count - index >= 2)
+        {
+            var last = tokens[^1];
+            var glued = GluedAmountUnit().Match(last);
+            if (glued.Success && Units.Units.Find(glued.Groups[2].Value) is { Kind: UnitKind.Mass or UnitKind.Volume })
+            {
+                amount = double.Parse(glued.Groups[1].Value, CultureInfo.InvariantCulture);
+                unit = glued.Groups[2].Value;
+                tokens.RemoveAt(tokens.Count - 1);
+            }
+            else if (tokens.Count - index >= 3 && Units.Units.Find(last) is { Kind: UnitKind.Mass or UnitKind.Volume } && ParseNumberToken(tokens[^2]) is { } tail)
+            {
+                amount = tail;
+                unit = last.TrimEnd('.');
+                tokens.RemoveRange(tokens.Count - 2, 2);
+            }
+        }
+
         // "1 whole chicken, 4–5 lb": a weight right after the comma is the amount.
         if ((amount is null || unit is null || CountUnits.Contains(unit)) && preparation is not null && preparation.Any(char.IsDigit))
         {
@@ -186,6 +212,12 @@ public static partial class QuantityTextParser
 
         var foodText = string.Join(' ', tokens.Skip(index)).Trim().Trim('-', ':').Trim();
         if (foodText.Length == 0) foodText = text;
+        // "a bowl of quinoa 200 g": once an exact weight or volume is known, the container word says nothing about the food.
+        if (unit is not null && Units.Units.Find(unit) is { Kind: UnitKind.Mass or UnitKind.Volume })
+        {
+            var stripped = Container().Replace(foodText, "");
+            if (stripped.Length > 0) foodText = stripped;
+        }
 
         return new ParsedFoodText(raw, amount is null ? null : Math.Round(amount.Value, 4), unit, foodText, preparation, note);
     }
@@ -194,11 +226,70 @@ public static partial class QuantityTextParser
     public static IReadOnlyList<string> SplitItems(string sentence)
     {
         var cleaned = LeadingVerb().Replace(sentence.Trim(), "");
+        cleaned = HundredAnd().Replace(cleaned, "$1 "); // "two hundred and fifty grams" is one amount, not two items
         return ItemSeparator().Split(cleaned)
             .Select(s => s.Trim().TrimEnd('.', '!'))
             .Where(s => s.Length > 0)
+            .SelectMany(SplitByQuantity)
             .ToList();
     }
+
+    /// <summary>
+    /// Spoken lists often have no commas or "and": "two pieces of toast two scrambled eggs". A new quantity starts a new
+    /// food once the current one already has a food word; numbers that belong to the same amount ("1 1/2 cups", "half a
+    /// pound", "twenty five grams") and numbers inside a name ("2% milk", "80/20 beef") don't split. A stray trailing
+    /// amount ("chicken breast 4 oz") is kept with its food.
+    /// </summary>
+    public static IReadOnlyList<string> SplitByQuantity(string phrase)
+    {
+        var tokens = phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var segments = new List<List<string>>();
+        var current = new List<string>();
+        var hasFood = false;
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var bare = tokens[i].Trim(',', ';', '.', '!', '?').ToLowerInvariant();
+            var next = i + 1 < tokens.Length ? tokens[i + 1].Trim(',', ';', '.', '!', '?').ToLowerInvariant() : null;
+            if (StartsQuantity(bare, next))
+            {
+                if (hasFood) { segments.Add(current); current = []; hasFood = false; }
+                current.Add(tokens[i]);
+                continue;
+            }
+            current.Add(tokens[i]);
+            if (IsFoodWord(bare)) hasFood = true;
+        }
+        if (current.Count > 0) segments.Add(current);
+
+        // A segment with no food word of its own ("4 oz" after "chicken breast") belongs to the one before it.
+        var merged = new List<List<string>>();
+        foreach (var seg in segments)
+        {
+            var food = seg.Any(t => IsFoodWord(t.Trim(',', ';', '.', '!', '?').ToLowerInvariant()));
+            if (!food && merged.Count > 0) merged[^1].AddRange(seg);
+            else merged.Add(seg);
+        }
+        return merged.Select(seg => string.Join(' ', seg)).ToList();
+    }
+
+    private static readonly HashSet<string> NotAmountsAfterArticle = new(StringComparer.OrdinalIgnoreCase)
+        { "day", "week", "month", "year", "time", "while", "bit", "lot", "little", "few", "couple", "side", "half", "third", "quarter", "dozen" };
+
+    private static readonly HashSet<string> Fillers = new(StringComparer.OrdinalIgnoreCase)
+        { "of", "the", "a", "an", "and", "to", "or", "-", "about", "around", "approximately", "roughly", "some", "like", "maybe", "just" };
+
+    private static bool StartsQuantity(string bare, string? next)
+    {
+        if (bare.Length == 0 || bare.EndsWith('%') || next == "%") return false;
+        if (bare is "a" or "an") return next is not null && !NotAmountsAfterArticle.Contains(next);
+        if (NumberWords.ContainsKey(bare)) return true;
+        if (PercentRatio().IsMatch(bare)) return false; // "80/20" ground beef is a name, not 4
+        return ParseNumberToken(bare) is not null || GluedAmountUnit().IsMatch(bare);
+    }
+
+    private static bool IsFoodWord(string bare) =>
+        bare.Length > 0 && !Fillers.Contains(bare) && !NumberWords.ContainsKey(bare) && ParseNumberToken(bare) is null
+        && !GluedAmountUnit().IsMatch(bare) && Units.Units.Find(bare) is null && !CountUnits.Contains(bare);
 
     private static double? ReadAmount(List<string> tokens, ref int index)
     {
@@ -229,6 +320,7 @@ public static partial class QuantityTextParser
                         if (total is null && !nextIsNumber) total = 1;
                     }
                     else if (token == "dozen") total = (total ?? 1) * 12;
+                    else if (token == "hundred") total = (total ?? 1) * 100;   // "one hundred twenty five" → 125
                     else total = (total ?? 0) + word;   // "one and a half" → 1 + 0.5
                     index++;
                     continue;
@@ -329,6 +421,8 @@ public static partial class QuantityTextParser
     [GeneratedRegex(@"^(\d+)/(\d+)$")] private static partial Regex FractionToken();
     [GeneratedRegex(@"^([\d./½¼¾⅓⅔]+)-([\d./½¼¾⅓⅔]+)$")] private static partial Regex RangeToken();
     [GeneratedRegex(@"\b(\d+)-(\d+/\d+)\b")] private static partial Regex MixedHyphen();
-    [GeneratedRegex(@"^(i\s+(had|ate|drank|just\s+had|just\s+ate)|log|add|track)\s+", RegexOptions.IgnoreCase)] private static partial Regex LeadingVerb();
+    [GeneratedRegex(@"^(?:(?:ok(?:ay)?|so|um+|uh+)[, ]+)?(?:i(?:'ve|\s+have)?\s+(?:just\s+)?(?:had|ate|eaten|drank|drunk|consumed)|(?:please\s+)?(?:log|add|track|record))\s+", RegexOptions.IgnoreCase)] private static partial Regex LeadingVerb();
+    [GeneratedRegex(@"\b(hundred|thousand)\s+and\s+(?=\w)", RegexOptions.IgnoreCase)] private static partial Regex HundredAnd();
+    [GeneratedRegex(@"^\d{2,3}/\d{2,3}$")] private static partial Regex PercentRatio();
     [GeneratedRegex(@"\s*(?:,|;|\band\b(?!\s+(?:a\s+)?(?:half|quarter|third)\b)|\bwith\b|\bplus\b|\n)\s*", RegexOptions.IgnoreCase)] private static partial Regex ItemSeparator();
 }

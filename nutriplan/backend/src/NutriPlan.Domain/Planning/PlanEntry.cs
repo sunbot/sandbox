@@ -40,6 +40,17 @@ public sealed class PlanEntry
 
     public void Reopen() => Status = PlanStatus.Planned;
 
+    /// <summary>
+    /// A planned meal only counts as Eaten while a diary entry is actually linked to it. If that entry is gone (deleted
+    /// before this was enforced), the meal is planned again. Returns true when the status changed.
+    /// </summary>
+    public bool ReconcileEaten(bool hasLinkedLog)
+    {
+        if (Status != PlanStatus.Eaten || hasLinkedLog) return false;
+        Status = PlanStatus.Planned;
+        return true;
+    }
+
     /// <summary>Creates the diary entry that fulfils this planned meal (optionally at a different amount).</summary>
     public DiaryEntry ToDiaryEntry(double scale = 1)
     {

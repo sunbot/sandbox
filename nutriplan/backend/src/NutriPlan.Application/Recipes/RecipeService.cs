@@ -253,7 +253,7 @@ public sealed partial class RecipeService(
         {
             if (!cache.TryGetValue(q, out var found))
             {
-                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false)).ToList();
+                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false, assumeCookedStaples: false)).ToList();
                 cache[q] = found;
             }
             return found;

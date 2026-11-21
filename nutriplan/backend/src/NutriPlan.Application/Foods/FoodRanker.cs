@@ -44,27 +44,33 @@ public static partial class FoodRanker
     private static readonly HashSet<string> DefaultDescriptors = ["whole", "plain", "fresh", "regular", "long-grain", "all commercial varieties", "nfs"];
 
     /// <summary>Signals a processed/derived product rather than the food itself.</summary>
+    /// <summary>Organ meats and by-products: never what a plain "chicken" or "beef" means, so a strong penalty unless asked for.</summary>
+    private static readonly HashSet<string> OrganWords = ["giblet", "giblets", "foot", "gizzard", "gizzards", "liver", "livers", "heart", "hearts", "neck", "necks", "feet", "tongue", "kidney", "kidneys", "tripe", "brain", "brains"];
+
     private static readonly HashSet<string> ProcessedWords =
     [
-        "breaded", "nugget", "tender", "topping", "roll", "patty", "patties", "stick", "imitation", "babyfood", "canned", "dried",
+        "breaded", "nugget", "tender", "ground", "topping", "roll", "patty", "patties", "stick", "imitation", "babyfood", "canned", "dried",
         "powder", "dehydrated", "frozen", "heated", "mix", "substitute", "flavored", "sweetened", "bar",
     ];
 
     /// <param name="useHistory">Boost foods you log often. On for search (your usual yogurt first); off for recipe
     /// matching, where "whole milk" must match milk even if you log yogurt every day.</param>
-    public static IReadOnlyList<RankedFood> Rank(string query, IEnumerable<FoodSearchRow> rows, bool useHistory = true)
+    /// <param name="assumeCookedStaples">Rice, pasta, beans… with no state said: prefer the cooked entry (what people eat) instead of
+    /// the dry ingredient. Off for recipe ingredients, where "1 cup rice" means dry.</param>
+    public static IReadOnlyList<RankedFood> Rank(string query, IEnumerable<FoodSearchRow> rows, bool useHistory = true, bool assumeCookedStaples = false)
     {
         var queryTokens = Tokens(query).ToList();
-        var wantsCooked = queryTokens.Any(CookingWords.Contains);
+        var requested = FoodPreparation.Requested(queryTokens);
+        var cookedDefault = assumeCookedStaples && requested == PreparationState.Unspecified && FoodPreparation.IsCookedStaple(queryTokens);
         var wantsCombination = CombinationDish().IsMatch($" {query.ToLowerInvariant()} "); // "mac and cheese", "rice with beans"
         return rows
-            .Select(r => new RankedFood(r.Food, Score(queryTokens, wantsCooked, r, useHistory, wantsCombination)))
+            .Select(r => new RankedFood(r.Food, Score(queryTokens, requested, cookedDefault, r, useHistory, wantsCombination)))
             .OrderByDescending(r => r.Score)
             .ThenBy(r => r.Food.Name.Length)
             .ToList();
     }
 
-    private static double Score(List<string> queryTokens, bool wantsCooked, FoodSearchRow row, bool useHistory, bool wantsCombination)
+    private static double Score(List<string> queryTokens, PreparationState requested, bool cookedDefault, FoodSearchRow row, bool useHistory, bool wantsCombination)
     {
         var food = row.Food;
         var segments = food.Name.ToLowerInvariant().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -116,16 +122,22 @@ public static partial class FoodRanker
         // Plain default forms ("Egg, whole", "Yogurt, plain") over variants, unless the query asks otherwise.
         score += 3 * Math.Min(2, DefaultDescriptors.Count(d => segments.Contains(d) || nameTokens.Contains(d)));
         score -= 4 * nameTokens.Count(t => ProcessedWords.Contains(t) && !querySet.Contains(t));
+        score -= 14 * nameTokens.Count(t => OrganWords.Contains(t) && !querySet.Contains(t));
 
         // Plain is better: penalise extra words that weren't asked for.
         var extra = Math.Max(0, nameTokens.Count - queryTokens.Count);
         score -= Math.Min(15, extra * 1.2);
 
-        // Raw vs cooked.
-        var isCooked = nameTokens.Any(CookingWords.Contains);
-        var isRaw = nameTokens.Contains("raw");
-        if (wantsCooked) score += isCooked ? 6 : isRaw ? -6 : 0;
-        else score += isRaw ? 4 : isCooked ? -2 : 0;
+        // Raw vs cooked. A state the person asked for is matched strictly; otherwise raw is the default for produce and
+        // meat, and cooked for staples people eat cooked (rice, pasta, beans) — shown as an assumption, never silent.
+        var state = FoodPreparation.StateOf(food.Name);
+        score += requested switch
+        {
+            PreparationState.Cooked => state == PreparationState.Cooked ? 10 : state == PreparationState.Raw ? -14 : 0,
+            PreparationState.Raw => state == PreparationState.Raw ? 10 : state == PreparationState.Cooked ? -14 : 0,
+            _ when cookedDefault => state == PreparationState.Cooked ? (FoodPreparation.IsPlainCooked(food.Name) ? 10 : 2) : state == PreparationState.Raw ? -10 : 0,
+            _ => state == PreparationState.Raw ? 4 : state == PreparationState.Cooked ? -2 : 0,
+        };
 
         // Source trust.
         score += food.Source switch

@@ -58,9 +58,12 @@ public class WeekTests
     {
         var oats = _store.AddFood("Oats", 379, 13, 68, 6.5);
         var tomorrow = await Plan().AddFoodAsync(new AddPlanFoodRequest(_store.Today.AddDays(1), MealSlot.Breakfast, oats.Id, 80, null, null));
-        await Assert.ThrowsAsync<ValidationException>(() => Plan().MarkEatenAsync(tomorrow.Id));
+        // With the device's own date the guard is exact; without it the server allows one day of slack for time zones.
+        await Assert.ThrowsAsync<ValidationException>(() => Plan().MarkEatenAsync(tomorrow.Id, 1, _store.Today));
+        var dayAfter = await Plan().AddFoodAsync(new AddPlanFoodRequest(_store.Today.AddDays(2), MealSlot.Breakfast, oats.Id, 80, null, null));
+        await Assert.ThrowsAsync<ValidationException>(() => Plan().MarkEatenAsync(dayAfter.Id));
         Assert.Empty(_store.Diary);
-        Assert.Equal(PlanStatus.Planned, _store.Plan.Single().Status);
+        Assert.All(_store.Plan, e => Assert.Equal(PlanStatus.Planned, e.Status));
     }
 
     [Fact]

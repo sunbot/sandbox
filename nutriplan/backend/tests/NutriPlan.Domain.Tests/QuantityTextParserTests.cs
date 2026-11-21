@@ -89,3 +89,28 @@ public class QuantityTextParserTests
         Assert.Single(items);
     }
 }
+
+public class TrailingAmountTests
+{
+    [Theory]
+    [InlineData("a bowl of quinoa 200 g", 200, "g", "quinoa")]
+    [InlineData("chicken breast 4 oz", 4, "oz", "chicken breast")]
+    [InlineData("chicken breast 4oz", 4, "oz", "chicken breast")]
+    [InlineData("rice 1 cup", 1, "cup", "rice")]
+    public void An_amount_said_after_the_food_is_found(string text, double amount, string unit, string food)
+    {
+        var p = QuantityTextParser.Parse(text);
+        Assert.Equal(amount, p.Amount);
+        Assert.Equal(unit, p.Unit);
+        Assert.Equal(food, p.FoodText);
+    }
+
+    [Fact]
+    public void A_bare_number_after_a_food_is_not_an_amount() =>
+        Assert.Null(QuantityTextParser.Parse("chicken 65").Amount);
+
+    [Fact]
+    public void Repeated_quantities_split_into_separate_phrases() =>
+        Assert.Equal(["2 pieces of toast", "2 scrambled eggs", "a cup of coffee"],
+            QuantityTextParser.SplitItems("two pieces of toast two scrambled eggs and a cup of coffee").Select(s => s.Replace("two", "2")));
+}

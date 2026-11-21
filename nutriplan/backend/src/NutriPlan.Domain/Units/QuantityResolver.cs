@@ -19,6 +19,12 @@ public static partial class QuantityResolver
 {
     private static readonly HashSet<string> SizeWords = ["small", "medium", "large", "extra-large", "jumbo", "regular"];
 
+    /// <summary>
+    /// Count words that don't name a portion ("2 pieces of toast", "3 items"). If the food has a portion called exactly that
+    /// it's used; otherwise they mean "this many of the food's standard item", from the food's own USDA portions.
+    /// </summary>
+    private static readonly HashSet<string> GenericCountWords = ["piece", "pc", "pcs", "item", "unit", "each", "portion", "whole"];
+
     private static readonly string[] DefaultPortionHints = ["medium", "whole", "regular", "large", "each", "item", "unit", "serving", "piece"];
 
     public static ResolvedQuantity Resolve(Food food, double amount, string? unitText) =>
@@ -70,7 +76,7 @@ public static partial class QuantityResolver
                 return new(amount * match.GramsPerUnit, ResolutionMethod.NamedPortion,
                     $"{amount:0.##} × {match.Description} ({match.GramsPerUnit:0.#} g each)", match);
             // A size word with no matching size listed ("1 medium" when USDA only has "1 banana"): use the standard item.
-            if (!SizeWords.Contains(wanted))
+            if (!SizeWords.Contains(wanted) && !GenericCountWords.Contains(wanted))
                 return new(null, ResolutionMethod.Unresolved, $"\"{unitText}\" isn't a known measure for this food. Pick a portion or enter grams.");
         }
 
@@ -84,11 +90,12 @@ public static partial class QuantityResolver
         // Best default: a portion named after the food itself ("1 banana" for "Banana, raw").
         var nameWord = foodName is null ? null : Singular(WordSplit().Split(foodName.ToLowerInvariant()).FirstOrDefault(w => w.Length > 2) ?? "");
         // Never a part or a variety as "one": a slice, ring or leaf, or "grape tomato" for "Tomatoes, raw".
+        // If every portion is a part (bread: only slices), the part is the item, and the usual size hints pick among them.
         var whole = usable.Where(p => !Words(p.Description).Overlaps(PartOrVarietyWords)).ToList();
-        var fallback = (nameWord is null ? null : whole.FirstOrDefault(p => Words(p.Description).Contains(nameWord)))
-            ?? hints.Select(h => whole.FirstOrDefault(p => Words(p.Description).Contains(h))).FirstOrDefault(p => p is not null)
-            ?? whole.FirstOrDefault()
-            ?? usable.FirstOrDefault();
+        var pool = whole.Count > 0 ? whole : usable;
+        var fallback = (nameWord is null ? null : pool.FirstOrDefault(p => Words(p.Description).Contains(nameWord)))
+            ?? hints.Select(h => pool.FirstOrDefault(p => Words(p.Description).Contains(h))).FirstOrDefault(p => p is not null)
+            ?? pool.FirstOrDefault();
 
         if (fallback is not null)
             return new(amount * fallback.GramsPerUnit, ResolutionMethod.DefaultPortion,

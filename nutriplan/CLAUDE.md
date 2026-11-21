@@ -102,6 +102,9 @@ Keep the USDA importer and Open Food Facts barcode fallback. The existing `IBarc
 - The APK workflow doesn't wait for CI, overwrites the mutable `android-latest` release, and signs with the Expo template debug key. Moving to a protected key forces a one-time reinstall.
 - Daily nutrient totals still add known values only; entries missing a nutrient are counted per nutrient (`missingFrom`) and the app marks those totals as minimums (≥). Weekly heatmap averages don't flag this yet.
 - The API key is stored in AsyncStorage (not secure storage).
+- Ask quantity/state limits: a unitless amount of a food whose only USDA portion is a size ("a coffee" → "1 medium", 480 g) is
+  labelled Given; "Understood by" in Ask and `/api/status` show whether Claude or the built-in rules handled a request.
+  `IdempotencyStore` is in-memory (single instance); the unique index on `diary_entries.plan_entry_id` is the durable guard.
 
 ## Definition of done
 

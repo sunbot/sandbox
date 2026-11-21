@@ -26,11 +26,11 @@ public sealed record GroceryListDto(DateOnly From, DateOnly To, IReadOnlyList<Gr
 /// subtracted, and items are grouped by food category as a stand-in for store aisles.
 /// Batch-cooked recipes are only bought once.
 /// </summary>
-public sealed class GroceryService(IPlanRepository plan, IRecipeRepository recipes, IFoodRepository foods, IPantryRepository pantry)
+public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary, IRecipeRepository recipes, IFoodRepository foods, IPantryRepository pantry)
 {
     public async Task<GroceryListDto> BuildAsync(DateOnly from, DateOnly to, bool subtractPantry = true, CancellationToken ct = default)
     {
-        var entries = (await plan.GetRangeAsync(from, to, ct)).Where(e => e.Status == PlanStatus.Planned).ToList();
+        var entries = (await PlanReconciliation.ReadRangeAsync(plan, diary, from, to, ct)).Where(e => e.Status == PlanStatus.Planned).ToList();
         var recipeMap = await recipes.GetManyAsync(entries.Where(e => e.Item.RecipeId is not null).Select(e => e.Item.RecipeId!.Value).Distinct(), ct);
 
         var lines = new List<Line>();
