@@ -64,6 +64,8 @@ public sealed class FoodService(
     public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true, bool useHistory = true)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
+        // Everyday words USDA names differently ("toast" → toasted bread), same as Ask.
+        if (Synonyms.TryGetValue(query.Trim(), out var synonym)) query = synonym;
         var rows = await foods.SearchAsync(query.Trim(), Math.Max(limit * 12, 300), ct);
         if (!dedupe) return FoodRanker.Rank(query, rows, useHistory).Take(limit).ToList();
         // Several entries can share a name (Foundation samples, SR Legacy, Survey). Keep one per name, preferring

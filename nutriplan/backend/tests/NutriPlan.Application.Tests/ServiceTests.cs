@@ -209,6 +209,16 @@ public class ServiceTests
     }
 
     [Fact]
+    public void A_missing_food_form_is_a_weak_match()
+    {
+        var rows = new[] { Row("Kale, raw", FoodSource.UsdaSrLegacy), Row("Snacks, potato chips, plain, salted", FoodSource.UsdaSrLegacy) };
+        var best = FoodRanker.Rank("kale chips", rows).Single(r => r.Food.Name == "Kale, raw");
+        Assert.True(FoodService.MatchConfidence(best.Score) < 0.5);
+        var plain = FoodRanker.Rank("kale", rows).Single(r => r.Food.Name == "Kale, raw");
+        Assert.True(plain.Score - best.Score >= 15);
+    }
+
+    [Fact]
     public void Recipe_matching_ignores_logging_history()
     {
         var yogurt = new FoodSearchRow(MakeFood("Yogurt, whole milk, plain", FoodSource.UsdaSrLegacy), 0.4, 60);

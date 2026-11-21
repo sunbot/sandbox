@@ -32,6 +32,14 @@ public static partial class FoodRanker
         "game meat", "crustaceans", "mollusks", "candies", "snacks", "alcoholic beverage", "fast foods", "restaurant", "babyfood",
     ];
 
+    /// <summary>Words that name a prepared form of a food (stemmed, as <see cref="Tokens"/> produces them).</summary>
+    private static readonly HashSet<string> FormWords =
+    [
+        "chip", "soup", "juice", "smoothie", "sauce", "salad", "sandwich", "pie", "muffin", "cookie", "cake", "cracker",
+        "fry", "frie", "nugget", "bar", "cereal", "pancake", "waffle", "burrito", "taco", "pizza", "stew", "curry", "jerky",
+        "chowder", "dip", "spread", "milkshake", "shake", "latte", "brownie", "granola", "pudding", "casserole",
+    ];
+
     /// <summary>Descriptors USDA uses for the plain, default form of a food.</summary>
     private static readonly HashSet<string> DefaultDescriptors = ["whole", "plain", "fresh", "regular", "long-grain", "all commercial varieties", "nfs"];
 
@@ -99,6 +107,10 @@ public static partial class FoodRanker
             // "Beans and brown rice", "Chicken with rice" for "brown rice": a combination dish you didn't ask for.
             if (!wantsCombination && CombinationDish().IsMatch(head))
                 score -= 8;
+
+            // "kale chips", "tomato soup", "apple juice": the form is the food. A match that lacks it (raw kale) is a
+            // different food, so it ranks lower and shows as a weak match instead of a confident one.
+            score -= 15 * queryTokens.Count(q => FormWords.Contains(q) && !nameTokens.Contains(q));
         }
 
         // Plain default forms ("Egg, whole", "Yogurt, plain") over variants, unless the query asks otherwise.
