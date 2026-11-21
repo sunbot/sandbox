@@ -32,7 +32,7 @@ jobs:
         working-directory: nutriplan/mobile
     env:
       # Baked into the app as its default server. Optional: the app also has a Settings screen for it.
-      EXPO_PUBLIC_API_URL: ${{ inputs.api_url || vars.NUTRIPLAN_API_URL }}
+      EXPO_PUBLIC_API_URL: ${{ inputs.api_url || vars.NUTRIPLAN_API_URL || 'https://sandbox-pxdy.onrender.com' }}
     steps:
       - uses: actions/checkout@v4
 
