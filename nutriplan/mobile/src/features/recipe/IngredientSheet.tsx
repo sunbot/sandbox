@@ -4,7 +4,7 @@ import type { Ingredient } from '@/api/types';
 import { AppText, Badge, BottomSheet, PrimaryButton, SecondaryButton } from '@/components/ds';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
-import { ingredientState, type IngredientState } from './nutritionView';
+import { closedEditor, ingredientState, syncGramsEditor, typeGrams, type IngredientState } from './nutritionView';
 
 const stateWords: Record<IngredientState, string> = {
   header: '', matched: 'Auto-matched to a USDA food', confirmed: 'Confirmed by you', check: 'Check this match',
@@ -25,11 +25,14 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetGrams,
 }) {
   const t = useTheme();
   const [last, setLast] = useState(ingredient);
-  const [grams, setGrams] = useState('');
-  const [editedFor, setEditedFor] = useState<number | null>(null);
+  const [editor, setEditor] = useState(closedEditor);
   if (ingredient && ingredient !== last) setLast(ingredient);
   const ing = ingredient ?? last; // keep content while the sheet animates out
-  if (ingredient && editedFor !== ingredient.position) { setEditedFor(ingredient.position); setGrams(ingredient.grams ? String(Math.round(ingredient.grams * 10) / 10) : ''); }
+  // Reset from the current data on every open (also reopening the same ingredient); keep typing while open.
+  const synced = syncGramsEditor(editor, ingredient);
+  if (synced !== editor) setEditor(synced);
+  const grams = synced.text;
+  const setGrams = (text: string) => setEditor((e) => typeGrams(e, text));
   if (!ing) return null;
 
   const state = ingredientState(ing);

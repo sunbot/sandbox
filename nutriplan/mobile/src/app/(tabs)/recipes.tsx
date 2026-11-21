@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { FlatList, Image, Pressable, TextInput, View } from 'react-native';
+import { FlatList, Pressable, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRecipeMutations, useRecipes } from '@/api/hooks';
 import { AppCard, AppText, Badge, EmptyState, PrimaryButton, SearchField, SecondaryButton, Skeleton } from '@/components/ds';
-import { ChefHat, ChevronRight, Download, Plus, Star, Utensils } from '@/components/ds/icons';
+import { ChefHat, ChevronRight, Download, Plus, Star } from '@/components/ds/icons';
+import { RecipeThumb } from '@/features/recipe/RecipeThumb';
 import { loadSettings } from '@/lib/settings';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -102,14 +103,7 @@ export default function RecipesScreen() {
           {({ pressed }) => (
             <AppCard padded={false} style={pressed ? { backgroundColor: t.colors.surfaceMuted } : undefined}>
               <View style={{ flexDirection: 'row', gap: t.space.md, alignItems: 'center', padding: t.space.md }}>
-                {r.hasPhoto || r.imageUrl ? (
-                  <Image source={r.hasPhoto ? { uri: `${server.apiUrl}/api/recipes/${r.id}/photo`, headers: server.apiKey ? { 'X-Api-Key': server.apiKey } : undefined } : { uri: r.imageUrl! }}
-                    style={{ width: 64, height: 64, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted }} />
-                ) : (
-                  <View style={{ width: 64, height: 64, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
-                    <Utensils size={22} strokeWidth={1.6} color={t.colors.textMuted} />
-                  </View>
-                )}
+                <RecipeThumb recipe={r} server={server} size={64} radius={t.radii.button} />
                 <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     {r.isFavorite ? <Star size={16} strokeWidth={1.8} color={t.colors.accent} fill={t.colors.accent} /> : null}

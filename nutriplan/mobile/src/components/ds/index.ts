@@ -4,3 +4,4 @@ export { MacroProgress, NutrientProgress, nutrientStatus, nutrientStatusInProgre
 export type { NutrientStatus } from './data';
 export { BottomSheet, ConfirmationSheet, SnackbarProvider, useSnackbar } from './overlays';
 export { ListGroup, ListRow } from './list';
+export { SegmentedControl } from './segmented';

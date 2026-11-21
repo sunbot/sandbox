@@ -1,7 +1,8 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { AppText } from '@/components/ds';
 import { useTheme } from '@/theme/ThemeProvider';
+import { previewScale } from '@/theme/tokens';
 import { macroComposition, type MacroKey } from './nutritionView';
 
 const names: Record<MacroKey, string> = { protein: 'Protein', carbs: 'Carbohydrate', fat: 'Fat' };
@@ -19,13 +20,16 @@ export function macroChartLabel(n: { calories: number; protein: number; carbs: n
  * not gram shares. The center shows the recipe's reported calories; the ring only splits macro-derived energy, so the
  * two can differ slightly (fiber, alcohol, rounding) and are never forced to agree.
  */
-export function MacroDonutChart({ calories, protein, carbs, fat, caption, size = 132 }: {
+export function MacroDonutChart({ calories, protein, carbs, fat, caption, size: baseSize = 132 }: {
   calories: number; protein: number; carbs: number; fat: number;
   /** Words under the calories, e.g. "per serving". */
   caption: string;
   size?: number;
 }) {
   const t = useTheme();
+  // The centre text scales with the user's font size, so the ring grows with it (capped) instead of clipping the text.
+  const fontScale = useWindowDimensions().fontScale * previewScale;
+  const size = Math.round(baseSize * Math.min(1.45, Math.max(1, fontScale)));
   const stroke = Math.round(size * 0.115);
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;

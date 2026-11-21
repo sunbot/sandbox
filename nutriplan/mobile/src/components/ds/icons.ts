@@ -55,3 +55,4 @@ export { default as Pencil } from 'lucide-react-native/icons/pencil';
 export { default as RefreshCw } from 'lucide-react-native/icons/refresh-cw';
 export { default as Info } from 'lucide-react-native/icons/info';
 export { default as Layers } from 'lucide-react-native/icons/layers';
+export { default as CircleHelp } from 'lucide-react-native/icons/circle-help';
