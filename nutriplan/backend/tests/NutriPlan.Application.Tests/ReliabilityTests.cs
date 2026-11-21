@@ -255,6 +255,23 @@ public class ReliabilityTests
         public Task<InterpretedRequest> InterpretAsync(string text, DateOnly today, CancellationToken ct = default) => throw new HttpRequestException("secret-looking detail sk-test-123");
     }
 
+    private sealed class DiagnosticFailure : ILanguageInterpreter
+    {
+        public bool IsAvailable => true;
+        public Task<InterpretedRequest> InterpretAsync(string text, DateOnly today, CancellationToken ct = default) =>
+            throw new SafeDiagnosticException("Anthropic rejected the request: credit balance is too low.");
+    }
+
+    [Fact]
+    public async Task A_safe_diagnostic_reason_is_shown_when_claude_fails()
+    {
+        _store.AddFood("Egg, whole, raw", 143, 12.6, 0.7, 9.5, portions: new FoodPortion("large", 50));
+        var r = await Assistant(new DiagnosticFailure()).HandleAsync(new AssistantRequest("2 eggs", Sat));
+        Assert.Equal("RulesFallback", r.Interpreter);
+        Assert.Contains("credit balance is too low", r.InterpreterNote);
+        Assert.Single(r.FoodMatches);
+    }
+
     private sealed class FakeClaude(InterpretedRequest result) : ILanguageInterpreter
     {
         public bool IsAvailable => true;

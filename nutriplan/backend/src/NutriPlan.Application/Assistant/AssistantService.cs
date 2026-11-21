@@ -63,7 +63,9 @@ public sealed class AssistantService(
                 // Only the exception's type is reported (never its message), so nothing sensitive can leak into a response.
                 logger.LogWarning(ex, "Language model unavailable, falling back to rules.");
                 interpreted = RuleBasedInterpreter.Interpret(request.Text, today);
-                info = new InterpreterInfo("RulesFallback", $"Claude is configured but the request failed ({ex.GetType().Name}), so the built-in rules were used.");
+                info = new InterpreterInfo("RulesFallback", ex is Common.SafeDiagnosticException safe
+                    ? $"Claude is configured but the request failed. {safe.Message} The built-in rules were used."
+                    : $"Claude is configured but the request failed ({ex.GetType().Name}), so the built-in rules were used.");
             }
         }
         else interpreted = RuleBasedInterpreter.Interpret(request.Text, today);
