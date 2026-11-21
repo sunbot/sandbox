@@ -48,3 +48,10 @@ export { default as TriangleAlert } from 'lucide-react-native/icons/triangle-ale
 export { default as Undo2 } from 'lucide-react-native/icons/undo-2';
 export { default as Utensils } from 'lucide-react-native/icons/utensils';
 export { default as X } from 'lucide-react-native/icons/x';
+export { default as CalendarPlus } from 'lucide-react-native/icons/calendar-plus';
+export { default as CircleMinus } from 'lucide-react-native/icons/circle-minus';
+export { default as ExternalLink } from 'lucide-react-native/icons/external-link';
+export { default as Pencil } from 'lucide-react-native/icons/pencil';
+export { default as RefreshCw } from 'lucide-react-native/icons/refresh-cw';
+export { default as Info } from 'lucide-react-native/icons/info';
+export { default as Layers } from 'lucide-react-native/icons/layers';

@@ -24,3 +24,17 @@ Week shows **338 eaten + 0 planned, 1,072 not planned yet**. Both are the same 1
 - "Mark eaten" creates exactly one linked diary entry. The database has a unique index on the link, and Log all / Plan all
   accept an `Idempotency-Key`, so a double tap or retry cannot save twice.
 - A meal planned for a later day cannot be logged early. "Today" is the device's date (sent by the app), not the server's.
+
+## Recipe details: three separate ideas
+
+- **Show** (Per serving / Whole recipe / Per 100 g): only changes how the numbers are displayed. Per serving is the stored value;
+  whole recipe is per serving × the servings the recipe makes; per 100 g is the whole recipe ÷ the finished dish's weight × 100.
+- **Makes** (the recipe's yield): how many servings the whole recipe produces. Editable with *Change*.
+- **Servings I'm having**: how much you are logging or planning (fractions allowed). Independent of the two above.
+
+Per 100 g appears only when a finished-dish weight (`cookedWeightGrams`) was entered in Edit recipe. It is never estimated from
+ingredient weights (raw weight is not cooked weight) or invented densities.
+
+The macro donut splits *macro-derived* energy (protein 4, carbohydrate 4 including fiber, fat 9 kcal per gram). The centre shows the
+recipe's own calories; when the two differ noticeably the screen says so (fiber, alcohol, rounding) instead of forcing them to match.
+"Based on N% of ingredients" counts lines that have a food and an amount; it does not verify that each match is the right food.

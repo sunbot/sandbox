@@ -1,187 +1,209 @@
 import { useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLogRecipe, usePlanMutations, useRecipe, useRecipeMutations } from '@/api/hooks';
 import type { Ingredient } from '@/api/types';
-import { MacroLine } from '@/components/charts';
-import { Button, Card, Chip, ErrorView, Field, Loading } from '@/components/ui';
+import { AppCard, AppText, ConfirmationSheet, EmptyState, FilterChip, PrimaryButton, SecondaryButton, SectionHeader, Skeleton, TextButton, useSnackbar } from '@/components/ds';
+import { CalendarPlus, Check, ChefHat, ExternalLink, Layers, RefreshCw } from '@/components/ds/icons';
+import { IngredientNutritionRow } from '@/features/recipe/IngredientNutritionRow';
+import { IngredientSheet } from '@/features/recipe/IngredientSheet';
+import { NutritionSummary } from '@/features/recipe/NutritionSummary';
+import { RecipeHeader } from '@/features/recipe/RecipeHeader';
+import { ServingModeSelector } from '@/features/recipe/ServingModeSelector';
+import {
+  availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nutritionFor, parseServings, reliabilityNote,
+  servingsWord, type NutritionMode,
+} from '@/features/recipe/nutritionView';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
-import { Star } from '@/components/ds/icons';
-import { colors, font, spacing } from '@/lib/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 
 /**
- * Recipe nutrition is computed from each ingredient's matched food and grams. Low-confidence or
- * unmatched lines are highlighted so you can fix them; the per-serving numbers update immediately.
+ * Recipe nutrition is computed from each ingredient's matched food and grams. Three separate ideas live on this
+ * screen and are kept apart: how the numbers are SHOWN (per serving / whole recipe / per 100 g), how many servings the
+ * recipe MAKES (yield), and how much YOU are logging or planning.
  */
 export default function RecipeScreen() {
+  const t = useTheme();
+  const snackbar = useSnackbar();
   const { id, planDate } = useLocalSearchParams<{ id: string; planDate?: string }>();
   const recipe = useRecipe(id);
   const m = useRecipeMutations();
   const plan = usePlanMutations();
   const logRecipe = useLogRecipe();
   const [servings, setServings] = useState('1');
-  const [meal, setMeal] = useState<Meal>('Dinner');
+  const [meal, setMeal] = useState<Meal>(mealForNow);
   const [batchDays, setBatchDays] = useState('3');
-  // Everything below shows on the screen rather than in alerts, which don't appear in the web version.
+  const [mode, setMode] = useState<NutritionMode>('serving');
+  // Everything that needs reading stays on screen rather than in alerts, which don't appear in the web version.
   const [notice, setNotice] = useState<string | null>(null);
-  const [openIng, setOpenIng] = useState<number | null>(null);
+  const [openIng, setOpenIng] = useState<Ingredient | null>(null);
   const [yieldText, setYieldText] = useState<string | null>(null); // non-null while editing "makes N servings"
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  if (recipe.isLoading) return <Loading />;
-  if (recipe.error) return <ErrorView error={recipe.error} />;
-  const r = recipe.data!;
-  const s = r.summary;
-  const n = Number(servings) || 1;
+  if (recipe.isLoading) {
+    return <View style={{ padding: t.screenPadding, gap: t.space.md }}><Skeleton width="100%" height={96} radius={20} /><Skeleton width="100%" height={260} radius={20} /><Skeleton width="100%" height={200} radius={20} /></View>;
+  }
+  if (recipe.error || !recipe.data) {
+    return <EmptyState icon={ChefHat} title="Couldn’t load this recipe" body={recipe.error instanceof Error ? recipe.error.message : 'Check your connection and try again.'}
+      action={<SecondaryButton label="Try again" onPress={() => recipe.refetch()} />} />;
+  }
 
-  const addToPlan = async () => {
-    await plan.addRecipe.mutateAsync({ date: planDate ?? today(), meal, recipeId: s.id, servings: n });
-    router.back();
+  const r = recipe.data;
+  const s = r.summary;
+  const basis = { perServing: s.perServing, servings: s.servings, cookedWeightGrams: r.cookedWeightGrams };
+  const modes = availableModes(basis);
+  const shownMode = effectiveMode(mode, basis);
+  const shown = nutritionFor(basis, shownMode) ?? s.perServing;
+  const counts = ingredientCounts(r.ingredients);
+  const note = reliabilityNote(s.coverage, counts);
+
+  const n = parseServings(servings);
+  const eating = n ? eatingNutrition(s.perServing, n) : null;
+  const logDate = today();
+
+  const run = async (action: () => Promise<unknown>, done?: string) => {
+    try { await action(); if (done) setNotice(done); } catch (e) { setNotice(e instanceof Error ? e.message : String(e)); }
   };
 
-  const batch = async () => {
+  const addToPlan = () => n && run(async () => {
+    await plan.addRecipe.mutateAsync({ date: planDate ?? logDate, meal, recipeId: s.id, servings: n });
+    router.back();
+  });
+
+  const logNow = () => n && run(async () => {
+    // The meal the user picked above, never a time-of-day guess.
+    await logRecipe.mutateAsync(logRecipeRequest({ date: logDate, meal, recipeId: s.id, servings: n }));
+    snackbar({ message: `Logged ${servingsWord(n)} to ${meal.toLowerCase()} today` });
+  });
+
+  const batch = () => n && run(async () => {
     const days = Math.max(1, Math.min(7, Number(batchDays) || 1));
-    const start = planDate ?? today();
+    const start = planDate ?? logDate;
     await plan.addBatch.mutateAsync({ recipeId: s.id, servingsPerPortion: n, slots: Array.from({ length: days }, (_, i) => ({ date: addDays(start, i), meal })) });
     setNotice(`Planned ${days} portions of ${s.name}, ${meal.toLowerCase()} from ${dayLabel(start)}. It's on the grocery list once.`);
-  };
-
-  const fixIngredient = (ing: Ingredient) => setOpenIng((p) => (p === ing.position ? null : ing.position));
+  });
 
   const saveYield = async () => {
-    const v = Number(yieldText);
-    if (!(v > 0)) return setNotice('Enter how many servings the whole recipe makes.');
-    try {
+    const v = parseServings(yieldText ?? '');
+    if (!v) return setNotice('Enter how many servings the whole recipe makes.');
+    await run(async () => {
       await m.setServings.mutateAsync({ id: s.id, servings: v });
       setYieldText(null);
-      setNotice(`Now ${v} serving${v === 1 ? '' : 's'}: per-serving numbers updated.`);
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : String(e));
-    }
+    }, `Now ${servingsWord(v)}: per-serving numbers updated.`);
   };
 
-  const refreshMatches = async () => {
-    try {
-      const d = await m.rematch.mutateAsync(s.id);
-      setNotice(`Ingredients re-matched: ${Math.round(d.summary.coverage * 100)}% now counted. Lines you chose or excluded were kept.`);
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : String(e));
-    }
-  };
+  const refreshMatches = () => run(async () => {
+    const d = await m.rematch.mutateAsync(s.id);
+    setNotice(`Ingredients re-matched: ${Math.round(d.summary.coverage * 100)}% now counted. Lines you chose or excluded were kept.`);
+  });
+
+  const input = [t.type.bodyStrong, { minHeight: 48, paddingHorizontal: t.space.md, color: t.colors.text, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted }] as const;
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text style={font.title}>{s.name}</Text>
-      {r.description ? <Text style={font.small}>{r.description}</Text> : null}
+    <ScrollView contentContainerStyle={{ padding: t.screenPadding, gap: t.space.lg, paddingBottom: t.space.huge }} keyboardShouldPersistTaps="handled">
+      <RecipeHeader recipe={r} onFavorite={() => m.favorite.mutate({ id: s.id, favorite: !s.isFavorite })}
+        onEdit={() => router.push({ pathname: '/recipe/edit', params: { id: s.id } })} />
+      {r.description ? <AppText variant="secondary" tone="secondary">{r.description}</AppText> : null}
 
       {notice ? (
-        <View accessibilityLiveRegion="polite" style={styles.notice}>
-          <Text style={[font.body, { flex: 1 }]}>{notice}</Text>
-          <Button title="OK" variant="ghost" compact onPress={() => setNotice(null)} />
-        </View>
+        <AppCard style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}>
+          <AppText variant="body" style={{ flex: 1 }} accessibilityLiveRegion="polite">{notice}</AppText>
+          <TextButton label="OK" onPress={() => setNotice(null)} />
+        </AppCard>
       ) : null}
 
-      <Card style={{ gap: spacing.xs }}>
-        {yieldText === null ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-            <Text style={font.small}>Per serving · whole recipe makes {s.servings} serving{s.servings === 1 ? '' : 's'}</Text>
-            <Button title="Change" variant="ghost" compact onPress={() => setYieldText(String(s.servings))} />
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, flexWrap: 'wrap' }}>
-            <View style={{ width: 110 }}><Field label="Recipe makes" value={yieldText} onChangeText={setYieldText} keyboardType="decimal-pad" /></View>
-            <Button title="Save" compact onPress={saveYield} loading={m.setServings.isPending} />
-            <Button title="Cancel" variant="ghost" compact onPress={() => setYieldText(null)} />
-          </View>
-        )}
-        {s.servings === 1 && !r.servingDescription && yieldText === null ? (
-          <Text style={[font.tiny, { color: colors.high }]}>The recipe didn’t say how many servings it makes, so this is the whole recipe. Tap Change to set it.</Text>
+      <AppCard style={{ gap: t.space.lg }} sheen>
+        <ServingModeSelector modes={modes} value={shownMode} onChange={setMode} />
+        <NutritionSummary nutrition={shown} mode={shownMode} makes={s.servings} gramsPerServing={gramsPerServing(basis)} reliability={note} />
+        {modes.length < 3 ? (
+          <AppText variant="caption" tone="muted">Per 100 g appears once you enter the finished dish’s weight in Edit recipe. It is never estimated from the ingredients.</AppText>
         ) : null}
-        <MacroLine n={s.perServing} />
-        <Text style={font.tiny}>Fiber {s.perServing.fiber.toFixed(1)} g · calculated from {Math.round(s.coverage * 100)}% of ingredients{s.coverage < 1 ? ' (fix the highlighted ones)' : ''}</Text>
-        {r.sourceNutritionText ? <Text style={font.tiny}>Source says: {r.sourceNutritionText}</Text> : null}
-      </Card>
+        {r.sourceNutritionText ? <AppText variant="caption" tone="muted">The recipe source says: {r.sourceNutritionText}</AppText> : null}
 
-      <Card style={{ gap: spacing.md }}>
-        <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' }}>
-          <View style={{ width: 90 }}><Field label="Servings" value={servings} onChangeText={setServings} keyboardType="decimal-pad" /></View>
-          <Text style={[font.small, { flex: 1 }]}>{Math.round(s.perServing.calories * n)} kcal</Text>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {meals.map((x) => <Chip key={x} label={x} selected={x === meal} onPress={() => setMeal(x)} />)}
-        </View>
-        <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
-          <Button title={planDate ? `Plan for ${dayLabel(planDate)}` : 'Plan for today'} compact onPress={addToPlan} loading={plan.addRecipe.isPending} />
-          <Button title="Log now" variant="secondary" compact loading={logRecipe.isPending}
-            onPress={async () => { await logRecipe.mutateAsync({ date: today(), meal: mealForNow(), recipeId: s.id, servings: n }); setNotice(`Logged ${n} serving${n === 1 ? '' : 's'} to ${mealForNow().toLowerCase()} today.`); }} />
-          <Button title={s.isFavorite ? 'Favorite' : 'Add to favorites'} icon={Star} iconFilled={s.isFavorite} variant="ghost" compact
-            accessibilityLabel={s.isFavorite ? 'Favorite. Tap to remove from favorites' : 'Add to favorites'}
-            onPress={() => m.favorite.mutate({ id: s.id, favorite: !s.isFavorite })} />
-        </View>
-        <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' }}>
-          <View style={{ width: 90 }}><Field label="Batch days" value={batchDays} onChangeText={setBatchDays} keyboardType="number-pad" /></View>
-          <Button title="Cook once, plan leftovers" variant="secondary" compact onPress={batch} loading={plan.addBatch.isPending} />
-        </View>
-      </Card>
-
-      <Button title="Edit recipe" variant="secondary" onPress={() => router.push({ pathname: '/recipe/edit', params: { id: s.id } })} />
-
-      <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm, flexWrap: 'wrap' }}>
-          <Text style={font.heading}>Ingredients</Text>
-          <Button title="Refresh matches" variant="ghost" compact onPress={refreshMatches} loading={m.rematch.isPending} />
-        </View>
-        <Text style={[font.tiny, { marginBottom: spacing.sm }]}>Tap an ingredient to choose a different food or leave it out.</Text>
-        {r.ingredients.map((ing) => {
-          const header = ing.status === 'Ignored' && ing.note === 'Section header';
-          const needsAttention = ing.status === 'Unmatched' || (ing.status === 'AutoMatched' && (ing.grams == null || ing.matchConfidence < 0.5));
-          return (
-            <View key={ing.position} style={[styles.ing, needsAttention && styles.attention]}>
-              <Text style={[header ? font.heading : font.body, { fontSize: header ? 14 : 15 }]} onPress={header ? undefined : () => fixIngredient(ing)}>
-                {ing.rawText}
-              </Text>
-              {!header && (
-                <Text style={font.tiny} onPress={() => fixIngredient(ing)}>
-                  {ing.status === 'Ignored' ? `Not counted · ${ing.note ?? ''}` : ing.foodName ? `→ ${ing.foodName}${ing.grams ? ` · ${Math.round(ing.grams)} g` : ''}${ing.nutrition ? ` · ${Math.round(ing.nutrition.calories)} kcal` : ''}` : 'Tap to choose a food'}
-                  {needsAttention && ing.note ? `\n${ing.note}` : ''}
-                </Text>
-              )}
-              {!header && openIng === ing.position ? (
-                <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', marginTop: spacing.xs }}>
-                  <Button title="Choose food" compact onPress={() => { setOpenIng(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }} />
-                  {ing.status !== 'Ignored' ? (
-                    <Button title="Leave out" variant="secondary" compact onPress={() => { setOpenIng(null); m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); }} />
-                  ) : null}
-                  <Button title="Cancel" variant="ghost" compact onPress={() => setOpenIng(null)} />
-                </View>
-              ) : null}
+        <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border, paddingTop: t.space.md, gap: t.space.sm }}>
+          {yieldText === null ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
+              <AppText variant="secondary" tone="secondary" style={{ flex: 1 }}>This recipe makes {servingsWord(s.servings)}</AppText>
+              <TextButton label="Change" onPress={() => setYieldText(String(s.servings))} />
             </View>
-          );
-        })}
-      </Card>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
+              <AppText variant="secondary" tone="secondary">Makes</AppText>
+              <TextInput value={yieldText} onChangeText={setYieldText} keyboardType="decimal-pad" accessibilityLabel="Servings the whole recipe makes" style={[...input, { width: 90, textAlign: 'center' }]} />
+              <PrimaryButton label="Save" onPress={saveYield} loading={m.setServings.isPending} />
+              <TextButton label="Cancel" tone="secondary" onPress={() => setYieldText(null)} />
+            </View>
+          )}
+          {s.servings === 1 && !r.servingDescription && yieldText === null ? (
+            <AppText variant="caption" tone="warning">The recipe didn’t say how many servings it makes, so this is the whole recipe. Tap Change to set it.</AppText>
+          ) : null}
+        </View>
+      </AppCard>
+
+      <AppCard style={{ gap: t.space.lg }}>
+        <SectionHeader title="Log or plan" />
+        <View style={{ gap: t.space.xs }}>
+          <AppText variant="label" tone="secondary">Servings I’m having</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md }}>
+            <TextInput value={servings} onChangeText={setServings} keyboardType="decimal-pad" accessibilityLabel="Servings to log or plan" style={[...input, { width: 96, textAlign: 'center' }]} />
+            <AppText variant="body" tone="secondary" numeric style={{ flex: 1 }} accessibilityLiveRegion="polite">
+              {eating ? `= ${Math.round(eating.calories)} kcal · P ${Math.round(eating.protein)} · C ${Math.round(eating.carbs)} · F ${Math.round(eating.fat)}` : 'Enter a number above zero'}
+            </AppText>
+          </View>
+        </View>
+        <View style={{ gap: t.space.xs }}>
+          <AppText variant="label" tone="secondary">Meal</AppText>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.space.sm }}>
+            {meals.map((x) => <FilterChip key={x} label={x === 'Snack' ? 'Snacks' : x} selected={x === meal} onPress={() => setMeal(x)} />)}
+          </View>
+        </View>
+        <View style={{ gap: t.space.sm }}>
+          <PrimaryButton label={`Log now · ${meal === 'Snack' ? 'snacks' : meal.toLowerCase()}`} icon={Check} disabled={!n} loading={logRecipe.isPending} onPress={logNow} fullWidth />
+          <SecondaryButton label={planDate ? `Plan for ${dayLabel(planDate)}` : 'Plan for today'} icon={CalendarPlus} disabled={!n} loading={plan.addRecipe.isPending} onPress={addToPlan} fullWidth />
+        </View>
+        <View style={{ gap: t.space.xs, borderTopWidth: 1, borderTopColor: t.colors.border, paddingTop: t.space.md }}>
+          <AppText variant="label" tone="secondary">Cook once, eat several times</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, flexWrap: 'wrap' }}>
+            <TextInput value={batchDays} onChangeText={setBatchDays} keyboardType="number-pad" accessibilityLabel="Number of days to plan leftovers" style={[...input, { width: 72, textAlign: 'center' }]} />
+            <AppText variant="secondary" tone="secondary">days</AppText>
+            <SecondaryButton label="Plan leftovers" icon={Layers} disabled={!n} loading={plan.addBatch.isPending} onPress={batch} />
+          </View>
+        </View>
+      </AppCard>
+
+      <AppCard padded={false}>
+        <View style={{ padding: t.space.lg, paddingBottom: t.space.sm, gap: t.space.xs }}>
+          <SectionHeader title="Ingredients" action={<TextButton label="Refresh matches" icon={RefreshCw} onPress={refreshMatches} />} />
+          <AppText variant="caption" tone="muted">
+            {counts.counted} of {counts.total} counted{counts.unmatched ? ` · ${counts.unmatched} unmatched` : ''}{counts.check ? ` · ${counts.check} to check` : ''}{counts.excluded ? ` · ${counts.excluded} left out` : ''}. Tap one to change its food or amount.
+          </AppText>
+        </View>
+        <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>
+          {r.ingredients.map((ing) => <IngredientNutritionRow key={ing.position} ingredient={ing} onPress={() => setOpenIng(ing)} />)}
+        </View>
+      </AppCard>
 
       {r.directions ? (
-        <Card><Text style={[font.heading, { marginBottom: spacing.sm }]}>Directions</Text><Text style={[font.body, { lineHeight: 22 }]}>{r.directions}</Text></Card>
+        <AppCard style={{ gap: t.space.sm }}>
+          <SectionHeader title="Directions" />
+          <AppText variant="body" style={{ lineHeight: 24 }}>{r.directions}</AppText>
+        </AppCard>
       ) : null}
-      {r.sourceUrl ? <Button title={`Open ${r.sourceName ?? 'source'}`} variant="ghost" onPress={() => Linking.openURL(r.sourceUrl!)} /> : null}
-      {confirmDelete ? (
-        <Card style={{ gap: spacing.sm }}>
-          <Text style={font.body}>Delete {s.name}? This can’t be undone.</Text>
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Button title="Delete" variant="danger" compact loading={m.remove.isPending} onPress={async () => { await m.remove.mutateAsync(s.id); router.back(); }} />
-            <Button title="Keep it" variant="ghost" compact onPress={() => setConfirmDelete(false)} />
-          </View>
-        </Card>
-      ) : (
-        <Button title="Delete recipe" variant="danger" onPress={() => setConfirmDelete(true)} />
-      )}
+
+      <View style={{ gap: t.space.sm }}>
+        {r.sourceUrl ? <SecondaryButton label={`Open ${r.sourceName ?? 'source'}`} icon={ExternalLink} onPress={() => Linking.openURL(r.sourceUrl!)} fullWidth /> : null}
+        <SecondaryButton label="Edit recipe" onPress={() => router.push({ pathname: '/recipe/edit', params: { id: s.id } })} fullWidth />
+        <SecondaryButton label="Delete recipe" tone="danger" onPress={() => setConfirmDelete(true)} fullWidth />
+      </View>
+
+      <IngredientSheet ingredient={openIng} onClose={() => setOpenIng(null)} busy={m.updateIngredient.isPending}
+        onChooseFood={(ing) => { setOpenIng(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
+        onLeaveOut={(ing) => { m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); setOpenIng(null); }}
+        onSetGrams={(ing, grams) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, grams }); setOpenIng(null); })} />
+
+      <ConfirmationSheet visible={confirmDelete} title={`Delete ${s.name}?`} message="This can’t be undone. Meals you already logged or planned from it keep their nutrition."
+        confirmLabel="Delete recipe" destructive loading={m.remove.isPending} onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => run(async () => { await m.remove.mutateAsync(s.id); router.back(); })} />
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  notice: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: 12, backgroundColor: colors.surfaceMuted },
-  page: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
-  ing: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, gap: 2 },
-  attention: { backgroundColor: colors.attention, marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6 },
-});
