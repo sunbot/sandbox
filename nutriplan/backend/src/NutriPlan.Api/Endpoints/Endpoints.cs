@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using NutriPlan.Application.Common;
 using NutriPlan.Application.Assistant;
 using NutriPlan.Application.Diary;
 using NutriPlan.Application.Foods;
@@ -26,7 +27,7 @@ public sealed record UpdateDiaryRequest(double? Scale, DateOnly? Date, MealSlot?
 public sealed record FavoriteRequest(bool Favorite);
 public sealed record ServingsRequest(double Servings);
 public sealed record UrlImportRequest(string Url);
-public sealed record EatenRequest(double Scale = 1);
+public sealed record EatenRequest(double Scale = 1, DateOnly? Today = null);
 
 public static class FoodEndpoints
 {
@@ -53,7 +54,8 @@ public static class DiaryEndpoints
         g.MapGet("/{date}", (DateOnly date, DiaryService s, CancellationToken ct) => s.GetDayAsync(date, ct));
         g.MapGet("/quick-log", (MealSlot? meal, int? limit, DiaryService s, CancellationToken ct) => s.GetQuickLogAsync(meal, Math.Clamp(limit ?? 20, 1, 50), ct));
         g.MapPost("/food", (LogFoodRequest r, DiaryService s, CancellationToken ct) => s.LogFoodAsync(r, ct));
-        g.MapPost("/foods", (LogFoodsRequest r, DiaryService s, CancellationToken ct) => s.LogFoodsAsync(r, ct));
+        g.MapPost("/foods", ([Microsoft.AspNetCore.Mvc.FromHeader(Name = "Idempotency-Key")] string? key, LogFoodsRequest r, DiaryService s, IdempotencyStore once, CancellationToken ct) =>
+            once.RunAsync(key, r, () => s.LogFoodsAsync(r, ct)));
         g.MapPost("/recipe", (LogRecipeRequest r, DiaryService s, CancellationToken ct) => s.LogRecipeAsync(r, ct));
         g.MapPost("/quick", (LogQuickRequest r, DiaryService s, CancellationToken ct) => s.LogQuickAsync(r, ct));
         g.MapPost("/copy", (CopyRequest r, DiaryService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, r.ToMeal, ct));
@@ -68,21 +70,22 @@ public static class PlanEndpoints
     public static void MapPlanEndpoints(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/plan").WithTags("Plan");
-        g.MapGet("/week", (DateOnly date, PlanService s, CancellationToken ct) => s.GetWeekAsync(date, ct));
+        g.MapGet("/week", (DateOnly date, DateOnly? today, PlanService s, CancellationToken ct) => s.GetWeekAsync(date, today, ct));
         g.MapPost("/food", (AddPlanFoodRequest r, PlanService s, CancellationToken ct) => s.AddFoodAsync(r, ct));
-        g.MapPost("/foods", (AddPlanFoodsRequest r, PlanService s, CancellationToken ct) => s.AddFoodsAsync(r, ct));
+        g.MapPost("/foods", ([Microsoft.AspNetCore.Mvc.FromHeader(Name = "Idempotency-Key")] string? key, AddPlanFoodsRequest r, PlanService s, IdempotencyStore once, CancellationToken ct) =>
+            once.RunAsync(key, r, () => s.AddFoodsAsync(r, ct)));
         g.MapPost("/recipe", (AddPlanRecipeRequest r, PlanService s, CancellationToken ct) => s.AddRecipeAsync(r, ct));
         g.MapPost("/batch", (AddBatchRequest r, PlanService s, CancellationToken ct) => s.AddBatchAsync(r, ct));
         g.MapPost("/{id:guid}/move", (Guid id, MoveRequest r, PlanService s, CancellationToken ct) => s.MoveAsync(id, r.Date, r.Meal, ct));
         g.MapPost("/{id:guid}/swap-recipe", (Guid id, SwapRecipeRequest r, PlanService s, CancellationToken ct) => s.SwapForRecipeAsync(id, r.RecipeId, r.Servings, ct));
         g.MapPost("/{id:guid}/swap-food", (Guid id, SwapFoodRequest r, PlanService s, CancellationToken ct) => s.SwapForFoodAsync(id, r.FoodId, r.Grams, r.Amount, r.Unit, ct));
         g.MapPost("/{id:guid}/rescale", (Guid id, ScaleRequest r, PlanService s, CancellationToken ct) => s.RescaleAsync(id, r.Scale, ct));
-        g.MapPost("/{id:guid}/eaten", (Guid id, EatenRequest? r, PlanService s, CancellationToken ct) => s.MarkEatenAsync(id, r?.Scale ?? 1, ct));
+        g.MapPost("/{id:guid}/eaten", (Guid id, EatenRequest? r, PlanService s, CancellationToken ct) => s.MarkEatenAsync(id, r?.Scale ?? 1, r?.Today, ct));
         g.MapPost("/{id:guid}/skip", (Guid id, PlanService s, CancellationToken ct) => s.MarkSkippedAsync(id, ct));
         g.MapPost("/{id:guid}/reopen", (Guid id, PlanService s, CancellationToken ct) => s.ReopenAsync(id, ct));
         g.MapPost("/copy", (PlanCopyRequest r, PlanService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, ct));
         g.MapDelete("/{id:guid}", async (Guid id, PlanService s, CancellationToken ct) => { await s.DeleteAsync(id, ct); return Results.NoContent(); });
-        g.MapGet("/rebalance", (DateOnly date, PlanService s, CancellationToken ct) => s.ProposeRebalanceAsync(date, ct));
+        g.MapGet("/rebalance", (DateOnly date, DateOnly? today, PlanService s, CancellationToken ct) => s.ProposeRebalanceAsync(date, today, ct));
         g.MapPost("/rebalance", (RebalanceApplyRequest r, PlanService s, CancellationToken ct) => s.ApplyRebalanceAsync(r.Date, r.Scale, ct));
         g.MapGet("/gaps", (DateOnly date, bool? includePlanned, bool? micros, bool? recipesOnly, int? maxItems, GapFillService s, CancellationToken ct) =>
             s.SuggestAsync(new GapFillRequest(date, includePlanned ?? true, micros ?? true, maxItems ?? 3, recipesOnly ?? false), ct));
@@ -146,7 +149,16 @@ public static class AssistantEndpoints
     public static void MapAssistantEndpoints(this RouteGroupBuilder api)
     {
         api.MapPost("/assistant", (AssistantRequest r, AssistantService s, CancellationToken ct) => s.HandleAsync(r, ct)).WithTags("Assistant");
-        api.MapGet("/status", (NutriPlan.Application.Abstractions.ILanguageInterpreter ai, NutriPlan.Infrastructure.Persistence.NutriPlanDbContext db) =>
-            new { languageModel = ai.IsAvailable, foods = db.Foods.Count() }).WithTags("Assistant");
+        // Which interpreter this server uses for Ask. Reports whether Claude is configured and which model, never the key itself.
+        // Each Ask response also says which interpreter handled that request ("Claude", "Rules" or "RulesFallback").
+        api.MapGet("/status", (NutriPlan.Application.Abstractions.ILanguageInterpreter ai, Microsoft.Extensions.Options.IOptions<NutriPlan.Infrastructure.Ai.ClaudeOptions> claude,
+                NutriPlan.Infrastructure.Persistence.NutriPlanDbContext db) =>
+            new
+            {
+                languageModel = ai.IsAvailable,
+                interpreter = ai.IsAvailable ? "Claude" : "Rules",
+                interpreterModel = ai.IsAvailable ? claude.Value.InterpreterModel : null,
+                foods = db.Foods.Count(),
+            }).WithTags("Assistant");
     }
 }

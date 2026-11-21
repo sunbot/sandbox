@@ -162,7 +162,10 @@ export type FoodMatch = {
   nutrition?: Nutrition | null;
   /** 0–1; below 0.5 the match deserves a look. */
   confidence: number;
+  /** Raw / cooked state of this food, with a note when it matters and the id of the other state's entry. */
+  preparation?: Preparation | null;
 };
+export type Preparation = { state: 'Raw' | 'Cooked' | 'Unspecified'; requested?: string | null; note?: string | null; otherFoodId?: string | null; otherState?: string | null };
 export type FoodMatchGroup = { text: string; amount?: number | null; unit?: string | null; foodQuery: string; matches: FoodMatch[] };
 export type RecipeIdea = { name: string; description: string; servings: number; ingredients: string[]; directions: string; perServing: Nutrition; coverage: number; warnings: string[] };
 
@@ -170,6 +173,9 @@ export type AssistantResponse = {
   intent: string;
   reply: string;
   usedLanguageModel: boolean;
+  /** Which interpreter handled the request: Claude, Rules (Claude not configured) or RulesFallback (Claude failed). */
+  interpreter?: 'Claude' | 'Rules' | 'RulesFallback';
+  interpreterNote?: string | null;
   meal?: Meal | null;
   date: string;
   foodMatches: FoodMatchGroup[];

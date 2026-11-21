@@ -57,6 +57,8 @@ public sealed class InMemoryStore : IFoodRepository, IRecipeRepository, IDiaryRe
     Task<DiaryEntry?> IDiaryRepository.GetAsync(Guid id, CancellationToken ct) => Task.FromResult(Diary.FirstOrDefault(d => d.Id == id));
     Task<IReadOnlyList<DiaryEntry>> IDiaryRepository.GetRangeAsync(DateOnly from, DateOnly to, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<DiaryEntry>>(Diary.Where(d => d.Date >= from && d.Date <= to).ToList());
+    public Task<IReadOnlySet<Guid>> GetLinkedPlanEntryIdsAsync(IReadOnlyCollection<Guid> planEntryIds, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlySet<Guid>>(Diary.Where(d => d.PlanEntryId != null && planEntryIds.Contains(d.PlanEntryId.Value)).Select(d => d.PlanEntryId!.Value).ToHashSet());
     public Task<IReadOnlyList<FrequentItem>> GetFrequentItemsAsync(int days, int limit, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<FrequentItem>>(Diary.GroupBy(d => (d.Item.FoodId, d.Item.RecipeId))
             .Select(g => new FrequentItem(g.Last().Item, g.First().Meal, g.Count(), g.Last().LoggedAt)).Take(limit).ToList());

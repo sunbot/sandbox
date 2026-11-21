@@ -63,6 +63,11 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                     b.HasIndex("Date")
                         .HasDatabaseName("ix_diary_entries_date");
 
+                    b.HasIndex("PlanEntryId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_diary_entries_plan_entry_id")
+                        .HasFilter("plan_entry_id IS NOT NULL");
+
                     b.ToTable("diary_entries", (string)null);
                 });
 

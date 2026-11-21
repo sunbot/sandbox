@@ -36,6 +36,8 @@ public interface IDiaryRepository
 {
     Task<DiaryEntry?> GetAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<DiaryEntry>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
+    /// <summary>Which of these plan entries have a diary entry logged against them (wherever that entry's date is now).</summary>
+    Task<IReadOnlySet<Guid>> GetLinkedPlanEntryIdsAsync(IReadOnlyCollection<Guid> planEntryIds, CancellationToken ct = default);
     /// <summary>Most-logged foods/recipes in the lookback window, for quick-log and gap-filling.</summary>
     Task<IReadOnlyList<FrequentItem>> GetFrequentItemsAsync(int days, int limit, CancellationToken ct = default);
     void Add(DiaryEntry entry);

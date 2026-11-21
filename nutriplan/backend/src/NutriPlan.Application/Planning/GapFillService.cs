@@ -54,7 +54,7 @@ public sealed class GapFillService(
 
         var eaten = NutrientProfile.Sum((await diary.GetRangeAsync(date, date, ct)).Select(e => e.Item.Nutrients));
         var planned = request.IncludePlanned
-            ? NutrientProfile.Sum((await plan.GetRangeAsync(date, date, ct)).Where(p => p.Status == PlanStatus.Planned).Select(p => p.Item.Nutrients))
+            ? NutrientProfile.Sum((await PlanReconciliation.ReadRangeAsync(plan, diary, date, date, ct)).Where(p => p.Status == PlanStatus.Planned).Select(p => p.Item.Nutrients))
             : NutrientProfile.Empty;
         var have = eaten + planned;
 

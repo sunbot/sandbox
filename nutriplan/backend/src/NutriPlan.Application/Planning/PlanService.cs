@@ -58,14 +58,16 @@ public sealed class PlanService(
     IClock clock,
     IUnitOfWork uow)
 {
-    public async Task<WeekDto> GetWeekAsync(DateOnly anyDayInWeek, CancellationToken ct = default)
+    /// <param name="clientToday">The caller's local date. The week is judged against it (past / today / future), not the server's
+    /// clock, so Week and Today agree wherever you are. Falls back to the server's configured time zone.</param>
+    public async Task<WeekDto> GetWeekAsync(DateOnly anyDayInWeek, DateOnly? clientToday = null, CancellationToken ct = default)
     {
         var targets = await targetsRepo.GetAsync(ct);
         var start = WeeklyBudgetCalculator.WeekStartFor(anyDayInWeek, targets.WeekStartsOn);
         var end = start.AddDays(6);
-        var planned = await plan.GetRangeAsync(start, end, ct);
+        var planned = await PlanReconciliation.ReadRangeAsync(plan, diary, start, end, ct);
         var logged = await diary.GetRangeAsync(start, end, ct);
-        var today = clock.Today;
+        var today = clientToday ?? clock.Today;
 
         var inputs = Enumerable.Range(0, 7).Select(i =>
         {
@@ -167,13 +169,14 @@ public sealed class PlanService(
     }
 
     /// <summary>"I ate it" — logs the planned meal (optionally a different amount) and marks it eaten.</summary>
-    public async Task<DiaryEntryDto> MarkEatenAsync(Guid id, double scale = 1, CancellationToken ct = default)
+    public async Task<DiaryEntryDto> MarkEatenAsync(Guid id, double scale = 1, DateOnly? clientToday = null, CancellationToken ct = default)
     {
         if (scale <= 0) throw new ValidationException("Scale must be greater than zero.");
         var entry = await GetEntry(id, ct);
         if (entry.Status == PlanStatus.Eaten) throw new ValidationException("This meal is already logged.");
         // Planned food is never counted as eaten ahead of time.
-        if (entry.Date > clock.Today) throw new ValidationException("That meal is planned for a later day. Log it on the day you eat it.");
+        // Judged by the caller's local date; without one, the server's date plus a day of slack so a time-zone difference never blocks a real meal.
+        if (entry.Date > (clientToday ?? clock.Today.AddDays(1))) throw new ValidationException("That meal is planned for a later day. Log it on the day you eat it.");
         var logged = entry.ToDiaryEntry(scale);
         diary.Add(logged);
         await uow.SaveChangesAsync(ct);
@@ -197,7 +200,7 @@ public sealed class PlanService(
     public async Task<IReadOnlyList<PlanEntryDto>> CopyAsync(DateOnly from, DateOnly to, MealSlot? meal, CancellationToken ct = default)
     {
         if (from == to && meal is null) throw new ValidationException("Choose a different day to copy to.");
-        var source = (await plan.GetRangeAsync(from, from, ct))
+        var source = (await PlanReconciliation.ReadRangeAsync(plan, diary, from, from, ct))
             .Where(e => e.Status == PlanStatus.Planned && (meal is null || e.Meal == meal)).ToList();
         if (source.Count == 0) throw new ValidationException("There's nothing planned to copy.");
         var copies = source.Select(e => new PlanEntry(to, e.Meal, e.Item)).ToList();
@@ -218,9 +221,9 @@ public sealed class PlanService(
     /// After straying: for each remaining day whose plan misses the (adjusted) calorie target by more
     /// than 5 %, propose one scale factor for that day's planned portions. Nothing changes until applied.
     /// </summary>
-    public async Task<IReadOnlyList<RebalanceProposalDto>> ProposeRebalanceAsync(DateOnly anyDayInWeek, CancellationToken ct = default)
+    public async Task<IReadOnlyList<RebalanceProposalDto>> ProposeRebalanceAsync(DateOnly anyDayInWeek, DateOnly? clientToday = null, CancellationToken ct = default)
     {
-        var week = await GetWeekAsync(anyDayInWeek, ct);
+        var week = await GetWeekAsync(anyDayInWeek, clientToday, ct);
         var proposals = new List<RebalanceProposalDto>();
         foreach (var day in week.Days.Where(d => !d.IsPast))
         {
@@ -240,14 +243,14 @@ public sealed class PlanService(
     public async Task<IReadOnlyList<PlanEntryDto>> ApplyRebalanceAsync(DateOnly date, double scale, CancellationToken ct = default)
     {
         if (scale <= 0) throw new ValidationException("Scale must be greater than zero.");
-        var entries = (await plan.GetRangeAsync(date, date, ct)).Where(e => e.Status == PlanStatus.Planned).ToList();
+        var entries = (await PlanReconciliation.ReadRangeAsync(plan, diary, date, date, ct)).Where(e => e.Status == PlanStatus.Planned).ToList();
         entries.ForEach(e => e.Rescale(scale));
         await uow.SaveChangesAsync(ct);
         return entries.Select(PlanEntryDto.From).ToList();
     }
 
     private async Task<PlanEntry> GetEntry(Guid id, CancellationToken ct) =>
-        await plan.GetAsync(id, ct) ?? throw new NotFoundException($"Plan entry {id} not found.");
+        await PlanReconciliation.ReadAsync(plan, diary, id, ct) ?? throw new NotFoundException($"Plan entry {id} not found.");
 
     private async Task<PlanEntryDto> AddAsync(PlanEntry entry, CancellationToken ct)
     {

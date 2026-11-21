@@ -98,8 +98,13 @@ function Response({ r }: { r: AssistantResponse }) {
       {r.foodMatches.length ? <ReviewCard response={r} /> : null}
       <OtherResults r={r} />
       <AppText variant="caption" tone="muted">
-        {r.usedLanguageModel ? 'Understood by Claude' : 'Understood offline'} · numbers from the USDA food database
+        {r.interpreter === 'Claude' || (!r.interpreter && r.usedLanguageModel) ? 'Understood by Claude'
+          : r.interpreter === 'RulesFallback' ? 'Claude unavailable, built-in rules used'
+          : 'Understood by built-in rules'} · numbers from the USDA food database
       </AppText>
+      {r.interpreterNote && r.interpreter === 'RulesFallback' ? (
+        <AppText variant="caption" tone="muted">{r.interpreterNote}</AppText>
+      ) : null}
     </View>
   );
 }

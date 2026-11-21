@@ -149,6 +149,12 @@ public sealed class DiaryRepository(NutriPlanDbContext db) : IDiaryRepository
     public async Task<IReadOnlyList<DiaryEntry>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default) =>
         await db.DiaryEntries.Where(e => e.Date >= from && e.Date <= to).OrderBy(e => e.Date).ThenBy(e => e.LoggedAt).ToListAsync(ct);
 
+    public async Task<IReadOnlySet<Guid>> GetLinkedPlanEntryIdsAsync(IReadOnlyCollection<Guid> planEntryIds, CancellationToken ct = default) =>
+        planEntryIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await db.DiaryEntries.AsNoTracking().Where(e => e.PlanEntryId != null && planEntryIds.Contains(e.PlanEntryId.Value))
+                .Select(e => e.PlanEntryId!.Value).ToListAsync(ct)).ToHashSet();
+
     public async Task<IReadOnlyList<FrequentItem>> GetFrequentItemsAsync(int days, int limit, CancellationToken ct = default)
     {
         var since = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-days));

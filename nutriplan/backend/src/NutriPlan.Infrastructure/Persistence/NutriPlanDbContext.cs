@@ -81,6 +81,8 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.Property(x => x.Meal).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Item).HasColumnType("jsonb").HasConversion(Json.Of<ItemSnapshot>(), Json.Comparer<ItemSnapshot>());
             e.HasIndex(x => x.Date);
+            // A planned meal is logged at most once, even if two requests race (double tap, retry).
+            e.HasIndex(x => x.PlanEntryId).IsUnique().HasFilter("plan_entry_id IS NOT NULL").HasDatabaseName("ux_diary_entries_plan_entry_id");
         });
 
         b.Entity<PlanEntry>(e =>

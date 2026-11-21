@@ -8,13 +8,20 @@ using NutriPlan.Domain.Units;
 namespace NutriPlan.Application.Foods;
 
 /// <summary>A food match for a piece of text, with the amount already converted to grams when possible.</summary>
+/// <param name="State">Raw, Cooked or Unspecified, from the matched food's name.</param>
+/// <param name="Requested">The state the person asked for ("grilled", "raw"), or null if they didn't say.</param>
+/// <param name="Note">Set when the state wasn't specified and a raw/cooked counterpart would change the calories noticeably.</param>
+/// <param name="OtherFoodId">That counterpart (raw if this is cooked, and the reverse), so it can be chosen in one tap.</param>
+public sealed record PreparationDto(string State, string? Requested, string? Note, Guid? OtherFoodId, string? OtherState);
+
 /// <param name="Confidence">0–1 from the ranking score; below 0.5 the match deserves a look.</param>
 public sealed record FoodMatchDto(
     FoodSummaryDto Food,
     double Score,
     QuantityDto Quantity,
     NutritionDto? Nutrition,
-    double Confidence);
+    double Confidence,
+    PreparationDto? Preparation = null);
 
 public sealed record FoodMatchGroupDto(
     string Text,
@@ -61,16 +68,16 @@ public sealed class FoodService(
 
     /// <param name="dedupe">Collapse entries with the same name (for display). Matching code passes false so it can
     /// try each entry's measures.</param>
-    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true, bool useHistory = true)
+    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true, bool useHistory = true, bool assumeCookedStaples = true)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
         // Everyday words USDA names differently ("toast" → toasted bread), same as Ask.
         if (Synonyms.TryGetValue(query.Trim(), out var synonym)) query = synonym;
         var rows = await foods.SearchAsync(query.Trim(), Math.Max(limit * 12, 300), ct);
-        if (!dedupe) return FoodRanker.Rank(query, rows, useHistory).Take(limit).ToList();
+        if (!dedupe) return FoodRanker.Rank(query, rows, useHistory, assumeCookedStaples).Take(limit).ToList();
         // Several entries can share a name (Foundation samples, SR Legacy, Survey). Keep one per name, preferring
         // one that has household measures (cup, slice…) so amounts like "1 cup" can be converted.
-        return FoodRanker.Rank(query, rows, useHistory)
+        return FoodRanker.Rank(query, rows, useHistory, assumeCookedStaples)
             .GroupBy(r => (r.Food.Name.ToLowerInvariant(), r.Food.Brand?.ToLowerInvariant()))
             .Select(g =>
             {
@@ -142,6 +149,48 @@ public sealed class FoodService(
         return MatchAsync(text, parsed.FoodText, parsed.Amount, parsed.Unit, cookedState: null, limit, ct);
     }
 
+    /// <summary>
+    /// Raw vs cooked for one match. Only flagged when no state was asked for and the other state is also a real option whose
+    /// calories per 100 g differ by a quarter or more — i.e. when guessing wrong would materially change the log.
+    /// No weights are ever converted between states.
+    /// </summary>
+    private static PreparationDto PreparationFor(Food food, PreparationState requested, bool cookedStaple, IReadOnlyList<RankedFood> candidates)
+    {
+        var state = FoodPreparation.StateOf(food.Name);
+        var req = requested == PreparationState.Unspecified ? null : requested.ToString();
+        if (state == PreparationState.Unspecified || !FoodPreparation.CookingMattersFor(food.Name)) return new(state.ToString(), req, null, null, null);
+
+        var other = state == PreparationState.Raw ? PreparationState.Cooked : PreparationState.Raw;
+        var mine = FoodPreparation.Identity(food.Name);
+        var counterpart = candidates
+            .Where(c => c.Food.Id != food.Id && FoodPreparation.StateOf(c.Food.Name) == other)
+            .Select(c => (c.Food, Sim: FoodPreparation.Similarity(mine, FoodPreparation.Identity(c.Food.Name))))
+            .Where(x => x.Sim >= 0.6)
+            .OrderByDescending(x => x.Sim)
+            .Select(x => x.Food)
+            .FirstOrDefault();
+        if (counterpart is null)
+        {
+            // Rice, pasta, beans with no state said: cooked was assumed, so say so even when no dry entry is in the results.
+            var assumed = requested == PreparationState.Unspecified && cookedStaple && state == PreparationState.Cooked
+                ? $"Assumed cooked ({food.NutrientsPer100g.Calories:0} kcal per 100 g). If you weighed it raw or dry, search for the dry version — it has far more calories per gram."
+                : null;
+            return new(state.ToString(), req, assumed, null, null);
+        }
+
+        var a = food.NutrientsPer100g.Calories;
+        var b = counterpart.NutrientsPer100g.Calories;
+        var material = Math.Max(a, b) > 0 && Math.Abs(a - b) / Math.Max(a, b) >= 0.25;
+        string? note = null;
+        if (requested == PreparationState.Unspecified && material)
+        {
+            note = state == PreparationState.Raw
+                ? $"Raw weight ({a:0} kcal per 100 g). If it was cooked, choose the cooked version ({b:0} kcal per 100 g)."
+                : $"Assumed cooked ({a:0} kcal per 100 g). If you weighed it raw or dry, choose that version ({b:0} kcal per 100 g).";
+        }
+        return new(state.ToString(), req, note, counterpart.Id, other.ToString());
+    }
+
     /// <summary>Same scale as recipe ingredient matching: 0 at score 20, 1 at score 80.</summary>
     public static double MatchConfidence(double score) => Math.Round(Math.Clamp((score - 20) / 60, 0, 1), 2);
 
@@ -153,6 +202,9 @@ public sealed class FoodService(
             query = $"{query} {cookedState}";
 
         var ranked = await SearchRankedAsync(query, limit, ct);
+        var queryTokens = FoodRanker.Tokens(query).ToList();
+        var requested = FoodPreparation.Requested(queryTokens);
+        var cookedStaple = FoodPreparation.IsCookedStaple(queryTokens);
         var matches = ranked.Select(r =>
         {
             // No amount: offer the food's standard USDA portion as an assumption to confirm. If there isn't one,
@@ -160,9 +212,11 @@ public sealed class FoodService(
             var q = QuantityResolver.Resolve(r.Food, amount ?? 1, amount is null ? null : unit);
             if (amount is null && !q.IsResolved)
                 q = new ResolvedQuantity(null, ResolutionMethod.Unresolved, "No amount given. Choose how much.");
+            // A count word that isn't a portion ("2 pieces") falls back to the food's standard item: shown as an assumption.
+            var assumedItem = amount is not null && q.Method == ResolutionMethod.DefaultPortion && !string.IsNullOrWhiteSpace(unit);
             var nutrition = q.Grams is null ? null : NutritionDto.From(r.Food.NutrientsFor(q.Grams.Value));
-            return new FoodMatchDto(FoodSummaryDto.From(r.Food), Math.Round(r.Score, 1), QuantityDto.From(q, amountGiven: amount is not null),
-                nutrition, MatchConfidence(r.Score));
+            return new FoodMatchDto(FoodSummaryDto.From(r.Food), Math.Round(r.Score, 1), QuantityDto.From(q, amountGiven: amount is not null && !assumedItem),
+                nutrition, MatchConfidence(r.Score), PreparationFor(r.Food, requested, cookedStaple, ranked));
         }).ToList();
 
         return new FoodMatchGroupDto(originalText, amount, unit, foodQuery, matches);
