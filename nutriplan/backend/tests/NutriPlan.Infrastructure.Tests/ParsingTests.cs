@@ -3,6 +3,7 @@ using NutriPlan.Application.Abstractions;
 using NutriPlan.Domain.Foods;
 using NutriPlan.Domain.Nutrients;
 using NutriPlan.Infrastructure.Ai;
+using NutriPlan.Infrastructure.Configuration;
 using NutriPlan.Infrastructure.External;
 using NutriPlan.Infrastructure.Usda;
 
@@ -141,5 +142,31 @@ public class ParsingTests
 
         const string raw = "Host=localhost;Database=nutriplan;Username=u;Password=p";
         Assert.Equal(raw, Persistence.ConnectionStrings.FromUrlOrRaw(raw));
+    }
+
+    [Fact]
+    public void Dotenv_files_parse_and_prefer_env_local()
+    {
+        var parsed = DotEnv.Parse("""
+            # Neon
+            DATABASE_URL="postgresql://u:p@ep-x.neon.tech/db?sslmode=require"
+            export Claude__ApiKey='sk-test'
+            App__TimeZone=America/Chicago # my zone
+            EMPTY=
+            not a pair
+            """);
+        Assert.Equal("postgresql://u:p@ep-x.neon.tech/db?sslmode=require", parsed["DATABASE_URL"]);
+        Assert.Equal("sk-test", parsed["Claude:ApiKey"]);
+        Assert.Equal("America/Chicago", parsed["App:TimeZone"]);
+        Assert.Equal("", parsed["EMPTY"]);
+        Assert.False(parsed.ContainsKey("not a pair"));
+
+        var root = Directory.CreateTempSubdirectory("dotenv").FullName;
+        var deep = Directory.CreateDirectory(Path.Combine(root, "a", "b")).FullName;
+        File.WriteAllText(Path.Combine(root, ".env"), "DATABASE_URL=from-env\nONLY_IN_ENV=1");
+        File.WriteAllText(Path.Combine(root, ".env.local"), "DATABASE_URL=from-local");
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddDotEnvFiles(deep).Build();
+        Assert.Equal("from-local", config["DATABASE_URL"]);
+        Assert.Equal("1", config["ONLY_IN_ENV"]);
     }
 }

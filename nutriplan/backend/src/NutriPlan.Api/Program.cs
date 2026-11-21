@@ -6,10 +6,15 @@ using NutriPlan.Api.Endpoints;
 using NutriPlan.Application;
 using NutriPlan.Application.Common;
 using NutriPlan.Infrastructure;
+using NutriPlan.Infrastructure.Configuration;
 using NutriPlan.Infrastructure.Persistence;
 using NutriPlan.Infrastructure.Usda;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Local development: pick up DATABASE_URL etc. from .env.local / .env (e.g. written by `neon deploy`).
+// Real environment variables, user-secrets and appsettings take precedence over these files.
+builder.Configuration.AddDotEnvFiles();
 
 // Hosts like Render/Railway/Fly pass the port to listen on in $PORT.
 if (Environment.GetEnvironmentVariable("PORT") is { Length: > 0 } port)

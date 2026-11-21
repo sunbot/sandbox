@@ -12,3 +12,4 @@ appsettings.Development.local.json
 .env.*
 !.env.example
 data/usda/
+.neon
