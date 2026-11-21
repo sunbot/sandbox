@@ -79,3 +79,18 @@ Your data stays in Neon.
 
 Neon keeps point-in-time history on its free tier. For your own copy:
 `pg_dump "<DATABASE_URL>" > nutriplan-backup.sql`.
+
+## GitHub Actions (automatic checks, optional deploy trigger)
+
+`.github/workflows/nutriplan-ci.yml` runs on every push and pull request that touches `nutriplan/`:
+
+1. **Backend:** build, then all tests against a real Postgres, then a check that the database model matches the migrations.
+2. **App:** type-check, lint, and the web export the Docker image uses.
+3. **Deploy (only on `main`, only if both pass):** calls a Render deploy hook, if you add the secret below.
+
+Render already redeploys on every push to the connected branch by default. To make it deploy only after the checks pass:
+in Render, turn off auto-deploy for the service (Settings → Build & Deploy); copy its **Deploy Hook** URL; in GitHub
+go to repo → Settings → Secrets and variables → Actions → **New repository secret** named `RENDER_DEPLOY_HOOK_URL`.
+The workflow does nothing for deploys until that secret exists, so it's safe to leave as is.
+
+Copilot: with a Copilot plan, ask it for a review on a pull request, or use the Copilot chat in GitHub to extend this workflow.

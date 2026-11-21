@@ -25,7 +25,8 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
     public DbSet<PantryItem> PantryItems => Set<PantryItem>();
     public DbSet<NutritionTargets> Targets => Set<NutritionTargets>();
 
-    public Task SaveChangesAsync(CancellationToken ct = default) => base.SaveChangesAsync(ct);
+    // Explicit, so it doesn't hide DbContext.SaveChangesAsync.
+    async Task IUnitOfWork.SaveChangesAsync(CancellationToken ct) => await SaveChangesAsync(ct);
 
     protected override void OnModelCreating(ModelBuilder b)
     {
