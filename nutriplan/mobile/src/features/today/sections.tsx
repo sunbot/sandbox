@@ -267,11 +267,17 @@ export function NutrientsCard({ progress, mode, anythingLogged, onSeeAll, onFill
         </View>
         <TextButton label="See all" onPress={onSeeAll} />
       </View>
-      {anythingLogged ? top.map((p) => <NutrientProgress key={p.nutrientId} name={p.name} amount={p.amount} target={p.target!} unit={p.unit} kind={p.kind} status={p.status} />) : null}
+      {anythingLogged && top.some((p) => (p.missingFrom ?? 0) > 0) ? <MinimumNote /> : null}
+      {anythingLogged ? top.map((p) => <NutrientProgress key={p.nutrientId} name={p.name} amount={p.amount} target={p.target!} unit={p.unit} kind={p.kind} status={p.status} missingFrom={p.missingFrom} />) : null}
       <SecondaryButton label="Fill gaps" icon={Sparkles} onPress={onFillGaps} fullWidth style={{ marginTop: t.space.xs }}
         accessibilityHint="Suggests foods and recipes that close today's nutrient gaps" />
     </AppCard>
   );
+}
+
+/** Unknown isn't zero: some entries (quick calories, sparse labels) don't report every nutrient. */
+function MinimumNote() {
+  return <AppText variant="caption" tone="muted">≥ marks a minimum: some of the day’s entries don’t report that nutrient.</AppText>;
 }
 
 const GROUPS: { title: string; statuses: NutrientStatus[] }[] = [
@@ -288,6 +294,7 @@ export function NutrientsSheet({ visible, onClose, progress, mode }: { visible: 
   return (
     <BottomSheet visible={visible} onClose={onClose} title={mode.inProgress ? 'Nutrients so far' : 'Nutrients this day'}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: t.space.lg, gap: t.space.xs }}>
+        {scored.some((p) => (p.missingFrom ?? 0) > 0) ? <MinimumNote /> : null}
         {mode.inProgress ? (
           <AppText variant="secondary" tone="secondary">
             Goals fill up as you eat. “Behind pace” means a nutrient is well behind the share of your calories you’ve already eaten.
@@ -299,7 +306,7 @@ export function NutrientsSheet({ visible, onClose, progress, mode }: { visible: 
           return (
             <View key={g.title} style={{ gap: t.space.xs, marginTop: t.space.sm }}>
               <AppText variant="label" tone="secondary" accessibilityRole="header">{g.title}</AppText>
-              {rows.map((p) => <NutrientProgress key={p.nutrientId} name={p.name} amount={p.amount} target={p.target!} unit={p.unit} kind={p.kind} status={p.status} />)}
+              {rows.map((p) => <NutrientProgress key={p.nutrientId} name={p.name} amount={p.amount} target={p.target!} unit={p.unit} kind={p.kind} status={p.status} missingFrom={p.missingFrom} />)}
             </View>
           );
         })}

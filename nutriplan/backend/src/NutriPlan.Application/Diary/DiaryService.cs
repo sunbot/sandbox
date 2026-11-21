@@ -15,7 +15,9 @@ public sealed record DiaryEntryDto(Guid Id, DateOnly Date, string Meal, ItemDto 
 
 public sealed record MealDto(string Meal, NutritionDto Totals, IReadOnlyList<DiaryEntryDto> Entries);
 
-public sealed record NutrientProgressDto(int NutrientId, string Name, string Unit, double Amount, double? Target, double? Percent, string Kind);
+/// <param name="MissingFrom">How many of the day's entries have no value for this nutrient (unknown, not zero), so the
+/// amount is a minimum. 0 means every entry reported it.</param>
+public sealed record NutrientProgressDto(int NutrientId, string Name, string Unit, double Amount, double? Target, double? Percent, string Kind, int MissingFrom = 0);
 
 public sealed record DayDto(
     DateOnly Date,
@@ -179,8 +181,10 @@ public sealed class DiaryService(
             var def = NutrientCatalog.Get(id);
             var target = targets.TargetFor(id);
             var amount = totals.Get(id);
+            // Unknown isn't zero: count entries that don't report this nutrient (quick calories, sparse labels).
+            var missing = entries.Count(e => !e.Item.Nutrients.Has(id));
             return new NutrientProgressDto(id, def.Name, def.Unit, Math.Round(amount, 2), target,
-                target is > 0 ? Math.Round(amount / target.Value * 100, 1) : null, def.TargetKind.ToString());
+                target is > 0 ? Math.Round(amount / target.Value * 100, 1) : null, def.TargetKind.ToString(), missing);
         }).ToList();
 
         return new DayDto(date, NutritionDto.From(totals), meals, progress);

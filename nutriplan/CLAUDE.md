@@ -100,7 +100,7 @@ Keep the USDA importer and Open Food Facts barcode fallback. The existing `IBarc
 
 - `ApiKeyMiddleware` allows all requests when `Api:Key` is unset (fails open). Requiring a key needs coordinating with the Render config and the app's Settings first.
 - The APK workflow doesn't wait for CI, overwrites the mutable `android-latest` release, and signs with the Expo template debug key. Moving to a protected key forces a one-time reinstall.
-- Daily nutrient totals treat a missing nutrient value as 0 (e.g. quick-calorie entries), without marking the total as incomplete.
+- Daily nutrient totals still add known values only; entries missing a nutrient are counted per nutrient (`missingFrom`) and the app marks those totals as minimums (≥). Weekly heatmap averages don't flag this yet.
 - The API key is stored in AsyncStorage (not secure storage).
 
 ## Definition of done

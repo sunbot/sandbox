@@ -95,4 +95,17 @@ public class WeekTests
         Assert.Equal(a.Item.Nutrition.Calories, moved.Item.Nutrition.Calories);
         Assert.Empty(_store.Diary);
     }
+
+    [Fact]
+    public async Task Nutrient_totals_say_when_some_entries_have_no_data()
+    {
+        var oats = _store.AddFood("Oats", 379, 13, 68, 6.5);
+        await Diary().LogFoodAsync(new LogFoodRequest(_store.Today, MealSlot.Breakfast, oats.Id, 80, null, null));
+        await Diary().LogQuickAsync(new LogQuickRequest(_store.Today, MealSlot.Snack, "Cake", 420, null, null, null));
+
+        var day = await Diary().GetDayAsync(_store.Today);
+        Assert.Equal(0, day.Progress.Single(p => p.NutrientId == Domain.Nutrients.NutrientIds.Energy).MissingFrom);
+        var fiber = day.Progress.Single(p => p.NutrientId == Domain.Nutrients.NutrientIds.Fiber);
+        Assert.Equal(2, fiber.MissingFrom); // neither the test oats nor the quick entry report fiber
+    }
 }

@@ -90,7 +90,7 @@ export function nutrientStatusInProgress(amount: number, target: number, kind: '
  * A micronutrient row. Status is shown with icon + word + number (never color alone).
  * Pass `status` to override the finished-day status (Today passes the in-progress one).
  */
-export function NutrientProgress({ name, amount, target, unit, kind, status: statusOverride }: { name: string; amount: number; target: number; unit: string; kind: 'Goal' | 'Limit'; status?: NutrientStatus }) {
+export function NutrientProgress({ name, amount, target, unit, kind, status: statusOverride, missingFrom = 0 }: { name: string; amount: number; target: number; unit: string; kind: 'Goal' | 'Limit'; status?: NutrientStatus; missingFrom?: number }) {
   const t = useTheme();
   const status = statusOverride ?? nutrientStatus(amount, target, kind);
   const meta: Record<NutrientStatus, { icon: LucideIcon; word: string; color: string; text: 'warning' | 'error' | 'success' | 'secondary' }> = {
@@ -108,14 +108,14 @@ export function NutrientProgress({ name, amount, target, unit, kind, status: sta
   const large = useLargeText();
   const value = (
     <AppText variant="secondary" numeric numberOfLines={1}>
-      <AppText variant="secondary" numeric style={{ fontWeight: '600' }}>{fmtAmount(amount)}</AppText>
+      <AppText variant="secondary" numeric style={{ fontWeight: '600' }}>{missingFrom > 0 ? '≥ ' : ''}{fmtAmount(amount)}</AppText>
       <AppText variant="secondary" tone="secondary" numeric> / {fmtAmount(target)} {unit}</AppText>
     </AppText>
   );
   if (large) {
     // Large text: name on its own line, then amount + status, then the bar.
     return (
-      <View accessible accessibilityLabel={`${name}: ${fmtAmount(amount)} of ${fmtAmount(target)} ${unit}, ${m.word}`} style={{ gap: 4, paddingVertical: t.space.xs }}>
+      <View accessible accessibilityLabel={`${name}: ${missingFrom > 0 ? 'at least ' : ''}${fmtAmount(amount)} of ${fmtAmount(target)} ${unit}, ${m.word}${missingFrom > 0 ? `. ${missingFrom} ${missingFrom === 1 ? 'entry has' : 'entries have'} no data for it` : ''}`} style={{ gap: 4, paddingVertical: t.space.xs }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}>
           <Icon size={18} color={m.color} strokeWidth={2.2} />
           <AppText variant="body" style={{ flex: 1 }}>{name}{kind === 'Limit' ? ' · limit' : ''}</AppText>
@@ -129,7 +129,7 @@ export function NutrientProgress({ name, amount, target, unit, kind, status: sta
     );
   }
   return (
-    <View accessible accessibilityLabel={`${name}: ${fmtAmount(amount)} of ${fmtAmount(target)} ${unit}, ${m.word}`} style={{ gap: 6, paddingVertical: t.space.xs }}>
+    <View accessible accessibilityLabel={`${name}: ${missingFrom > 0 ? 'at least ' : ''}${fmtAmount(amount)} of ${fmtAmount(target)} ${unit}, ${m.word}${missingFrom > 0 ? `. ${missingFrom} ${missingFrom === 1 ? 'entry has' : 'entries have'} no data for it` : ''}`} style={{ gap: 6, paddingVertical: t.space.xs }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}>
         <Icon size={18} color={m.color} strokeWidth={2.2} />
         <AppText variant="body" style={{ flex: 1 }} numberOfLines={2}>{name}{kind === 'Limit' ? <AppText variant="secondary" tone="secondary"> · limit</AppText> : null}</AppText>

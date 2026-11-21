@@ -37,7 +37,8 @@ export type Item = {
 
 export type DiaryEntry = { id: string; date: string; meal: Meal; item: Item; planEntryId?: string | null; note?: string | null };
 
-export type NutrientProgress = { nutrientId: number; name: string; unit: string; amount: number; target?: number | null; percent?: number | null; kind: 'Goal' | 'Limit' };
+/** missingFrom: entries that don't report this nutrient (unknown, not zero) — the amount is then a minimum. */
+export type NutrientProgress = { nutrientId: number; name: string; unit: string; amount: number; target?: number | null; percent?: number | null; kind: 'Goal' | 'Limit'; missingFrom?: number };
 
 export type Day = {
   date: string;
