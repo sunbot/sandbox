@@ -143,7 +143,20 @@ public sealed class RecipeService(
     public async Task<RecipeDetailDto> RematchAsync(Guid id, CancellationToken ct = default)
     {
         var recipe = await Get(id, ct);
-        await MatchIngredientsAsync(recipe, onlyUnmatched: true, ct);
+        recipe.ReparseIngredients(); // latest parsing rules; your confirmed/excluded lines are kept
+        await MatchIngredientsAsync(recipe, onlyUnmatched: false, ct);
+        await uow.SaveChangesAsync(ct);
+        return await ToDetailAsync(recipe, ct);
+    }
+
+    /// <summary>How many servings the whole recipe makes. Per-serving nutrition is recalculated; ingredients don't change.</summary>
+    public async Task<RecipeDetailDto> SetServingsAsync(Guid id, double servings, CancellationToken ct = default)
+    {
+        if (servings is <= 0 or > 500) throw new ValidationException("Servings must be between 0 and 500.");
+        var recipe = await Get(id, ct);
+        recipe.SetServings(servings);
+        recipe.ServingDescription = $"{servings:0.##} (set by you)";
+        await RecalculateAsync(recipe, ct);
         await uow.SaveChangesAsync(ct);
         return await ToDetailAsync(recipe, ct);
     }
@@ -200,11 +213,12 @@ public sealed class RecipeService(
                 else
                 {
                     recipe.Rename(item.Name);
-                    if (item.Servings is > 0) recipe.SetServings(item.Servings.Value);
+                    if (item.Servings is > 0 && recipe.ServingDescription?.EndsWith("(set by you)") != true) recipe.SetServings(item.Servings.Value); // your own servings win
                     updated++;
                 }
 
-                recipe.ServingDescription = item.ServingsText;
+                if (item.ServingsText is not null || recipe.ServingDescription?.EndsWith("(set by you)") != true)
+                    recipe.ServingDescription = item.ServingsText;
                 recipe.Description = item.Description;
                 recipe.Directions = item.Directions;
                 recipe.Notes = item.Notes;
@@ -218,10 +232,11 @@ public sealed class RecipeService(
                 recipe.Rating = item.Rating;
                 recipe.SourceNutritionText = item.SourceNutritionText;
                 recipe.SetCategories(item.Categories);
-                if (!recipe.Ingredients.Select(i => i.RawText).SequenceEqual(item.IngredientLines.Select(l => l.Trim()).Where(l => l.Length > 0)))
-                    recipe.SetIngredientLines(item.IngredientLines);
+                // Re-importing refreshes matches with the current rules (fixes from app updates apply to recipes you
+                // already have); lines you confirmed or excluded yourself are kept.
+                recipe.ReparseIngredients(item.IngredientLines);
 
-                await MatchIngredientsAsync(recipe, onlyUnmatched: true, ct, searchCache);
+                await MatchIngredientsAsync(recipe, onlyUnmatched: false, ct, searchCache);
                 saved.Add(recipe);
             }
             catch (Exception ex) when (ex is ArgumentException or ValidationException)
@@ -257,7 +272,7 @@ public sealed class RecipeService(
             var query = IngredientQuery.Clean(ing.FoodText);
             if (!cache.TryGetValue(query, out var top))
             {
-                top = (await foodService.SearchRankedAsync(query, 12, ct, dedupe: false)).ToList();
+                top = (await foodService.SearchRankedAsync(query, 12, ct, dedupe: false, useHistory: false)).ToList();
                 cache[query] = top;
             }
 
@@ -275,7 +290,10 @@ public sealed class RecipeService(
             var q = QuantityResolver.Resolve(best.Food, ing.Amount ?? 1, ing.Unit);
             if (!q.IsResolved)
             {
-                foreach (var alternative in top.Skip(1).Where(a => a.Score >= best.Score - 20))
+                // Only the same kind of food ("Oats" for "Oats, rolled"), never a different one that happens to have the
+                // measure (that's how "olive oil" once became mayonnaise).
+                foreach (var alternative in top.Skip(1).Where(a => a.Score >= best.Score - 20
+                             && (SameHead(a.Food, best.Food) || NutritionallyEquivalent(a.Food, best.Food))))
                 {
                     var altQ = QuantityResolver.Resolve(alternative.Food, ing.Amount ?? 1, ing.Unit);
                     if (!altQ.IsResolved) continue;
@@ -300,10 +318,20 @@ public sealed class RecipeService(
             ing.FoodName = best.Food.DisplayName;
             ing.Grams = q.Grams is null ? null : Math.Round(q.Grams.Value, 2);
             ing.Status = IngredientMatchStatus.AutoMatched;
-            ing.MatchConfidence = Confidence(best.Score);
+            // A known recipe term ("80/20 ground beef" → USDA's name for it) that found its food is a sure match.
+            ing.MatchConfidence = IngredientQuery.Alias(ing.FoodText) is not null && best.Score >= MinAutoMatchScore + 10
+                ? Math.Max(0.8, Confidence(best.Score))
+                : Confidence(best.Score);
             ing.ResolutionNote = q.Explanation;
         }
         await RecalculateAsync(recipe, ct);
+    }
+
+    /// <summary>Same food named the same way: "Oats, rolled" and "Oats" (first word of the USDA name).</summary>
+    private static bool SameHead(Food a, Food b)
+    {
+        static string Head(Food f) => FoodRanker.Stem(f.Name.Split(',', ' ')[0].Trim().ToLowerInvariant());
+        return Head(a) == Head(b);
     }
 
     /// <summary>Within ~8 % on calories and close on each macro: effectively the same food.</summary>

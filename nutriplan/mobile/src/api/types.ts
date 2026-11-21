@@ -121,6 +121,7 @@ export type Ingredient = {
 
 export type RecipeDetail = {
   summary: RecipeSummary;
+  servingDescription?: string | null;
   description?: string | null;
   directions?: string | null;
   notes?: string | null;

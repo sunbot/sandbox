@@ -174,6 +174,8 @@ export function useRecipeMutations() {
       onSuccess: refresh,
     }),
     remove: useMutation({ mutationFn: (id: string) => del(`/recipes/${id}`), onSuccess: refresh }),
+    setServings: useMutation({ mutationFn: ({ id, servings }: { id: string; servings: number }) => put<T.RecipeDetail>(`/recipes/${id}/servings`, { servings }), onSuccess: refresh }),
+    rematch: useMutation({ mutationFn: (id: string) => post<T.RecipeDetail>(`/recipes/${id}/rematch`), onSuccess: refresh }),
   };
 }
 

@@ -134,6 +134,22 @@ public sealed class Recipe
         Touch();
     }
 
+    /// <summary>
+    /// Re-reads ingredient lines with the current parser (optionally new lines from a re-import). Lines you confirmed
+    /// or excluded yourself are kept as they are when their text hasn't changed; everything else starts fresh.
+    /// </summary>
+    public void ReparseIngredients(IEnumerable<string>? lines = null)
+    {
+        var keep = _ingredients
+            .Where(i => i.Status is IngredientMatchStatus.Confirmed || (i.Status is IngredientMatchStatus.Ignored && i.ResolutionNote == "Excluded by you"))
+            .ToDictionary(i => i.Position);
+        var source = (lines ?? _ingredients.OrderBy(i => i.Position).Select(i => i.RawText)).Select(l => l.Trim()).Where(l => l.Length > 0);
+        _ingredients = source
+            .Select((l, i) => keep.TryGetValue(i, out var old) && old.RawText == l ? old : RecipeIngredient.FromText(l, i))
+            .ToList();
+        Touch();
+    }
+
     public void ReplaceIngredients(IEnumerable<RecipeIngredient> ingredients)
     {
         _ingredients = ingredients.OrderBy(i => i.Position).ToList();

@@ -19,6 +19,16 @@ public class QuantityTextParserTests
     [InlineData("8 fl oz orange juice", 8, "fl oz", "orange juice")]
     [InlineData("cup of coffee", 1, "cup", "coffee")]
     [InlineData("1-1/2 cups rice", 1.5, "cups", "rice")]
+    // Copied-recipe formatting: list markers, numbered steps, markdown, amounts only in parentheses.
+    [InlineData("- 1 lb 80/20 ground beef", 1, "lb", "80/20 ground beef")]
+    [InlineData("• ½ cup fresh lime juice", 0.5, "cup", "fresh lime juice")]
+    [InlineData("▢ 1/2 cup olive oil", 0.5, "cup", "olive oil")]
+    [InlineData("☐ 2 large eggs", 2, "large", "eggs")]
+    [InlineData("1. 1/4 cup chopped cilantro", 0.25, "cup", "chopped cilantro")]
+    [InlineData("- 2 tsp garlic powder *(or 4 fresh cloves, minced)*", 2, "tsp", "garlic powder")]
+    [InlineData("**1 cup** whole milk", 1, "cup", "whole milk")]
+    [InlineData("- Olive oil (about 2 tbsp for searing)", 2, "tbsp", "Olive oil")]
+    [InlineData("1.5 cups flour", 1.5, "cups", "flour")]
     public void Parses_amount_unit_and_food(string input, double amount, string? unit, string food)
     {
         var result = QuantityTextParser.Parse(input);

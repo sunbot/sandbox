@@ -23,6 +23,7 @@ public sealed record RelogRequest(DateOnly Date, MealSlot? Meal);
 public sealed record CopyRequest(DateOnly From, DateOnly To, MealSlot? Meal, MealSlot? ToMeal);
 public sealed record UpdateDiaryRequest(double? Scale, DateOnly? Date, MealSlot? Meal, string? Note);
 public sealed record FavoriteRequest(bool Favorite);
+public sealed record ServingsRequest(double Servings);
 public sealed record UrlImportRequest(string Url);
 public sealed record EatenRequest(double Scale = 1);
 
@@ -104,6 +105,7 @@ public static class RecipeEndpoints
         g.MapPut("/{id:guid}/ingredients/{position:int}", (Guid id, int position, UpdateIngredientRequest r, RecipeService s, CancellationToken ct) =>
             s.UpdateIngredientAsync(id, position, r, ct));
         g.MapPost("/{id:guid}/rematch", (Guid id, RecipeService s, CancellationToken ct) => s.RematchAsync(id, ct));
+        g.MapPut("/{id:guid}/servings", (Guid id, ServingsRequest r, RecipeService s, CancellationToken ct) => s.SetServingsAsync(id, r.Servings, ct));
         g.MapPost("/import/paprika", async (IFormFile file, RecipeService s, CancellationToken ct) =>
         {
             await using var stream = file.OpenReadStream();

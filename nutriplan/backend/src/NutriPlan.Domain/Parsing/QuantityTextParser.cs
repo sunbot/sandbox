@@ -124,6 +124,17 @@ public static partial class QuantityTextParser
             }
         }
 
+        // "Olive oil (about 2 tbsp for searing)": no amount up front, but the note has one.
+        if (amount is null && parenContent is not null)
+        {
+            var inner = Parse(Approximately().Replace(parenContent, ""));
+            if (inner.Amount is not null && inner.Unit is not null && Units.Units.Find(inner.Unit) is not null)
+            {
+                amount = inner.Amount;
+                unit = inner.Unit;
+            }
+        }
+
         // Skip filler words: "of", "a", "the".
         while (index < tokens.Count && tokens[index] is "of" or "the" or "a" or "an")
             index++;
@@ -234,7 +245,11 @@ public static partial class QuantityTextParser
     private static string Normalize(string raw)
     {
         var s = raw.Replace('⁄', '/').Replace(' ', ' ').Replace('–', '-').Replace('—', '-').Trim();
-        s = s.TrimStart('-', '*', '•', '·').Trim();
+        // List markers from copied recipes: "- ", "• ", "▢ ", "☐ ", "✓ ", and numbered steps "1. 1/4 cup" / "2) 3 eggs".
+        s = ListMarker().Replace(s, "");
+        s = NumberedMarker().Replace(s, "");
+        // Markdown emphasis: "2 tsp garlic powder *(or 4 cloves)*", "**1 cup** milk".
+        s = s.Replace("*", "").Replace("__", "");
         // "1-1/2" → "1 1/2" ; space between number and unicode fraction "1 ½" handled by tokenizer.
         s = MixedHyphen().Replace(s, "$1 $2");
         // "2 - 3" → "2-3"
@@ -243,6 +258,10 @@ public static partial class QuantityTextParser
     }
 
     [GeneratedRegex(@"\(([^)]*)\)")] private static partial Regex Parenthetical();
+    [GeneratedRegex(@"^[\s\-*•·▪◦●○▢□☐✓✔➤>]+")] private static partial Regex ListMarker();
+    /// <summary>"1. " or "2) " only when another amount follows, so "2) eggs"-style lines aren't stripped of their count by accident.</summary>
+    [GeneratedRegex(@"^\d{1,2}[.)]\s+(?=[\d½¼¾⅓⅔⅛⅜⅝⅞])")] private static partial Regex NumberedMarker();
+    [GeneratedRegex(@"^(?:about|approx\.?|approximately|roughly|around|~)\s*", RegexOptions.IgnoreCase)] private static partial Regex Approximately();
     [GeneratedRegex(@"\s{2,}")] private static partial Regex MultiSpace();
     [GeneratedRegex(@"^(\d+(?:[.,]\d+)?)([a-zA-Z]+\.?)$")] private static partial Regex GluedAmountUnit();
     [GeneratedRegex(@"^(\d+)/(\d+)$")] private static partial Regex FractionToken();

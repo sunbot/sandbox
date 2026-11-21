@@ -59,14 +59,14 @@ public sealed class FoodService(
 
     /// <param name="dedupe">Collapse entries with the same name (for display). Matching code passes false so it can
     /// try each entry's measures.</param>
-    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true)
+    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true, bool useHistory = true)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
         var rows = await foods.SearchAsync(query.Trim(), Math.Max(limit * 12, 300), ct);
-        if (!dedupe) return FoodRanker.Rank(query, rows).Take(limit).ToList();
+        if (!dedupe) return FoodRanker.Rank(query, rows, useHistory).Take(limit).ToList();
         // Several entries can share a name (Foundation samples, SR Legacy, Survey). Keep one per name, preferring
         // one that has household measures (cup, slice…) so amounts like "1 cup" can be converted.
-        return FoodRanker.Rank(query, rows)
+        return FoodRanker.Rank(query, rows, useHistory)
             .GroupBy(r => (r.Food.Name.ToLowerInvariant(), r.Food.Brand?.ToLowerInvariant()))
             .Select(g =>
             {

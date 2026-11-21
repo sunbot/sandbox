@@ -183,6 +183,32 @@ public class ServiceTests
         Assert.Equal(b.Food.Name, FoodRanker.Rank("greek yogurt", [a, b])[0].Food.Name);
     }
 
+    [Fact]
+    public void Ranker_prefers_the_food_itself_over_a_food_that_only_contains_it()
+    {
+        var milk = new[] { Row("Yogurt, whole milk, plain", FoodSource.UsdaSrLegacy), Row("Milk, whole", FoodSource.UsdaSurvey) };
+        Assert.Equal("Milk, whole", FoodRanker.Rank("whole milk", milk)[0].Food.Name);
+
+        var oil = new[] { Row("Mayonnaise, reduced fat, with olive oil", FoodSource.UsdaSrLegacy), Row("Oil, olive, salad or cooking", FoodSource.UsdaSrLegacy) };
+        Assert.Equal("Oil, olive, salad or cooking", FoodRanker.Rank("olive oil", oil)[0].Food.Name);
+    }
+
+    [Fact]
+    public void Ranker_prefers_the_plain_food_over_a_combination_dish_unless_asked()
+    {
+        var rice = new[] { Row("Beans and brown rice", FoodSource.UsdaSurvey), Row("Rice, brown, cooked, NS as to fat", FoodSource.UsdaSurvey) };
+        Assert.Equal("Rice, brown, cooked, NS as to fat", FoodRanker.Rank("brown rice", rice)[0].Food.Name);
+        Assert.Equal("Beans and brown rice", FoodRanker.Rank("beans and brown rice", rice)[0].Food.Name);
+    }
+
+    [Fact]
+    public void Recipe_matching_ignores_logging_history()
+    {
+        var yogurt = new FoodSearchRow(MakeFood("Yogurt, whole milk, plain", FoodSource.UsdaSrLegacy), 0.4, 60);
+        var milk = new FoodSearchRow(MakeFood("Milk, whole", FoodSource.UsdaSurvey), 0.4, 0);
+        Assert.Equal("Milk, whole", FoodRanker.Rank("whole milk", [yogurt, milk], useHistory: false)[0].Food.Name);
+    }
+
     private static FoodSearchRow Row(string name, FoodSource source) => new(MakeFood(name, source), 0.3, 0);
 
     private static Food MakeFood(string name, FoodSource source) =>

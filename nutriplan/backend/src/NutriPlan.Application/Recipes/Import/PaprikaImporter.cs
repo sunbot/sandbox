@@ -87,7 +87,7 @@ public static class PaprikaImporter
             Description = Clean(r.Description),
             Notes = Clean(r.Notes),
             ServingsText = Clean(r.Servings),
-            Servings = ServingsParser.Parse(r.Servings),
+            Servings = ServingsParser.Parse(r.Servings) ?? ServingsParser.FindIn(r.NutritionalInfo, r.Notes, r.Description, r.Directions),
             PrepTime = Clean(r.PrepTime),
             CookTime = Clean(r.CookTime),
             TotalTime = Clean(r.TotalTime),

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using NutriPlan.Application.Recipes;
 using NutriPlan.Application.Recipes.Import;
 
 namespace NutriPlan.Application.Tests;
@@ -29,6 +30,37 @@ public class ImportTests
         ["photo_data"] = Convert.ToBase64String([0xFF, 0xD8, 0xFF]),
         ["some_future_field"] = "ignored",
     });
+
+    [Theory]
+    [InlineData("80/20 ground beef", "beef ground 80 lean meat 20 fat raw")]
+    [InlineData("ground beef (85/15)", "beef ground 85 lean meat 15 fat raw")]
+    [InlineData("93% lean ground beef", "beef ground 93 lean meat 7 fat raw")]
+    [InlineData("ground beef", "beef ground 80 lean meat 20 fat raw")]
+    [InlineData("Italian bread crumbs", "bread crumbs dry grated seasoned")]
+    [InlineData("panko", "bread crumbs dry grated plain")]
+    [InlineData("Rao's Homemade marinara sauce", "spaghetti sauce")]
+    [InlineData("bone-in pork shoulder", "pork fresh shoulder whole separable lean and fat raw")]
+    [InlineData("ground cumin", "spices cumin seed")]
+    [InlineData("kosher salt", "salt table")]
+    [InlineData("extra-virgin olive oil", "oil olive salad or cooking")]
+    [InlineData("spaghetti", "pasta dry enriched")]
+    [InlineData("cooked penne", "pasta cooked enriched without added salt")]
+    public void Recipe_words_map_to_usda_names(string text, string expected) => Assert.Equal(expected, IngredientQuery.Clean(text));
+
+    [Theory]
+    [InlineData("spaghetti squash")]
+    [InlineData("whole milk")]
+    [InlineData("chicken breast")]
+    public void Foods_without_an_alias_are_left_alone(string text) => Assert.Null(IngredientQuery.Alias(text));
+
+    [Theory]
+    [InlineData(6.0, null, "Nutrition Facts\nServings: 6 to 10\nCalories 1124")]
+    [InlineData(4.0, "Serves 4 as a main.", null)]
+    [InlineData(8.0, null, "Yield: 8")]
+    [InlineData(null, "Serving size: 1 cup", null)]
+    [InlineData(null, null, null)]
+    public void Finds_servings_in_other_recipe_text(double? expected, string? notes, string? nutrition) =>
+        Assert.Equal(expected, ServingsParser.FindIn(nutrition, notes));
 
     [Fact]
     public void One_corrupt_entry_does_not_block_the_rest_of_the_export()

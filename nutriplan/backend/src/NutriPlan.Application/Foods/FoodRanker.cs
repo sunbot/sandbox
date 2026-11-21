@@ -42,18 +42,21 @@ public static partial class FoodRanker
         "powder", "dehydrated", "frozen", "heated", "mix", "substitute", "flavored", "sweetened", "bar",
     ];
 
-    public static IReadOnlyList<RankedFood> Rank(string query, IEnumerable<FoodSearchRow> rows)
+    /// <param name="useHistory">Boost foods you log often. On for search (your usual yogurt first); off for recipe
+    /// matching, where "whole milk" must match milk even if you log yogurt every day.</param>
+    public static IReadOnlyList<RankedFood> Rank(string query, IEnumerable<FoodSearchRow> rows, bool useHistory = true)
     {
         var queryTokens = Tokens(query).ToList();
         var wantsCooked = queryTokens.Any(CookingWords.Contains);
+        var wantsCombination = CombinationDish().IsMatch($" {query.ToLowerInvariant()} "); // "mac and cheese", "rice with beans"
         return rows
-            .Select(r => new RankedFood(r.Food, Score(queryTokens, wantsCooked, r)))
+            .Select(r => new RankedFood(r.Food, Score(queryTokens, wantsCooked, r, useHistory, wantsCombination)))
             .OrderByDescending(r => r.Score)
             .ThenBy(r => r.Food.Name.Length)
             .ToList();
     }
 
-    private static double Score(List<string> queryTokens, bool wantsCooked, FoodSearchRow row)
+    private static double Score(List<string> queryTokens, bool wantsCooked, FoodSearchRow row, bool useHistory, bool wantsCombination)
     {
         var food = row.Food;
         var segments = food.Name.ToLowerInvariant().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -81,6 +84,16 @@ public static partial class FoodRanker
             // "Almond butter", "Oat milk", "Salmon nuggets": the query word only modifies a different food.
             var lastMatch = headTokens.FindLastIndex(querySet.Contains);
             if (lastMatch >= 0 && headTokens.Skip(lastMatch + 1).Any(t => !querySet.Contains(t)))
+                score -= 8;
+
+            // "Yogurt, whole milk" for "whole milk", "Mayonnaise, with olive oil" for "olive oil": the query words are
+            // only details of a different food. (Foods named by their category, like "Cheese, parmesan", are hit
+            // equally, so they still rank among themselves.)
+            if (queryTokens.Count >= 2 && !headTokens.Any(querySet.Contains))
+                score -= 6;
+
+            // "Beans and brown rice", "Chicken with rice" for "brown rice": a combination dish you didn't ask for.
+            if (!wantsCombination && CombinationDish().IsMatch(head))
                 score -= 8;
         }
 
@@ -117,7 +130,7 @@ public static partial class FoodRanker
         };
 
         // Personal history.
-        score += Math.Min(20, Math.Log2(1 + row.TimesLogged) * 5);
+        if (useHistory) score += Math.Min(20, Math.Log2(1 + row.TimesLogged) * 5);
 
         // Database similarity as a tie-breaker.
         score += row.TextSimilarity * 5;
@@ -141,4 +154,7 @@ public static partial class FoodRanker
 
     [GeneratedRegex(@"[^a-z0-9%\-]+")]
     private static partial Regex TokenSplit();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\s(and|with)\s")]
+    private static partial System.Text.RegularExpressions.Regex CombinationDish();
 }
