@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   page: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   arrow: { fontSize: 32, color: colors.primary, paddingHorizontal: spacing.sm },
-  banner: { backgroundColor: '#fff7e6', borderColor: colors.fair },
+  banner: { backgroundColor: colors.attention, borderColor: colors.fair },
   dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: spacing.sm },
   dayActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   footer: { gap: spacing.sm, marginTop: spacing.sm },

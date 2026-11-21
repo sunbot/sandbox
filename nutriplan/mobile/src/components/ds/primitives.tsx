@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
   ActivityIndicator,
   Pressable,
@@ -18,7 +19,7 @@ import { tabular, type Theme, type TypeVariant } from '@/theme/tokens';
 
 /* ───────────────────────── Typography ───────────────────────── */
 
-type Tone = 'default' | 'secondary' | 'muted' | 'primary' | 'success' | 'warning' | 'error' | 'onPrimary';
+type Tone = 'default' | 'secondary' | 'muted' | 'primary' | 'success' | 'warning' | 'error' | 'onPrimary' | 'accent';
 
 export type AppTextProps = TextProps & { variant?: TypeVariant; tone?: Tone; numeric?: boolean; align?: 'left' | 'center' | 'right' };
 
@@ -34,21 +35,43 @@ export function AppText({ variant = 'body', tone = 'default', numeric, align, st
     warning: t.colors.warningText,
     error: t.colors.errorText,
     onPrimary: t.colors.textOnPrimary,
+    accent: t.colors.accentText,
   }[tone];
   return <Text {...rest} style={[t.type[variant], { color }, numeric && tabular, align && { textAlign: align }, style]} />;
 }
 
 /* ───────────────────────── Card ───────────────────────── */
 
-export function AppCard({ children, style, padded = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; padded?: boolean }) {
+/**
+ * A layered surface. `sheen` adds a restrained top-to-bottom gradient for the one card that leads a screen
+ * (the day's summary), so it reads as the most important layer without any extra color.
+ */
+export function AppCard({ children, style, padded = true, sheen }: { children: ReactNode; style?: StyleProp<ViewStyle>; padded?: boolean; sheen?: boolean }) {
+  const t = useTheme();
   const s = useStyles(cardStyles);
-  return <View style={[s.card, padded && s.padded, style]}>{children}</View>;
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <View style={[s.card, padded && s.padded, style]}>
+      {sheen ? (
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <LinearGradient id={`sheen${id}`} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={t.colors.cardSheenTop} />
+              <Stop offset="1" stopColor={t.colors.surface} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill={`url(#sheen${id})`} />
+        </Svg>
+      ) : null}
+      {children}
+    </View>
+  );
 }
 
 const cardStyles = (t: Theme) =>
   StyleSheet.create({
-    card: { backgroundColor: t.colors.surface, borderRadius: t.radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.border },
-    padded: { padding: t.space.lg },
+    card: { backgroundColor: t.colors.surface, borderRadius: t.radii.card, borderWidth: 1, borderColor: t.colors.cardBorder, overflow: 'hidden' },
+    padded: { padding: t.space.xl },
   });
 
 /* ───────────────────────── Section header ───────────────────────── */

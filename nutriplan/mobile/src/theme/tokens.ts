@@ -48,6 +48,18 @@ export type Palette = {
   snackbar: string;
   snackbarText: string;
   snackbarAction: string;
+  /** Warm accent (apricot) for small moments of warmth: streaks, highlights, "kcal over" without alarm. */
+  accent: string;
+  accentText: string;
+  accentLight: string;
+  /** Hairline on cards so layered surfaces read as layers, not boxes. */
+  cardBorder: string;
+  /** Restrained gradients: card sheen (top → bottom) and the calorie ring stroke (start → end). */
+  cardSheenTop: string;
+  ringStart: string;
+  ringEnd: string;
+  /** Soft background glow behind the top of a screen. */
+  glow: string;
 };
 
 const light: Palette = {
@@ -82,56 +94,77 @@ const light: Palette = {
   snackbar: '#202925',
   snackbarText: '#FFFFFF',
   snackbarAction: '#8FD4BF',
+  accent: '#D98B5F',
+  accentText: '#9A5631',
+  accentLight: '#FBEDE4',
+  cardBorder: '#E4E9E5',
+  cardSheenTop: '#FFFFFF',
+  ringStart: '#3D9A84',
+  ringEnd: '#287968',
+  glow: 'rgba(40, 121, 104, 0.08)',
 };
 
-/** Same roles stepped for a dark surface (equivalent contrast). Not enabled until every screen supports it. */
+/**
+ * "Hearth" — the app's dark look: warm charcoal layers, soft sage-teal, small apricot accents.
+ * Text pairs are WCAG-checked (primary text 14:1, secondary 7:1, muted ≥ 4.5:1 on every surface).
+ * Macro colors are validated as a categorical set on the card surface (CVD + normal-vision separation),
+ * and are always labelled. Status hues are calm: sage for met, amber for "behind", coral only for over a limit.
+ */
 const dark: Palette = {
-  background: '#111614',
-  surface: '#1A201D',
-  surfaceRaised: '#212825',
-  surfaceMuted: '#232B27',
-  border: '#2E3833',
-  borderStrong: '#425049',
-  text: '#E9EEEB',
-  textSecondary: '#A9B5AF',
-  textMuted: '#8B9790',
-  textOnPrimary: '#0E1412',
-  primary: '#5DBBA4',
-  primaryPressed: '#4AA48E',
-  primaryLight: '#1E3631',
-  success: '#4FB98B',
-  successText: '#6FCDA2',
-  successLight: '#1B3229',
-  warning: '#E0A35A',
-  warningText: '#EDB878',
-  warningLight: '#3A2C1A',
-  error: '#E07B72',
-  errorText: '#EE968E',
-  errorLight: '#3D2220',
-  protein: '#5A9BEA',
-  carbs: '#F0B429',
-  fat: '#E27AA0',
-  track: '#2A332F',
-  scrim: 'rgba(0, 0, 0, 0.6)',
-  focus: '#5DBBA4',
-  snackbar: '#E9EEEB',
-  snackbarText: '#111614',
-  snackbarAction: '#1F6153',
+  background: '#121514',
+  surface: '#1A1E1C',
+  surfaceRaised: '#222725',
+  surfaceMuted: '#262B29',
+  border: '#2B312E',
+  borderStrong: '#3B4340',
+  text: '#EEEAE3',
+  textSecondary: '#ADA79D',
+  textMuted: '#968F85',
+  textOnPrimary: '#10201B',
+  primary: '#86BFAE',
+  primaryPressed: '#74AE9C',
+  primaryLight: '#1F332D',
+  success: '#8CC59E',
+  successText: '#93CBA5',
+  successLight: '#1E3126',
+  warning: '#D9A35E',
+  warningText: '#E2B47A',
+  warningLight: '#352A1C',
+  error: '#E08A7A',
+  errorText: '#EE9C8C',
+  errorLight: '#3A2522',
+  protein: '#5A8FD4',
+  carbs: '#BA8733',
+  fat: '#C0628F',
+  track: '#2A302D',
+  scrim: 'rgba(5, 7, 6, 0.62)',
+  focus: '#86BFAE',
+  snackbar: '#2C322F',
+  snackbarText: '#EEEAE3',
+  snackbarAction: '#9FD0C0',
+  accent: '#E3A178',
+  accentText: '#E8AD88',
+  accentLight: '#3A2A20',
+  cardBorder: 'rgba(255, 255, 255, 0.05)',
+  cardSheenTop: '#1E2321',
+  ringStart: '#A3D2BF',
+  ringEnd: '#5FA591',
+  glow: 'rgba(134, 191, 174, 0.10)',
 };
 
 export const palettes: Record<ColorScheme, Palette> = { light, dark };
 
 /**
- * The whole app stays light until every screen is migrated to `useTheme()` (spec decision 3).
- * Set to `null` to follow the device setting, and change app.json `userInterfaceStyle` to "automatic".
+ * NutriPlan is dark by design ("Hearth"). Screens not yet on the new components get the same colors through
+ * `src/lib/theme.ts`. Set to `null` to follow the device setting (and app.json `userInterfaceStyle` "automatic").
  */
-export const FORCED_COLOR_SCHEME: ColorScheme | null = 'light';
+export const FORCED_COLOR_SCHEME: ColorScheme | null = 'dark';
 
 /** 8-pt spacing with 4-pt half steps. */
 export const space = { xxs: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32, huge: 40 } as const;
 export const screenPadding = 20;
 
-export const radii = { sm: 8, button: 12, card: 16, sheet: 24, pill: 999 } as const;
+export const radii = { sm: 8, button: 14, card: 20, sheet: 28, pill: 999 } as const;
 
 export const sizes = { touch: 48, icon: 22, iconSmall: 18, iconLarge: 26 } as const;
 
@@ -148,7 +181,7 @@ export const previewScale = Platform.OS === 'web' ? Number(process.env.EXPO_PUBL
 const fs = (n: number) => Math.round(n * previewScale);
 
 export const type = {
-  pageTitle: { fontFamily: family, fontSize: fs(28), lineHeight: fs(34), fontWeight: '600' },
+  pageTitle: { fontFamily: family, fontSize: fs(28), lineHeight: fs(34), fontWeight: '600', letterSpacing: -0.3 },
   sectionTitle: { fontFamily: family, fontSize: fs(20), lineHeight: fs(26), fontWeight: '600' },
   cardTitle: { fontFamily: family, fontSize: fs(17), lineHeight: fs(22), fontWeight: '600' },
   body: { fontFamily: family, fontSize: fs(16), lineHeight: fs(22), fontWeight: '400' },
@@ -156,7 +189,8 @@ export const type = {
   secondary: { fontFamily: family, fontSize: fs(14), lineHeight: fs(19), fontWeight: '400' },
   label: { fontFamily: family, fontSize: fs(13), lineHeight: fs(17), fontWeight: '500' },
   caption: { fontFamily: family, fontSize: fs(12), lineHeight: fs(16), fontWeight: '400' },
-  display: { fontFamily: family, fontSize: fs(34), lineHeight: fs(40), fontWeight: '600' },
+  display: { fontFamily: family, fontSize: fs(38), lineHeight: fs(44), fontWeight: '500', letterSpacing: -0.8 },
+  overline: { fontFamily: family, fontSize: fs(12), lineHeight: fs(16), fontWeight: '600', letterSpacing: 0.8 },
 } satisfies Record<string, TextStyle>;
 
 export type TypeVariant = keyof typeof type;

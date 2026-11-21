@@ -80,12 +80,12 @@ export function VoiceButton({ onText, onFinal, autoStart, onPermissionDenied, on
   return (
     <Pressable onPress={toggle} accessibilityRole="button" accessibilityLabel={listening ? 'Stop listening' : 'Speak'}
       accessibilityState={{ busy: listening }} style={[styles.mic, listening && styles.micOn]}>
-      {listening ? <Square size={18} color="#fff" fill="#fff" /> : <Mic size={22} color={colors.text} />}
+      {listening ? <Square size={18} color={colors.primaryText} fill={colors.primaryText} /> : <Mic size={22} color={colors.text} />}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   mic: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border },
-  micOn: { backgroundColor: colors.high, borderColor: colors.high },
+  micOn: { backgroundColor: colors.primary, borderColor: colors.primary },
 });

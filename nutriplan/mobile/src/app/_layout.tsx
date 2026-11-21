@@ -1,10 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider as NavigationThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/lib/theme';
 import { SnackbarProvider } from '@/components/ds';
 import { ThemeProvider } from '@/theme/ThemeProvider';
+
+/** Navigation chrome in the same warm charcoal, so screen changes never flash white. */
+const navigationTheme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, primary: colors.primary, background: colors.background, card: colors.surface, text: colors.text, border: colors.border, notification: colors.accent },
+};
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
@@ -15,12 +21,14 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
+          <NavigationThemeProvider value={navigationTheme}>
           <SnackbarProvider>
-            <StatusBar style="dark" />
+            <StatusBar style="light" />
             <Stack
               screenOptions={{
-                headerStyle: { backgroundColor: colors.surface },
-                headerTitleStyle: { fontWeight: '600' },
+                headerStyle: { backgroundColor: colors.background },
+                headerShadowVisible: false,
+                headerTitleStyle: { fontWeight: '600', color: colors.text },
                 headerTintColor: colors.primary,
                 contentStyle: { backgroundColor: colors.background },
               }}
@@ -40,6 +48,7 @@ export default function RootLayout() {
               <Stack.Screen name="settings" options={{ title: 'Settings' }} />
             </Stack>
           </SnackbarProvider>
+          </NavigationThemeProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

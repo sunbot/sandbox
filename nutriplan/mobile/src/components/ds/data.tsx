@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useLargeText, useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
 import type { Theme } from '@/theme/tokens';
@@ -94,15 +94,16 @@ export function NutrientProgress({ name, amount, target, unit, kind, status: sta
   const t = useTheme();
   const status = statusOverride ?? nutrientStatus(amount, target, kind);
   const meta: Record<NutrientStatus, { icon: LucideIcon; word: string; color: string; text: 'warning' | 'error' | 'success' | 'secondary' }> = {
-    low: { icon: TriangleAlert, word: 'Low', color: t.colors.warning, text: 'warning' },
-    fair: { icon: CircleAlert, word: 'Getting there', color: t.colors.warning, text: 'secondary' },
+    // Calm by default: only 'Over limit' uses the alert triangle.
+    low: { icon: CircleAlert, word: 'Low', color: t.colors.warning, text: 'warning' },
+    fair: { icon: CircleDashed, word: 'Getting there', color: t.colors.textMuted, text: 'secondary' },
     met: { icon: CircleCheck, word: kind === 'Limit' ? 'Within limit' : 'Met', color: t.colors.success, text: 'success' },
     over: { icon: TriangleAlert, word: 'Over limit', color: t.colors.error, text: 'error' },
     progress: { icon: CircleDashed, word: 'In progress', color: t.colors.textMuted, text: 'secondary' },
     behind: { icon: Clock, word: 'Behind pace', color: t.colors.warning, text: 'secondary' },
   };
   const m = meta[status];
-  const bar = status === 'progress' ? t.colors.primary : m.color; // still filling up: the brand color, not a grey that looks disabled
+  const bar = status === 'progress' || status === 'fair' ? t.colors.primary : m.color; // still filling up: the brand color, not a grey that looks disabled
   const Icon = m.icon;
   const large = useLargeText();
   const value = (
@@ -148,26 +149,33 @@ export function NutrientProgress({ name, amount, target, unit, kind, status: sta
  * Compact ring for the day's calories. The center reads "38% of goal" so the percentage is never ambiguous;
  * the number beside the ring is the main read-out.
  */
-export function CalorieRing({ eaten, target, size = 88 }: { eaten: number; target: number; size?: number }) {
+export function CalorieRing({ eaten, target, size = 96 }: { eaten: number; target: number; size?: number }) {
   const t = useTheme();
-  const stroke = 9;
+  const stroke = 8;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const ratio = target > 0 ? eaten / target : 0;
   const over = ratio > 1.0001;
   const filled = Math.min(Math.max(ratio, 0), 1);
+  // Over the goal is shown in warm apricot, not alarm red: it's information, not a failure.
   return (
     <View style={{ width: size, height: size }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+        <Defs>
+          <LinearGradient id="ringStroke" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={over ? t.colors.accent : t.colors.ringStart} />
+            <Stop offset="1" stopColor={over ? t.colors.accent : t.colors.ringEnd} />
+          </LinearGradient>
+        </Defs>
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={t.colors.track} strokeWidth={stroke} fill="none" />
         {filled > 0 ? (
-          <Circle cx={size / 2} cy={size / 2} r={r} stroke={over ? t.colors.error : t.colors.primary} strokeWidth={stroke} fill="none"
+          <Circle cx={size / 2} cy={size / 2} r={r} stroke="url(#ringStroke)" strokeWidth={stroke} fill="none"
             strokeLinecap="round" strokeDasharray={`${c} ${c}`} strokeDashoffset={c * (1 - filled)} />
         ) : null}
       </Svg>
       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
-        <AppText variant="bodyStrong" numeric style={over ? { color: t.colors.errorText } : undefined}>{Math.round(ratio * 100)}%</AppText>
-        <AppText variant="caption" tone="secondary">of goal</AppText>
+        <AppText variant="bodyStrong" numeric style={over ? { color: t.colors.accentText } : undefined}>{Math.round(ratio * 100)}%</AppText>
+        <AppText variant="caption" tone="muted">of goal</AppText>
       </View>
     </View>
   );

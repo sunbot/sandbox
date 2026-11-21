@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/ds/icons';
@@ -110,7 +111,8 @@ export default function TodayScreen() {
     <View style={{ gap: t.space.xs }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.xs }}>
         <IconButton icon={ChevronLeft} label="Previous day" onPress={() => setDate(addDays(date, -1))} />
-        <View style={{ flex: 1, alignItems: 'center' }}>
+        <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+          {isToday ? <AppText variant="overline" tone="accent" numberOfLines={1}>{greeting().toUpperCase()}</AppText> : null}
           <AppText variant="pageTitle" accessibilityRole="header" numberOfLines={1}>{dayLabel(date).split(',')[0]}</AppText>
           <AppText variant="secondary" tone="secondary" numberOfLines={2} align="center">
             {fromIsoDate(date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -157,6 +159,7 @@ export default function TodayScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
+      <TopGlow />
       <ScrollView
         contentContainerStyle={page}
         refreshControl={<RefreshControl refreshing={data.day.isRefetching} onRefresh={() => { data.refetchAll(); }} colors={[t.colors.primary]} progressViewOffset={insets.top} />}
@@ -203,6 +206,27 @@ export default function TodayScreen() {
         onPick={(m) => { setRecentMeal(m); setPickingMeal(false); }} />
     </View>
   );
+}
+
+/** A soft sage light at the top of the page: depth without decoration. */
+function TopGlow() {
+  const t = useTheme();
+  return (
+    <Svg style={[StyleSheet.absoluteFill, { height: 420 }]} pointerEvents="none">
+      <Defs>
+        <RadialGradient id="todayGlow" cx="50%" cy="0%" rx="80%" ry="60%">
+          <Stop offset="0" stopColor={t.colors.glow} stopOpacity={1} />
+          <Stop offset="1" stopColor={t.colors.background} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect width="100%" height="100%" fill="url(#todayGlow)" />
+    </Svg>
+  );
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 }
 
 function errorText(e: unknown, fallback: string) {

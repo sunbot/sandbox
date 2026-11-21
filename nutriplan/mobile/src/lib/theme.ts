@@ -1,36 +1,38 @@
 /**
- * Design tokens. Change colors/spacing here and the whole app follows.
- * Macro colors are the first three slots of a CVD-validated categorical palette
- * (blue / orange / aqua); every macro mark is also text-labelled so color is never the only cue.
+ * Colors for screens not yet rebuilt on the design system (src/theme + src/components/ds).
+ * They mirror the "Hearth" dark palette in src/theme/tokens.ts so the whole app looks like one product.
+ * Macro colors match the validated dark macro set; status colors are calm and always shown with a label or number.
  */
 export const colors = {
-  background: '#f4f4f2',
-  surface: '#fcfcfb',
-  surfaceMuted: '#f0efec',
-  border: '#e4e3df',
-  text: '#0b0b0b',
-  textSecondary: '#52514e',
-  textMuted: '#8a8984',
-  primary: '#1c5cab',
-  primaryText: '#ffffff',
-  danger: '#d03b3b',
+  background: '#121514',
+  surface: '#1A1E1C',
+  surfaceMuted: '#262B29',
+  border: '#2B312E',
+  text: '#EEEAE3',
+  textSecondary: '#ADA79D',
+  textMuted: '#968F85',
+  primary: '#86BFAE',
+  primaryText: '#10201B',
+  danger: '#E08A7A',
+  accent: '#E3A178',
+  attention: '#2E2619', // warm amber tint for "needs a look" rows
 
-  calories: '#1c5cab',
-  protein: '#2a78d6',
-  carbs: '#eb6834',
-  fat: '#1baf7a',
+  calories: '#86BFAE',
+  protein: '#5A8FD4',
+  carbs: '#BA8733',
+  fat: '#C0628F',
 
   // Status levels (fixed meaning; always shown with a label or number too).
-  good: '#0ca30c',
-  fair: '#fab219',
-  low: '#ec835a',
-  high: '#d03b3b',
-  none: '#e4e3df',
+  good: '#8CC59E',
+  fair: '#D9A35E',
+  low: '#C98F5E',
+  high: '#E08A7A',
+  none: '#2B312E',
 };
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
-export const radius = { sm: 6, md: 10, lg: 16, pill: 999 };
+export const radius = { sm: 8, md: 12, lg: 20, pill: 999 };
 
 export const font = {
   title: { fontSize: 22, fontWeight: '700' as const, color: colors.text },

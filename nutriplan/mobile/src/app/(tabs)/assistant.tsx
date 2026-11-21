@@ -55,7 +55,7 @@ export default function AssistantScreen() {
         )}
         {turns.map((t) => (
           <View key={t.id} style={{ gap: spacing.sm }}>
-            <View style={styles.userBubble}><Text style={{ color: '#fff', fontSize: 15 }}>{t.text}</Text></View>
+            <View style={styles.userBubble}><Text style={{ color: colors.primaryText, fontSize: 15 }}>{t.text}</Text></View>
             {t.error ? <Text style={[font.small, { color: colors.danger }]}>{t.error}</Text> : null}
             {!t.response && !t.error ? <Text style={font.small}>Thinking…</Text> : null}
             {t.response ? <ResponseView r={t.response} /> : null}
@@ -188,5 +188,5 @@ const styles = StyleSheet.create({
   micNotice: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surfaceMuted, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   inputBar: { flexDirection: 'row', gap: spacing.sm, padding: spacing.md, alignItems: 'center', backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   match: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: 'transparent' },
-  matchSelected: { borderColor: colors.primary, backgroundColor: '#eef4fc' },
+  matchSelected: { borderColor: colors.primary, backgroundColor: '#1F332D' },
 });

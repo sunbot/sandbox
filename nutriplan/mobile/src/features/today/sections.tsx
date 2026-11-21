@@ -31,14 +31,14 @@ export function SummaryCard({ day, targets }: { day: Day; targets: Targets }) {
     { label: 'Fat', value: day.totals.fat, target: targets.fatGrams, color: t.colors.fat },
   ];
   return (
-    <AppCard style={{ gap: t.space.md }}>
+    <AppCard sheen style={{ gap: t.space.lg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.lg }}
         accessible accessibilityLabel={`${over ? `${-left} calories over` : `${left} calories left`}. ${Math.round(eaten)} eaten of ${Math.round(goal)} goal, ${pct} percent of your daily goal.`}>
-        <CalorieRing eaten={eaten} target={goal} size={large ? 116 : 88} />
+        <CalorieRing eaten={eaten} target={goal} size={large ? 120 : 96} />
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-            <AppText variant="display" numeric style={over ? { color: t.colors.errorText } : undefined}>{Math.abs(left).toLocaleString()}</AppText>
-            <AppText variant="secondary" tone={over ? 'error' : 'secondary'}>{over ? 'kcal over' : 'kcal left'}</AppText>
+            <AppText variant="display" numeric style={over ? { color: t.colors.accentText } : undefined}>{Math.abs(left).toLocaleString()}</AppText>
+            <AppText variant="secondary" tone={over ? 'accent' : 'secondary'}>{over ? 'kcal over' : 'kcal left'}</AppText>
           </View>
           <AppText variant="secondary" tone="secondary" numeric>
             {Math.round(eaten).toLocaleString()} eaten · {Math.round(goal).toLocaleString()} goal
@@ -316,7 +316,7 @@ export function TodaySkeleton() {
     <View style={{ gap: t.space.lg }} accessibilityLabel="Loading today" accessible>
       <AppCard style={{ gap: t.space.lg }}>
         <View style={{ flexDirection: 'row', gap: t.space.lg, alignItems: 'center' }}>
-          <Skeleton width={88} height={88} radius={44} />
+          <Skeleton width={96} height={96} radius={48} />
           <View style={{ flex: 1, gap: t.space.sm }}><Skeleton width="60%" height={34} /><Skeleton width="80%" height={14} /></View>
         </View>
         <View style={{ flexDirection: 'row', gap: t.space.lg }}>

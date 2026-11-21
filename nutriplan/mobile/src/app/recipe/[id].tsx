@@ -178,5 +178,5 @@ const styles = StyleSheet.create({
   notice: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: 12, backgroundColor: colors.surfaceMuted },
   page: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   ing: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, gap: 2 },
-  attention: { backgroundColor: '#fff7e6', marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6 },
+  attention: { backgroundColor: colors.attention, marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6 },
 });

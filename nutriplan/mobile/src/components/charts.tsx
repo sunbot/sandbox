@@ -86,10 +86,10 @@ export function DayCalorieBar({ eaten, planned, target, maxValue }: { eaten: num
 /** A heatmap cell: color carries the level, the number carries the value (never color alone). */
 export function HeatCell({ level, percent }: { level: string; percent?: number | null }) {
   const bg = levelColor[level] ?? colors.none;
-  const dark = level === 'good' || level === 'high' || level === 'veryHigh';
+  // Filled cells are light-on-dark tints, so their numbers use the dark ink; empty cells use muted text.
   return (
     <View style={[styles.cell, { backgroundColor: bg }]}>
-      <Text style={[styles.cellText, { color: level === 'none' ? colors.textMuted : dark ? '#fff' : colors.text }]}>
+      <Text style={[styles.cellText, { color: level === 'none' ? colors.textMuted : colors.primaryText }]}>
         {percent == null ? '–' : Math.round(percent)}
       </Text>
     </View>

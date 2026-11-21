@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nutriplan.app"
@@ -29,8 +29,8 @@
       "output": "single",
       "name": "NutriPlan",
       "shortName": "NutriPlan",
-      "themeColor": "#287968",
-      "backgroundColor": "#F7F8F6"
+      "themeColor": "#121514",
+      "backgroundColor": "#121514"
     },
     "plugins": [
       "expo-router",
