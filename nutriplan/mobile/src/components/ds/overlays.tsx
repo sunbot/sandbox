@@ -42,7 +42,8 @@ export function BottomSheet({ visible, onClose, title, children, footer }: {
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: t.colors.scrim, opacity: anim }]}>
           <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
         </Animated.View>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ maxHeight: '90%' }}>
+        {/* Edge-to-edge Android doesn't resize the window for the keyboard, so pad on both platforms. */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={{ maxHeight: '90%' }}>
           <Animated.View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, t.space.lg), transform: [{ translateY }] }]} accessibilityViewIsModal>
             <View style={s.handle} />
             {title ? (

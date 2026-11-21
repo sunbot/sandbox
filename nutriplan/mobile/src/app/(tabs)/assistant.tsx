@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View, type ScrollViewInstance } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useAssistant } from '@/api/hooks';
 import type { AssistantResponse } from '@/api/types';
 import { AppCard, AppText, FilterChip, SecondaryButton, Skeleton } from '@/components/ds';
@@ -27,6 +28,8 @@ export default function AskScreen() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const assistant = useAssistant();
   const scroll = useRef<ScrollViewInstance>(null);
+  // Android draws edge to edge, so the window doesn't resize for the keyboard: pad by its height on both platforms.
+  const headerHeight = useHeaderHeight();
 
   const ask = async (id: number, message: string) => {
     setTurns((prev) => prev.map((x) => (x.id === id ? { id, text: message } : x)));
@@ -50,7 +53,7 @@ export default function AskScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.colors.background }} behavior="padding" keyboardVerticalOffset={Platform.OS === 'web' ? 0 : headerHeight}>
       <ScrollView ref={scroll} style={{ flex: 1 }} keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: t.screenPadding, gap: t.space.lg, flexGrow: 1, justifyContent: turns.length ? 'flex-start' : 'flex-end' }}>
         {turns.length === 0 ? (

@@ -15,6 +15,8 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: t.colors.primary,
+        // Hide the tab bar while typing so the keyboard sits right under the field (Ask's composer).
+        tabBarHideOnKeyboard: true,
         tabBarInactiveTintColor: t.colors.textMuted,
         // A quiet bar that sits on the page: same charcoal family, a hairline instead of a hard edge.
         tabBarStyle: { backgroundColor: t.colors.surface, borderTopColor: t.colors.cardBorder, borderTopWidth: 1, elevation: 0 },
