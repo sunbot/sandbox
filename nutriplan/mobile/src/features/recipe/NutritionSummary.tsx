@@ -63,7 +63,7 @@ export function NutritionSummary({ nutrition, mode, makes, gramsPerServing, reli
         <View style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' }}>
           <Info size={16} strokeWidth={2} color={t.colors.textMuted} style={{ marginTop: 2 }} />
           <AppText variant="caption" tone="secondary" style={{ flex: 1 }}>
-            Protein, carbs and fat add up to {Math.round(comp.macroKcal)} kcal; the recipe’s calories are {Math.round(nutrition.calories)} kcal. The difference comes from fiber, alcohol and rounding.
+            Protein, carbs and fat add up to {Math.round(comp.macroKcal)} kcal; the recipe’s calories are {Math.round(nutrition.calories)} kcal. Differences like this can come from fiber, alcohol, rounding or the source data.
           </AppText>
         </View>
       ) : null}

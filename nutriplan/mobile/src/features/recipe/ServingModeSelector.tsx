@@ -17,7 +17,7 @@ export function ServingModeSelector({ modes, value, onChange }: { modes: Nutriti
         return (
           <Pressable key={m} onPress={() => onChange(m)} accessibilityRole="tab" accessibilityLabel={modeLabel[m]} accessibilityState={{ selected }}
             style={({ pressed }) => ({
-              flex: 1, minHeight: t.sizes.touch - 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space.sm, borderRadius: t.radii.button - 3,
+              flex: 1, minHeight: t.sizes.touch, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space.sm, borderRadius: t.radii.button - 3,
               backgroundColor: selected ? t.colors.surfaceRaised : 'transparent', borderWidth: 1, borderColor: selected ? t.colors.borderStrong : 'transparent',
               opacity: pressed ? 0.85 : 1,
             })}>

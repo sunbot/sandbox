@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Linking, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLogRecipe, usePlanMutations, useRecipe, useRecipeMutations } from '@/api/hooks';
-import type { Ingredient } from '@/api/types';
 import { AppCard, AppText, ConfirmationSheet, EmptyState, FilterChip, PrimaryButton, SecondaryButton, SectionHeader, Skeleton, TextButton, useSnackbar } from '@/components/ds';
 import { CalendarPlus, Check, ChefHat, ExternalLink, Layers, RefreshCw } from '@/components/ds/icons';
 import { IngredientNutritionRow } from '@/features/recipe/IngredientNutritionRow';
@@ -36,7 +35,8 @@ export default function RecipeScreen() {
   const [mode, setMode] = useState<NutritionMode>('serving');
   // Everything that needs reading stays on screen rather than in alerts, which don't appear in the web version.
   const [notice, setNotice] = useState<string | null>(null);
-  const [openIng, setOpenIng] = useState<Ingredient | null>(null);
+  // The position, not a copy: the sheet always shows the ingredient as it is now, after any refetch.
+  const [openPos, setOpenPos] = useState<number | null>(null);
   const [yieldText, setYieldText] = useState<string | null>(null); // non-null while editing "makes N servings"
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -173,13 +173,17 @@ export default function RecipeScreen() {
 
       <AppCard padded={false}>
         <View style={{ padding: t.space.lg, paddingBottom: t.space.sm, gap: t.space.xs }}>
-          <SectionHeader title="Ingredients" action={<TextButton label="Refresh matches" icon={RefreshCw} onPress={refreshMatches} />} />
+          {/* Wraps under the title when large text leaves no room beside it. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: t.space.sm }}>
+            <AppText variant="sectionTitle" accessibilityRole="header">Ingredients</AppText>
+            <TextButton label="Refresh matches" icon={RefreshCw} onPress={refreshMatches} />
+          </View>
           <AppText variant="caption" tone="muted">
             {counts.counted} of {counts.total} counted{counts.unmatched ? ` · ${counts.unmatched} unmatched` : ''}{counts.check ? ` · ${counts.check} to check` : ''}{counts.excluded ? ` · ${counts.excluded} left out` : ''}. Tap one to change its food or amount.
           </AppText>
         </View>
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>
-          {r.ingredients.map((ing) => <IngredientNutritionRow key={ing.position} ingredient={ing} onPress={() => setOpenIng(ing)} />)}
+          {r.ingredients.map((ing) => <IngredientNutritionRow key={ing.position} ingredient={ing} onPress={() => setOpenPos(ing.position)} />)}
         </View>
       </AppCard>
 
@@ -196,10 +200,10 @@ export default function RecipeScreen() {
         <SecondaryButton label="Delete recipe" tone="danger" onPress={() => setConfirmDelete(true)} fullWidth />
       </View>
 
-      <IngredientSheet ingredient={openIng} onClose={() => setOpenIng(null)} busy={m.updateIngredient.isPending}
-        onChooseFood={(ing) => { setOpenIng(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
-        onLeaveOut={(ing) => { m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); setOpenIng(null); }}
-        onSetGrams={(ing, grams) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, grams }); setOpenIng(null); })} />
+      <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => setOpenPos(null)} busy={m.updateIngredient.isPending}
+        onChooseFood={(ing) => { setOpenPos(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
+        onLeaveOut={(ing) => { m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); setOpenPos(null); }}
+        onSetGrams={(ing, grams) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, grams }); setOpenPos(null); })} />
 
       <ConfirmationSheet visible={confirmDelete} title={`Delete ${s.name}?`} message="This can’t be undone. Meals you already logged or planned from it keep their nutrition."
         confirmLabel="Delete recipe" destructive loading={m.remove.isPending} onCancel={() => setConfirmDelete(false)}
