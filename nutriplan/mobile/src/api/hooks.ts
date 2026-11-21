@@ -149,10 +149,15 @@ export function useRecipeMutations() {
   return {
     importUrl: useMutation({ mutationFn: (url: string) => post<T.RecipeDetail>('/recipes/import/url', { url }), onSuccess: refresh }),
     importPaprika: useMutation({
-      mutationFn: (file: { uri: string; name: string; mimeType?: string }) => {
+      mutationFn: (file: { uri: string; name: string; mimeType?: string; file?: File }) => {
         const form = new FormData();
-        // React Native's FormData accepts { uri, name, type } file parts.
-        form.append('file', { uri: file.uri, name: file.name, type: file.mimeType ?? 'application/octet-stream' } as unknown as Blob);
+        if (file.file) {
+          // Web: the picker hands us a real File. (The { uri } shorthand below is React Native only; a browser would send "[object Object]".)
+          form.append('file', file.file, file.name);
+        } else {
+          // React Native's FormData accepts { uri, name, type } file parts.
+          form.append('file', { uri: file.uri, name: file.name, type: file.mimeType ?? 'application/octet-stream' } as unknown as Blob);
+        }
         return api<T.ImportResult>('/recipes/import/paprika', { method: 'POST', body: form });
       },
       onSuccess: refresh,

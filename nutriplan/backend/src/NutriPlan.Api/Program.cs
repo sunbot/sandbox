@@ -12,6 +12,11 @@ using NutriPlan.Infrastructure.Usda;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Paprika exports embed every recipe photo; a real library is easily past Kestrel's 30 MB default.
+const long MaxUploadBytes = 300L * 1024 * 1024;
+builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = MaxUploadBytes);
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = MaxUploadBytes);
+
 // Local development: pick up DATABASE_URL etc. from .env.local / .env (e.g. written by `neon deploy`).
 // Real environment variables, user-secrets and appsettings take precedence over these files.
 builder.Configuration.AddDotEnvFiles();
