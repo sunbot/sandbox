@@ -1,116 +1,203 @@
-import { useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { useDay, useDeleteEntry, useLogFood, useLogRecipe, useQuickLog, useTargets, useUpdateEntry } from '@/api/hooks';
-import type { DiaryEntry, QuickLogItem } from '@/api/types';
-import { CalorieRing, MacroBars, ProgressBar } from '@/components/charts';
-import { ItemRow } from '@/components/ItemRow';
-import { Button, Card, Chip, ErrorView, Loading } from '@/components/ui';
-import { addDays, dayLabel, mealForNow, type Meal, today } from '@/lib/format';
-import { colors, font, spacing } from '@/lib/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/ds/icons';
+import { useDeleteEntry, useLogFood, useLogRecipe, usePlanMutations, useUpdateEntry } from '@/api/hooks';
+import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
+import { AppText, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
+import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
+import { MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton } from '@/features/today/sections';
+import { useTodayData } from '@/features/today/useTodayData';
+import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
+import { useTheme } from '@/theme/ThemeProvider';
 
-/** Today: the headline numbers, each meal, and the fastest ways to add food. */
+/**
+ * Today: calories and macros at a glance, one-tap logging (search, scan, voice, recent foods),
+ * meals with logged and planned food, and the nutrients that need attention.
+ * All data and writes go through the existing API hooks; nothing about nutrition math changes here.
+ */
 export default function TodayScreen() {
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
+  const snackbar = useSnackbar();
   const [date, setDate] = useState(today());
-  const day = useDay(date);
-  const targets = useTargets();
-  const quick = useQuickLog(mealForNow());
+  const quickMeal = mealForNow();
+  const data = useTodayData(date, quickMeal);
+
   const del = useDeleteEntry();
   const update = useUpdateEntry();
   const logFood = useLogFood();
   const logRecipe = useLogRecipe();
+  const plan = usePlanMutations();
 
-  if (day.isLoading || targets.isLoading) return <Loading />;
-  if (day.error || targets.error) return <ErrorView error={day.error ?? targets.error} onRetry={() => { day.refetch(); targets.refetch(); }} />;
-  const d = day.data!;
-  const t = targets.data!;
-  const focus = d.progress.filter((p) => t.nutrients.some((n) => n.isFocus && n.nutrientId === p.nutrientId)).slice(0, 6);
+  const [expanded, setExpanded] = useState<Partial<Record<Meal, boolean>>>({});
+  const [editing, setEditing] = useState<DiaryEntry | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({}); // kept if a sheet is dismissed by accident
+  const [showNutrients, setShowNutrients] = useState(false);
+  const [loggingId, setLoggingId] = useState<string | null>(null);
 
-  const add = (meal: Meal, path: '/food/search' | '/scan' | '/quick-add' = '/food/search') =>
-    router.push({ pathname: path, params: { date, meal, mode: 'log' } });
+  const isToday = date === today();
+  const go = (pathname: '/food/search' | '/scan', meal: Meal = quickMeal) => router.push({ pathname, params: { date, meal, mode: 'log' } });
 
-  const entryMenu = (e: DiaryEntry) =>
-    Alert.alert(e.item.name, undefined, [
-      { text: 'Half', onPress: () => update.mutate({ id: e.id, scale: 0.5 }) },
-      { text: 'Double', onPress: () => update.mutate({ id: e.id, scale: 2 }) },
-      { text: 'Delete', style: 'destructive', onPress: () => del.mutate(e.id) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+  /* ── Actions ── */
 
-  const relog = (q: QuickLogItem) => {
-    const meal = mealForNow();
-    if (q.item.recipeId) logRecipe.mutate({ date, meal, recipeId: q.item.recipeId, servings: q.item.quantity });
-    else if (q.item.foodId && q.item.grams) logFood.mutate({ date, meal, foodId: q.item.foodId, grams: q.item.grams });
-  };
+  const addRecent = useCallback(async (q: QuickLogItem) => {
+    try {
+      const created = q.item.recipeId
+        ? await logRecipe.mutateAsync({ date, meal: quickMeal, recipeId: q.item.recipeId, servings: q.item.quantity })
+        : q.item.foodId && q.item.grams
+          ? await logFood.mutateAsync({ date, meal: quickMeal, foodId: q.item.foodId, grams: q.item.grams })
+          : null;
+      if (!created) return;
+      snackbar({ message: `Added ${q.item.name} to ${quickMeal === 'Snack' ? 'snacks' : quickMeal.toLowerCase()}`, actionLabel: 'Undo', onAction: () => del.mutate(created.id) });
+    } catch (e) {
+      snackbar({ message: errorText(e, "Couldn't add that food") });
+    }
+  }, [date, quickMeal, logFood, logRecipe, del, snackbar]);
+
+  const logPlanned = useCallback(async (p: PlanEntry) => {
+    setLoggingId(p.id);
+    try {
+      // Existing endpoint: creates the diary entry from the plan and marks the plan item eaten (no duplicate).
+      await plan.eaten.mutateAsync({ id: p.id });
+      snackbar({ message: `Logged ${p.item.name}` });
+    } catch (e) {
+      snackbar({ message: errorText(e, "Couldn't log that meal") });
+    } finally {
+      setLoggingId(null);
+    }
+  }, [plan.eaten, snackbar]);
+
+  const saveEntry = useCallback(async (e: DiaryEntry, d: EntryDraft) => {
+    const scale = e.item.quantity > 0 ? d.quantity / e.item.quantity : 1;
+    const scaled = Math.abs(scale - 1) > 1e-9;
+    const moved = d.meal !== e.meal;
+    try {
+      await update.mutateAsync({ id: e.id, scale: scaled ? scale : undefined, meal: moved ? d.meal : undefined });
+      setDrafts(({ [e.id]: _, ...rest }) => rest);
+      setEditing(null);
+      snackbar({
+        message: `Updated ${e.item.name}`,
+        actionLabel: 'Undo',
+        onAction: () => update.mutate({ id: e.id, scale: scaled ? 1 / scale : undefined, meal: moved ? e.meal : undefined }),
+      });
+    } catch (err) {
+      snackbar({ message: errorText(err, "Couldn't save changes") });
+    }
+  }, [update, snackbar]);
+
+  const deleteEntry = useCallback((e: DiaryEntry) => {
+    setDrafts(({ [e.id]: _, ...rest }) => rest);
+    setEditing(null);
+    data.hide(e.id); // disappears now; the server delete happens when the Undo window closes
+    snackbar({
+      message: `Deleted ${e.item.name}`,
+      actionLabel: 'Undo',
+      onAction: () => data.unhide(e.id),
+      onTimeout: () => del.mutate(e.id, {
+        onSettled: () => data.unhide(e.id),
+        onError: (err) => snackbar({ message: errorText(err, "Couldn't delete that entry") }),
+      }),
+    });
+  }, [data, del, snackbar]);
+
+  /* ── Render ── */
+
+  const header = (
+    <View style={{ gap: t.space.xs }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.xs }}>
+        <IconButton icon={ChevronLeft} label="Previous day" onPress={() => setDate(addDays(date, -1))} />
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <AppText variant="pageTitle" accessibilityRole="header" numberOfLines={1}>{dayLabel(date).split(',')[0]}</AppText>
+          <AppText variant="secondary" tone="secondary" numberOfLines={2} align="center">
+            {fromIsoDate(date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+          </AppText>
+        </View>
+        <IconButton icon={ChevronRight} label="Next day" onPress={() => setDate(addDays(date, 1))} />
+      </View>
+      {!isToday ? (
+        <View style={{ alignItems: 'center' }}>
+          <FilterChip label="Back to today" icon={CalendarDays} onPress={() => setDate(today())} />
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const page = { paddingTop: insets.top + t.space.sm, paddingHorizontal: t.screenPadding, paddingBottom: t.space.huge * 2, gap: t.space.lg };
+
+  if (data.day.isLoading || data.targets.isLoading) {
+    return <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{header}<TodaySkeleton /></ScrollView>;
+  }
+
+  if (data.day.error || data.targets.error || !data.view || !data.targets.data) {
+    const err = data.day.error ?? data.targets.error;
+    const status = (err as { status?: number } | null)?.status;
+    return (
+      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+        {header}
+        <EmptyState icon={CloudOff}
+          title={status === 401 ? 'Enter your API key' : status === 0 ? "Can't reach your server" : "Couldn't load today"}
+          body={status === 401 ? 'Your server needs its key before it shares your data.' : err instanceof Error ? err.message : undefined}
+          action={<View style={{ gap: t.space.sm, alignSelf: 'stretch' }}>
+            <PrimaryButton label="Try again" onPress={() => { data.refetchAll(); }} />
+            {status === 401 || status === 0 ? <SecondaryButton label="Open settings" onPress={() => router.push('/settings')} /> : null}
+          </View>} />
+      </ScrollView>
+    );
+  }
+
+  const day = data.view;
+  const targets = data.targets.data;
 
   return (
-    <ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={day.isRefetching} onRefresh={() => { day.refetch(); }} />}>
-      <View style={styles.dateRow}>
-        <Pressable onPress={() => setDate(addDays(date, -1))} hitSlop={12}><Text style={styles.arrow}>‹</Text></Pressable>
-        <Pressable onPress={() => setDate(today())}><Text style={font.title}>{dayLabel(date)}</Text></Pressable>
-        <Pressable onPress={() => setDate(addDays(date, 1))} hitSlop={12}><Text style={styles.arrow}>›</Text></Pressable>
-      </View>
+    <View style={{ flex: 1, backgroundColor: t.colors.background }}>
+      <ScrollView
+        contentContainerStyle={page}
+        refreshControl={<RefreshControl refreshing={data.day.isRefetching} onRefresh={() => { data.refetchAll(); }} colors={[t.colors.primary]} progressViewOffset={insets.top} />}
+      >
+        {header}
+        <SummaryCard day={day} targets={targets} />
 
-      <Card style={styles.summary}>
-        <CalorieRing eaten={d.totals.calories} target={t.calories} />
-        <MacroBars totals={d.totals} targets={{ protein: t.proteinGrams, carbs: t.carbGrams, fat: t.fatGrams }} />
-      </Card>
-
-      <View style={styles.actions}>
-        <Button title="Search" icon="🔍" onPress={() => add(mealForNow())} compact />
-        <Button title="Scan" icon="▥" variant="secondary" onPress={() => add(mealForNow(), '/scan')} compact />
-        <Button title="Ask / speak" icon="💬" variant="secondary" onPress={() => router.push('/assistant')} compact />
-      </View>
-
-      {quick.data && quick.data.length > 0 && (
-        <View>
-          <Text style={[font.small, { marginBottom: spacing.sm }]}>Quick add · tap to log to {mealForNow().toLowerCase()}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-            {quick.data.map((q, i) => (
-              <Chip key={i} label={`${q.item.name.split(',')[0]} · ${Math.round(q.item.nutrition.calories)}`} onPress={() => relog(q)} />
-            ))}
-          </ScrollView>
+        <View style={{ gap: t.space.md }}>
+          <QuickActions onSearch={() => go('/food/search')} onScan={() => go('/scan')}
+            onVoice={() => router.push({ pathname: '/assistant', params: { listen: String(Date.now()) } })} />
+          <RecentFoods items={data.quick.data ?? []} meal={quickMeal} onPick={addRecent} />
         </View>
-      )}
 
-      {d.meals.map((m) => (
-        <Card key={m.meal}>
-          <View style={styles.mealHeader}>
-            <Text style={font.heading}>{m.meal}</Text>
-            <Text style={[font.small, font.number]}>{Math.round(m.totals.calories)} kcal</Text>
-          </View>
-          {m.entries.map((e) => (
-            <ItemRow key={e.id} item={e.item} onPress={() => entryMenu(e)} />
-          ))}
-          <View style={styles.mealButtons}>
-            <Button title="Add food" variant="ghost" compact onPress={() => add(m.meal)} />
-            <Button title="Quick kcal" variant="ghost" compact onPress={() => add(m.meal, '/quick-add')} />
-          </View>
-        </Card>
-      ))}
+        <View style={{ gap: t.space.md }}>
+          <AppText variant="sectionTitle" accessibilityRole="header">Meals</AppText>
+          {meals.map((m) => {
+            const md = day.meals.find((x) => x.meal === m);
+            const entries = md?.entries ?? [];
+            const planned = data.planned.filter((p) => p.meal === m);
+            const isExpanded = expanded[m] ?? (entries.length + planned.length > 0);
+            return (
+              <MealSection key={m} meal={m} totals={md?.totals.calories ?? 0} entries={entries} planned={planned}
+                expanded={isExpanded} onToggle={() => setExpanded((x) => ({ ...x, [m]: !isExpanded }))}
+                onAdd={() => go('/food/search', m)} onEntry={setEditing} onLogPlanned={logPlanned} loggingId={loggingId} />
+            );
+          })}
+        </View>
 
-      <Card>
-        <View style={styles.mealHeader}>
-          <Text style={font.heading}>Nutrients</Text>
-          <Button title="Fill gaps" variant="ghost" compact onPress={() => router.push({ pathname: '/gaps', params: { date } })} />
-        </View>
-        <View style={{ gap: spacing.md }}>
-          <ProgressBar label="Fiber" value={d.totals.fiber} target={d.progress.find((p) => p.nutrientId === 1079)?.target ?? 28} color={colors.calories} unit="g" />
-          {focus.filter((p) => p.nutrientId !== 1079 && p.target).map((p) => (
-            <ProgressBar key={p.nutrientId} label={p.name} value={p.amount} target={p.target!} unit={p.unit} color={colors.calories} limit={p.kind === 'Limit'} />
-          ))}
-        </View>
-      </Card>
-    </ScrollView>
+        <NutrientsCard progress={day.progress} onSeeAll={() => setShowNutrients(true)}
+          onFillGaps={() => router.push({ pathname: '/gaps', params: { date } })} />
+      </ScrollView>
+
+      <EntrySheet
+        entry={editing}
+        draft={editing ? drafts[editing.id] ?? null : null}
+        onDraft={(d) => { if (editing) setDrafts((x) => ({ ...x, [editing.id]: d })); }}
+        onClose={() => setEditing(null)} // draft is kept: reopening the same food restores it
+        onSave={saveEntry}
+        onDelete={deleteEntry}
+        saving={update.isPending}
+      />
+      <NutrientsSheet visible={showNutrients} onClose={() => setShowNutrients(false)} progress={day.progress} />
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  page: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
-  dateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  arrow: { fontSize: 32, color: colors.primary, paddingHorizontal: spacing.sm },
-  summary: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
-  actions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  mealButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-});
+function errorText(e: unknown, fallback: string) {
+  return e instanceof Error && e.message ? e.message : fallback;
+}

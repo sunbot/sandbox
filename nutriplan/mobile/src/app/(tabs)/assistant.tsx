@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
-import { router } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAssistant, useLogFood, useRecipeMutations } from '@/api/hooks';
 import type { AssistantResponse, FoodMatch, FoodMatchGroup, RecipeIdea } from '@/api/types';
 import { MacroLine } from '@/components/charts';
@@ -19,6 +19,11 @@ const examples = ['2 eggs and toast for breakfast', 'half a pound of chicken bre
  */
 export default function AssistantScreen() {
   const [text, setText] = useState('');
+  // Today's mic button opens Ask with ?listen=<token>; each new token starts listening once.
+  const { listen } = useLocalSearchParams<{ listen?: string }>();
+  const [listenToken, setListenToken] = useState<string | undefined>(listen);
+  const [micNotice, setMicNotice] = useState<{ text: string; settings: boolean } | null>(null);
+  useEffect(() => { if (listen) { setListenToken(listen); setMicNotice(null); } }, [listen]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const assistant = useAssistant();
   const scroll = useRef<ScrollViewInstance>(null);
@@ -58,11 +63,20 @@ export default function AssistantScreen() {
         ))}
       </ScrollView>
 
+      {micNotice ? (
+        <View style={styles.micNotice} accessibilityLiveRegion="polite">
+          <Text style={[font.small, { flex: 1 }]}>{micNotice.text}</Text>
+          {micNotice.settings ? <Button title="Settings" variant="secondary" compact onPress={() => Linking.openSettings()} /> : null}
+        </View>
+      ) : null}
       <View style={styles.inputBar}>
         <View style={{ flex: 1 }}>
           <Field value={text} onChangeText={setText} placeholder="e.g. a cup of oatmeal with blueberries" onSubmitEditing={() => send(text)} returnKeyType="send" />
         </View>
-        <VoiceButton onText={setText} onFinal={(final) => { setText(final); send(final); }} />
+        <VoiceButton key={listenToken ?? 'mic'} autoStart={!!listenToken}
+          onPermissionDenied={() => setMicNotice({ text: 'Microphone access is off. You can type instead, or allow it in your phone’s settings.', settings: true })}
+          onUnavailable={(reason) => setMicNotice({ text: `${reason} You can type instead.`, settings: false })}
+          onText={setText} onFinal={(final) => { setText(final); send(final); }} />
         <Button title="Send" compact onPress={() => send(text)} loading={assistant.isPending} />
       </View>
     </KeyboardAvoidingView>
@@ -171,6 +185,7 @@ const styles = StyleSheet.create({
   page: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
   examples: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   userBubble: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, maxWidth: '85%' },
+  micNotice: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surfaceMuted, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   inputBar: { flexDirection: 'row', gap: spacing.sm, padding: spacing.md, alignItems: 'center', backgroundColor: colors.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   match: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: 'transparent' },
   matchSelected: { borderColor: colors.primary, backgroundColor: '#eef4fc' },
