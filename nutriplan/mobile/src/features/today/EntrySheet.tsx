@@ -4,6 +4,7 @@ import { Minus, Plus, Trash2 } from '@/components/ds/icons';
 import type { DiaryEntry } from '@/api/types';
 import { AppText, BottomSheet, FilterChip, IconButton, PrimaryButton, SecondaryButton } from '@/components/ds';
 import { amount as fmtQty, meals, type Meal } from '@/lib/format';
+import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export type EntryDraft = { quantity: number; meal: Meal };
@@ -39,18 +40,26 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
   const scale = e.item.quantity > 0 ? d.quantity / e.item.quantity : 1;
   const kcal = e.item.nutrition.calories * scale;
   const changed = Math.abs(scale - 1) > 1e-9 || d.meal !== e.meal;
+  const shortName = e.item.kind === 'Food' ? friendlyFoodName(e.item.name) : e.item.name;
+  const showFull = shortName !== e.item.name.trim(); // the full USDA description, when the list shows a shorter name
 
   return (
     <BottomSheet
       visible={!!entry}
       onClose={onClose}
-      title={e.item.name}
+      title={shortName}
       footer={<>
         <PrimaryButton label={changed ? 'Save changes' : 'Done'} onPress={() => (changed ? onSave(e, d) : onClose())} loading={saving} fullWidth />
         <SecondaryButton label="Delete" icon={Trash2} tone="danger" onPress={() => onDelete(e)} fullWidth />
       </>}
     >
       <View style={{ gap: t.space.lg }}>
+        {showFull ? (
+          <View style={{ gap: 2 }}>
+            <AppText variant="caption" tone="secondary">Full description</AppText>
+            <AppText variant="secondary" selectable>{e.item.name}</AppText>
+          </View>
+        ) : null}
         {editableAmount ? (
           <View style={{ gap: t.space.sm }}>
             <AppText variant="label" tone="secondary">Amount</AppText>

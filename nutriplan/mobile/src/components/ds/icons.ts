@@ -6,6 +6,7 @@
 /* eslint-disable no-restricted-imports */
 export type { LucideIcon, LucideProps } from 'lucide-react-native';
 
+export { default as Check } from 'lucide-react-native/icons/check';
 export { default as CalendarClock } from 'lucide-react-native/icons/calendar-clock';
 export { default as CalendarDays } from 'lucide-react-native/icons/calendar-days';
 export { default as ChefHat } from 'lucide-react-native/icons/chef-hat';
@@ -15,6 +16,7 @@ export { default as ChevronRight } from 'lucide-react-native/icons/chevron-right
 export { default as ChevronUp } from 'lucide-react-native/icons/chevron-up';
 export { default as CircleAlert } from 'lucide-react-native/icons/circle-alert';
 export { default as CircleCheck } from 'lucide-react-native/icons/circle-check';
+export { default as CircleDashed } from 'lucide-react-native/icons/circle-dashed';
 export { default as Clock } from 'lucide-react-native/icons/clock';
 export { default as CloudOff } from 'lucide-react-native/icons/cloud-off';
 export { default as Flame } from 'lucide-react-native/icons/flame';

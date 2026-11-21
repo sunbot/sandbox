@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { CircleAlert, CircleCheck, Clock, Flame, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
+import { CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useLargeText, useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
 import type { Theme } from '@/theme/tokens';
 import { AppText, Badge } from './primitives';
@@ -21,43 +21,88 @@ function Track({ ratio, color, height = 8 }: { ratio: number; color: string; hei
   );
 }
 
-/** One macro: name, "eaten / target g", thin bar in the macro's own color. Always labelled (color is never the only cue). */
-export function MacroProgress({ label, value, target, color }: { label: string; value: number; target: number; color: string }) {
+/**
+ * One macro: name, "eaten / target g", thin bar in the macro's own color. Always labelled (color is never the only cue).
+ * `layout="column"` is the compact version used three-across in the summary card.
+ */
+export function MacroProgress({ label, value, target, color, layout = 'row' }: { label: string; value: number; target: number; color: string; layout?: 'row' | 'column' }) {
   const t = useTheme();
   const over = target > 0 && value > target * 1.05;
+  const a11y = `${label}: ${round(value)} of ${round(target)} grams${over ? ', over target' : ''}`;
+  const name = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <AppText variant="label" tone="secondary" numberOfLines={1}>{label}</AppText>
+    </View>
+  );
+  const amount = (
+    <AppText variant="label" numeric numberOfLines={1}>
+      <AppText variant="label" numeric style={{ fontWeight: '600' }}>{round(value)}</AppText>
+      <AppText variant="label" tone="secondary" numeric> / {round(target)} g</AppText>
+    </AppText>
+  );
+  if (layout === 'column') {
+    return (
+      <View accessible accessibilityLabel={a11y} style={{ flex: 1, gap: 4, minWidth: 0 }}>
+        {name}
+        {amount}
+        <Track ratio={target > 0 ? value / target : 0} color={color} height={6} />
+      </View>
+    );
+  }
   return (
-    <View accessible accessibilityLabel={`${label}: ${round(value)} of ${round(target)} grams${over ? ', over target' : ''}`} style={{ gap: 6 }}>
+    <View accessible accessibilityLabel={a11y} style={{ gap: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: t.space.sm }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-          <AppText variant="label" tone="secondary" numberOfLines={1}>{label}</AppText>
-        </View>
-        <AppText variant="label" numeric numberOfLines={1}>
-          <AppText variant="label" numeric style={{ fontWeight: '600' }}>{round(value)}</AppText>
-          <AppText variant="label" tone="secondary" numeric> / {round(target)} g</AppText>
-        </AppText>
+        {name}
+        {amount}
       </View>
       <Track ratio={target > 0 ? value / target : 0} color={color} />
     </View>
   );
 }
 
-export type NutrientStatus = 'low' | 'fair' | 'met' | 'over';
+/**
+ * - `low` / `fair` / `met` / `over`: a finished day (or any day, for limits). Goals: low < 50 %, fair < 90 %, met ≥ 90 %. Limits: over > 100 %.
+ * - `progress`: the day isn't over and this goal is still filling up normally. Not a warning.
+ * - `behind`: the day isn't over, but this goal is well behind the share of calories already eaten.
+ */
+export type NutrientStatus = 'low' | 'fair' | 'met' | 'over' | 'progress' | 'behind';
+
+export function nutrientStatus(amount: number, target: number, kind: 'Goal' | 'Limit'): NutrientStatus {
+  const pct = target > 0 ? amount / target : 0;
+  if (kind === 'Limit') return pct > 1 ? 'over' : 'met';
+  return pct < 0.5 ? 'low' : pct < 0.9 ? 'fair' : 'met';
+}
+
+/**
+ * Status for a day that's still under way. A goal only counts as "behind" when you've eaten at least 30 % of your
+ * calories and the nutrient is under half of that pace (e.g. 60 % of calories eaten but only 20 % of fiber).
+ * Before that, unfinished goals are simply "in progress". Limits are judged as usual: over is over.
+ */
+export function nutrientStatusInProgress(amount: number, target: number, kind: 'Goal' | 'Limit', dayProgress: number): NutrientStatus {
+  const base = nutrientStatus(amount, target, kind);
+  if (kind === 'Limit' || base === 'met') return base;
+  const pct = target > 0 ? amount / target : 0;
+  return dayProgress >= 0.3 && pct < dayProgress * 0.5 ? 'behind' : 'progress';
+}
 
 /**
  * A micronutrient row. Status is shown with icon + word + number (never color alone).
- * Goals: low < 50 %, fair < 90 %, met ≥ 90 %. Limits: over > 100 %.
+ * Pass `status` to override the finished-day status (Today passes the in-progress one).
  */
-export function NutrientProgress({ name, amount, target, unit, kind }: { name: string; amount: number; target: number; unit: string; kind: 'Goal' | 'Limit' }) {
+export function NutrientProgress({ name, amount, target, unit, kind, status: statusOverride }: { name: string; amount: number; target: number; unit: string; kind: 'Goal' | 'Limit'; status?: NutrientStatus }) {
   const t = useTheme();
-  const status = nutrientStatus(amount, target, kind);
+  const status = statusOverride ?? nutrientStatus(amount, target, kind);
   const meta: Record<NutrientStatus, { icon: LucideIcon; word: string; color: string; text: 'warning' | 'error' | 'success' | 'secondary' }> = {
     low: { icon: TriangleAlert, word: 'Low', color: t.colors.warning, text: 'warning' },
     fair: { icon: CircleAlert, word: 'Getting there', color: t.colors.warning, text: 'secondary' },
     met: { icon: CircleCheck, word: kind === 'Limit' ? 'Within limit' : 'Met', color: t.colors.success, text: 'success' },
     over: { icon: TriangleAlert, word: 'Over limit', color: t.colors.error, text: 'error' },
+    progress: { icon: CircleDashed, word: 'In progress', color: t.colors.textMuted, text: 'secondary' },
+    behind: { icon: Clock, word: 'Behind pace', color: t.colors.warning, text: 'secondary' },
   };
   const m = meta[status];
+  const bar = status === 'progress' ? t.colors.primary : m.color; // still filling up: the brand color, not a grey that looks disabled
   const Icon = m.icon;
   const large = useLargeText();
   const value = (
@@ -78,7 +123,7 @@ export function NutrientProgress({ name, amount, target, unit, kind }: { name: s
           {value}
           <AppText variant="caption" tone={m.text}>{m.word}</AppText>
         </View>
-        <Track ratio={target > 0 ? amount / target : 0} color={m.color} height={6} />
+        <Track ratio={target > 0 ? amount / target : 0} color={bar} height={6} />
       </View>
     );
   }
@@ -90,25 +135,22 @@ export function NutrientProgress({ name, amount, target, unit, kind }: { name: s
         {value}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingLeft: 26 }}>
-        <View style={{ flex: 1 }}><Track ratio={target > 0 ? amount / target : 0} color={m.color} height={6} /></View>
+        <View style={{ flex: 1 }}><Track ratio={target > 0 ? amount / target : 0} color={bar} height={6} /></View>
         <AppText variant="caption" tone={m.text} style={{ minWidth: 72, textAlign: 'right' }} numberOfLines={1}>{m.word}</AppText>
       </View>
     </View>
   );
 }
 
-export function nutrientStatus(amount: number, target: number, kind: 'Goal' | 'Limit'): NutrientStatus {
-  const pct = target > 0 ? amount / target : 0;
-  if (kind === 'Limit') return pct > 1 ? 'over' : 'met';
-  return pct < 0.5 ? 'low' : pct < 0.9 ? 'fair' : 'met';
-}
-
 /* ───────────────────────── Calorie ring ───────────────────────── */
 
-/** Compact ring for the day's calories. The number beside it is the read-out; the ring is a glanceable echo. */
-export function CalorieRing({ eaten, target, size = 104 }: { eaten: number; target: number; size?: number }) {
+/**
+ * Compact ring for the day's calories. The center reads "38% of goal" so the percentage is never ambiguous;
+ * the number beside the ring is the main read-out.
+ */
+export function CalorieRing({ eaten, target, size = 88 }: { eaten: number; target: number; size?: number }) {
   const t = useTheme();
-  const stroke = 10;
+  const stroke = 9;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const ratio = target > 0 ? eaten / target : 0;
@@ -124,8 +166,8 @@ export function CalorieRing({ eaten, target, size = 104 }: { eaten: number; targ
         ) : null}
       </Svg>
       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Flame size={22} color={over ? t.colors.error : t.colors.primary} strokeWidth={2} />
-        <AppText variant="caption" tone="secondary" numeric>{Math.round(ratio * 100)}%</AppText>
+        <AppText variant="bodyStrong" numeric style={over ? { color: t.colors.errorText } : undefined}>{Math.round(ratio * 100)}%</AppText>
+        <AppText variant="caption" tone="secondary">of goal</AppText>
       </View>
     </View>
   );

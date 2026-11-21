@@ -7,7 +7,7 @@ import { useDeleteEntry, useLogFood, useLogRecipe, usePlanMutations, useUpdateEn
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
 import { AppText, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
 import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
-import { MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton } from '@/features/today/sections';
+import { MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -22,8 +22,10 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const snackbar = useSnackbar();
   const [date, setDate] = useState(today());
-  const quickMeal = mealForNow();
-  const data = useTodayData(date, quickMeal);
+  const quickMeal = mealForNow(); // default for "Log food", "Scan" and Recent
+  const [recentMeal, setRecentMeal] = useState<Meal>(quickMeal); // where Recent chips add to; you can change it
+  const [pickingMeal, setPickingMeal] = useState(false);
+  const data = useTodayData(date, recentMeal);
 
   const del = useDeleteEntry();
   const update = useUpdateEntry();
@@ -45,23 +47,23 @@ export default function TodayScreen() {
   const addRecent = useCallback(async (q: QuickLogItem) => {
     try {
       const created = q.item.recipeId
-        ? await logRecipe.mutateAsync({ date, meal: quickMeal, recipeId: q.item.recipeId, servings: q.item.quantity })
+        ? await logRecipe.mutateAsync({ date, meal: recentMeal, recipeId: q.item.recipeId, servings: q.item.quantity })
         : q.item.foodId && q.item.grams
-          ? await logFood.mutateAsync({ date, meal: quickMeal, foodId: q.item.foodId, grams: q.item.grams })
+          ? await logFood.mutateAsync({ date, meal: recentMeal, foodId: q.item.foodId, grams: q.item.grams })
           : null;
       if (!created) return;
-      snackbar({ message: `Added ${q.item.name} to ${quickMeal === 'Snack' ? 'snacks' : quickMeal.toLowerCase()}`, actionLabel: 'Undo', onAction: () => del.mutate(created.id) });
+      snackbar({ message: `Added ${displayName(q.item)} to ${recentMeal === 'Snack' ? 'snacks' : recentMeal.toLowerCase()}`, actionLabel: 'Undo', onAction: () => del.mutate(created.id) });
     } catch (e) {
       snackbar({ message: errorText(e, "Couldn't add that food") });
     }
-  }, [date, quickMeal, logFood, logRecipe, del, snackbar]);
+  }, [date, recentMeal, logFood, logRecipe, del, snackbar]);
 
   const logPlanned = useCallback(async (p: PlanEntry) => {
     setLoggingId(p.id);
     try {
       // Existing endpoint: creates the diary entry from the plan and marks the plan item eaten (no duplicate).
       await plan.eaten.mutateAsync({ id: p.id });
-      snackbar({ message: `Logged ${p.item.name}` });
+      snackbar({ message: `Logged ${displayName(p.item)}` });
     } catch (e) {
       snackbar({ message: errorText(e, "Couldn't log that meal") });
     } finally {
@@ -78,7 +80,7 @@ export default function TodayScreen() {
       setDrafts(({ [e.id]: _, ...rest }) => rest);
       setEditing(null);
       snackbar({
-        message: `Updated ${e.item.name}`,
+        message: `Updated ${displayName(e.item)}`,
         actionLabel: 'Undo',
         onAction: () => update.mutate({ id: e.id, scale: scaled ? 1 / scale : undefined, meal: moved ? e.meal : undefined }),
       });
@@ -92,7 +94,7 @@ export default function TodayScreen() {
     setEditing(null);
     data.hide(e.id); // disappears now; the server delete happens when the Undo window closes
     snackbar({
-      message: `Deleted ${e.item.name}`,
+      message: `Deleted ${displayName(e.item)}`,
       actionLabel: 'Undo',
       onAction: () => data.unhide(e.id),
       onTimeout: () => del.mutate(e.id, {
@@ -149,6 +151,9 @@ export default function TodayScreen() {
 
   const day = data.view;
   const targets = data.targets.data;
+  // Today (or a future day) is still under way: nutrients are judged against the calories eaten so far, not the full day.
+  const nutrientMode: NutrientMode = { inProgress: date >= today(), dayProgress: targets.calories > 0 ? day.totals.calories / targets.calories : 0 };
+  const anythingLogged = day.meals.some((m) => m.entries.length > 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
@@ -162,7 +167,7 @@ export default function TodayScreen() {
         <View style={{ gap: t.space.md }}>
           <QuickActions onSearch={() => go('/food/search')} onScan={() => go('/scan')}
             onVoice={() => router.push({ pathname: '/assistant', params: { listen: String(Date.now()) } })} />
-          <RecentFoods items={data.quick.data ?? []} meal={quickMeal} onPick={addRecent} />
+          <RecentFoods items={data.quick.data ?? []} meal={recentMeal} onChangeMeal={() => setPickingMeal(true)} onPick={addRecent} />
         </View>
 
         <View style={{ gap: t.space.md }}>
@@ -180,7 +185,7 @@ export default function TodayScreen() {
           })}
         </View>
 
-        <NutrientsCard progress={day.progress} onSeeAll={() => setShowNutrients(true)}
+        <NutrientsCard progress={day.progress} mode={nutrientMode} anythingLogged={anythingLogged} onSeeAll={() => setShowNutrients(true)}
           onFillGaps={() => router.push({ pathname: '/gaps', params: { date } })} />
       </ScrollView>
 
@@ -193,7 +198,9 @@ export default function TodayScreen() {
         onDelete={deleteEntry}
         saving={update.isPending}
       />
-      <NutrientsSheet visible={showNutrients} onClose={() => setShowNutrients(false)} progress={day.progress} />
+      <NutrientsSheet visible={showNutrients} onClose={() => setShowNutrients(false)} progress={day.progress} mode={nutrientMode} />
+      <MealPickerSheet visible={pickingMeal} meal={recentMeal} onClose={() => setPickingMeal(false)}
+        onPick={(m) => { setRecentMeal(m); setPickingMeal(false); }} />
     </View>
   );
 }
