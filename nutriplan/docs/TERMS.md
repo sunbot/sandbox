@@ -52,3 +52,11 @@ recipe's own calories; when the two differ noticeably the screen says so (fiber,
   reaches a goal or exceeds a limit still counts.
 - Weekly notes ("Below goal on average…") need at least 3 finished logged days and skip nutrients with missing data.
 - **From** (food sources) is shown for a single day only, from each entry's saved nutrition snapshot.
+
+## Week screen
+
+- **Weekly target**, **Eaten** (diary), **Still planned** (plan entries still Planned, today and later), **Eaten + planned**
+  (projected), and **Not planned yet** (target − eaten − planned) or **Over if you follow the plan**. These come from the server's
+  weekly budget unchanged.
+- The **By day** chart has one column per day in the week's configured order: solid = eaten, soft dashed = still planned, a line =
+  that day's adjusted target. Past days over target are apricot. Tap a day for its exact numbers; its card opens below.
