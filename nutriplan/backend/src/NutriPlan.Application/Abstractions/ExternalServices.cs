@@ -7,8 +7,23 @@ namespace NutriPlan.Application.Abstractions;
 public interface IBarcodeProvider
 {
     string Name { get; }
-    /// <summary>Returns a new, unsaved <see cref="Food"/> or null if the barcode is unknown.</summary>
-    Task<Food?> LookupAsync(string normalizedBarcode, CancellationToken ct = default);
+    /// <summary>
+    /// Found (a new, unsaved <see cref="Food"/>), NotFound (the provider answered and doesn't know the code), or Failed
+    /// (couldn't get an answer: network, timeout, rate limit, unreadable response). A failure is never reported as not found.
+    /// </summary>
+    Task<BarcodeLookup> LookupAsync(string normalizedBarcode, CancellationToken ct = default);
+}
+
+public enum BarcodeLookupStatus { Found, NotFound, Failed }
+
+/// <summary>Why a provider couldn't answer. Temporary: the user should retry, not type the label in.</summary>
+public enum ProviderFailure { Network, Timeout, RateLimited, BadResponse }
+
+public sealed record BarcodeLookup(BarcodeLookupStatus Status, Food? Food = null, ProviderFailure? Failure = null)
+{
+    public static BarcodeLookup Found(Food food) => new(BarcodeLookupStatus.Found, food);
+    public static readonly BarcodeLookup NotFound = new(BarcodeLookupStatus.NotFound);
+    public static BarcodeLookup Failed(ProviderFailure why) => new(BarcodeLookupStatus.Failed, null, why);
 }
 
 public interface IWebPageFetcher

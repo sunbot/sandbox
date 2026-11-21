@@ -143,6 +143,23 @@ public sealed class Food
     };
 
     /// <summary>Strips non-digits and normalizes UPC-A (12) to EAN-13 so both scan formats match.</summary>
+    /// <summary>
+    /// A normalized code that can be a retail product: 8 digits (EAN-8 / UPC-E, whose check digit is computed on the expanded
+    /// form, so not checked here) or 13/14 digits with a valid GS1 check digit.
+    /// </summary>
+    public static bool IsPlausibleBarcode(string normalized)
+    {
+        if (normalized.Length == 8) return true;
+        if (normalized.Length is not (13 or 14)) return false;
+        var sum = 0;
+        for (var i = 0; i < normalized.Length - 1; i++)
+        {
+            var d = normalized[normalized.Length - 2 - i] - '0';
+            sum += i % 2 == 0 ? d * 3 : d;
+        }
+        return (10 - sum % 10) % 10 == normalized[^1] - '0';
+    }
+
     public static string? NormalizeBarcode(string? barcode)
     {
         if (string.IsNullOrWhiteSpace(barcode)) return null;

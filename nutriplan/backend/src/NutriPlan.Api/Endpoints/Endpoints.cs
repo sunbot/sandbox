@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using NutriPlan.Application.Common;
+using NutriPlan.Application.Abstractions;
 using NutriPlan.Application.Assistant;
 using NutriPlan.Application.Diary;
 using NutriPlan.Application.Foods;
@@ -36,8 +37,22 @@ public static class FoodEndpoints
         var g = api.MapGroup("/foods").WithTags("Foods");
         g.MapGet("/search", (string q, int? limit, FoodService s, CancellationToken ct) => s.SearchAsync(q, Math.Clamp(limit ?? 25, 1, 100), ct));
         g.MapGet("/match", (string text, FoodService s, CancellationToken ct) => s.MatchTextAsync(text, 8, ct));
-        g.MapGet("/barcode/{code}", async (string code, FoodService s, CancellationToken ct) =>
-            await s.LookupBarcodeAsync(code, ct) is { } food ? Results.Ok(food) : Results.NotFound(new { title = "Barcode not found. Add it as a custom food." }));
+        g.MapGet("/barcode/{code}", async (string code, FoodService s, CancellationToken ct) => await s.LookupBarcodeAsync(code, ct) switch
+        {
+            { Food: { } food } => Results.Ok(food),
+            { Failure: null } => Results.NotFound(new { title = "This barcode isn't in any food database yet.", reason = "NotFound" }),
+            { Failure: var why } => Results.Json(new
+            {
+                title = why switch
+                {
+                    ProviderFailure.Timeout => "The product database took too long to answer.",
+                    ProviderFailure.RateLimited => "The product database is busy right now.",
+                    ProviderFailure.BadResponse => "The product database sent an answer the app couldn't read.",
+                    _ => "Couldn't reach the product database.",
+                },
+                reason = why.ToString(),
+            }, statusCode: StatusCodes.Status503ServiceUnavailable),
+        });
         g.MapGet("/{id:guid}", (Guid id, FoodService s, CancellationToken ct) => s.GetAsync(id, ct));
         g.MapGet("/{id:guid}/quantity", (Guid id, double amount, string? unit, FoodService s, CancellationToken ct) => s.ResolveQuantityAsync(id, amount, unit, ct));
         g.MapPost("/", (CreateFoodRequest r, FoodService s, CancellationToken ct) => s.CreateCustomAsync(r, ct));

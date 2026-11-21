@@ -1,7 +1,8 @@
 import { loadSettings } from '@/lib/settings';
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  /** `reason` is the server's machine-readable cause when it gives one (e.g. "NotFound", "Timeout"). */
+  constructor(message: string, public status: number, public reason?: string) {
     super(message);
   }
 }
@@ -36,7 +37,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
     throw new ApiError('The server sent a response the app could not read.', res.status);
   }
   if (res.status === 401) throw new ApiError('API key missing or wrong — enter it in More → Settings.', 401);
-  if (!res.ok) throw new ApiError(data?.detail ?? data?.title ?? `Request failed (${res.status})`, res.status);
+  if (!res.ok) throw new ApiError(data?.detail ?? data?.title ?? `Request failed (${res.status})`, res.status, typeof data?.reason === 'string' ? data.reason : undefined);
   return data as T;
 }
 

@@ -15,6 +15,9 @@ namespace NutriPlan.Application.Foods;
 public sealed record PreparationDto(string State, string? Requested, string? Note, Guid? OtherFoodId, string? OtherState);
 
 /// <param name="Confidence">0–1 from the ranking score; below 0.5 the match deserves a look.</param>
+/// <summary>Food when found; otherwise Failure says whether a provider couldn't be reached (null = genuinely not found).</summary>
+public sealed record BarcodeResult(FoodSummaryDto? Food, ProviderFailure? Failure);
+
 public sealed record FoodMatchDto(
     FoodSummaryDto Food,
     double Score,
@@ -97,21 +100,32 @@ public sealed class FoodService(
     /// Barcode lookup: local database first (USDA branded import, your own foods, earlier scans),
     /// then each external provider in order. External hits are saved locally so the next scan is instant.
     /// </summary>
-    public async Task<FoodSummaryDto?> LookupBarcodeAsync(string barcode, CancellationToken ct = default)
+    /// <summary>
+    /// Local foods first, then each barcode provider in order. "Not found" only when every provider answered that it doesn't
+    /// know the code; if any provider couldn't be reached, the result is a temporary failure so the app offers a retry.
+    /// </summary>
+    public async Task<BarcodeResult> LookupBarcodeAsync(string barcode, CancellationToken ct = default)
     {
-        var normalized = Food.NormalizeBarcode(barcode) ?? throw new ValidationException("Barcode has no digits.");
+        var normalized = Food.NormalizeBarcode(barcode) ?? throw new ValidationException("That barcode has no digits. Scan it again.");
+        if (!Food.IsPlausibleBarcode(normalized)) throw new ValidationException("That doesn't look like a product barcode. Scan it again, or enter the label by hand.");
         var local = await foods.FindByBarcodeAsync(normalized, ct);
-        if (local is not null) return FoodSummaryDto.From(local);
+        if (local is not null) return new(FoodSummaryDto.From(local), null);
 
+        ProviderFailure? failure = null;
         foreach (var provider in barcodeProviders)
         {
-            var found = await provider.LookupAsync(normalized, ct);
-            if (found is null) continue;
-            foods.Add(found);
-            await uow.SaveChangesAsync(ct);
-            return FoodSummaryDto.From(found);
+            var result = await provider.LookupAsync(normalized, ct);
+            if (result is { Status: BarcodeLookupStatus.Found, Food: { } found })
+            {
+                // Two providers can know the same product under differently formatted codes: keep the first one saved.
+                if (await foods.FindByBarcodeAsync(found.Barcode ?? normalized, ct) is { } existing) return new(FoodSummaryDto.From(existing), null);
+                foods.Add(found);
+                await uow.SaveChangesAsync(ct);
+                return new(FoodSummaryDto.From(found), null);
+            }
+            if (result.Status == BarcodeLookupStatus.Failed) failure ??= result.Failure;
         }
-        return null;
+        return new(null, failure);
     }
 
     /// <summary>Creates a food from a nutrition label (values per serving are converted to per 100 g).</summary>
