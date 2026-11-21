@@ -32,11 +32,17 @@ public static partial class RuleBasedInterpreter
         }
 
         var meal = MealFrom(lower);
-        var date = DateFrom(lower, today);
+        var wantsPlan = PlanWords().IsMatch(lower);
+        // "Friday": the coming Friday when planning, the last one when logging ("I had pizza on Friday").
+        var date = DateFrom(lower, today) ?? WeekdayFrom(lower, today, forward: wantsPlan || !LogVerbs().IsMatch(lower) && !lower.Contains("had") && !lower.Contains("ate"));
         var isLog = LogVerbs().IsMatch(lower) || meal is not null;
+        // Anything for a future day is a plan: you can't have eaten it yet.
+        var isPlan = wantsPlan || date > today;
 
-        var cleaned = MealPhrase().Replace(t, " ");
+        var cleaned = PlanWords().Replace(t, " ");
+        cleaned = MealPhrase().Replace(cleaned, " ");
         cleaned = DatePhrase().Replace(cleaned, " ");
+        cleaned = WeekdayPhrase().Replace(cleaned, " ");
         cleaned = MultiSpace().Replace(cleaned, " ").Trim();
 
         var items = QuantityTextParser.SplitItems(cleaned)
@@ -45,7 +51,8 @@ public static partial class RuleBasedInterpreter
             .Select(p => new InterpretedItem(p.FoodText, p.Amount, p.Unit, p.Preparation, null, CookedStateFrom(p.FoodText + " " + p.Preparation)))
             .ToList();
 
-        return new InterpretedRequest(isLog ? AssistantIntent.LogFood : AssistantIntent.FindFood, items, meal, date, null, null, null);
+        var intent = isPlan ? AssistantIntent.PlanMeal : isLog ? AssistantIntent.LogFood : AssistantIntent.FindFood;
+        return new InterpretedRequest(intent, items, meal, date, null, null, null);
     }
 
     public static MealSlot? MealFrom(string lower) =>
@@ -58,6 +65,21 @@ public static partial class RuleBasedInterpreter
         lower.Contains("yesterday") ? today.AddDays(-1) :
         lower.Contains("tomorrow") ? today.AddDays(1) :
         lower.Contains("today") ? today : null;
+
+    private static readonly string[] Weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+    /// <summary>"friday", "on fri", "next tuesday" → that date: the coming one (forward) or the most recent one.</summary>
+    public static DateOnly? WeekdayFrom(string lower, DateOnly today, bool forward)
+    {
+        var m = WeekdayPhrase().Match(lower);
+        if (!m.Success) return null;
+        var word = m.Groups["day"].Value;
+        var target = Array.FindIndex(Weekdays, d => d.StartsWith(word[..3]));
+        if (target < 0) return null;
+        var diff = (target - (int)today.DayOfWeek + 7) % 7;
+        if (forward) return today.AddDays(diff == 0 && m.Groups["next"].Success ? 7 : diff);
+        return today.AddDays(diff == 0 ? 0 : diff - 7);
+    }
 
     private static string? CookedStateFrom(string text)
     {
@@ -96,4 +118,11 @@ public static partial class RuleBasedInterpreter
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex MultiSpace();
+
+    [GeneratedRegex(@"^(plan|schedule|let'?s have|i'?ll have|i want to have)\b|\b(to|on|in) (my|the) (meal )?plan\b|\bmeal plan\b|\bplan (for|to have)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex PlanWords();
+
+    /// <summary>Full day names anywhere ("friday dinner"); short ones only after on/this/for/next, so "sun-dried" isn't Sunday.</summary>
+    [GeneratedRegex(@"\b(?:(?:on|this|for|(?<next>next)) (?<day>mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\b|(?:(?:on|this|for|(?<next>next)) )?(?<day>monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b)", RegexOptions.IgnoreCase)]
+    private static partial Regex WeekdayPhrase();
 }

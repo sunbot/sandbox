@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useAssistant, useLogFood, useRecipeMutations } from '@/api/hooks';
+import { useAssistant, useLogFood, usePlanMutations, useRecipeMutations } from '@/api/hooks';
 import type { AssistantResponse, FoodMatch, FoodMatchGroup, RecipeIdea } from '@/api/types';
 import { MacroLine } from '@/components/charts';
 import { Button, Card, Chip, Field, QualityBadge } from '@/components/ui';
 import { VoiceButton } from '@/components/VoiceButton';
-import { mealForNow, today } from '@/lib/format';
+import { addDays, dayLabel, fromIsoDate, mealForNow, today, type Meal } from '@/lib/format';
 import { Check } from '@/components/ds/icons';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
@@ -85,16 +85,21 @@ export default function AssistantScreen() {
 }
 
 function ResponseView({ r }: { r: AssistantResponse }) {
-  const meal = r.meal ?? mealForNow();
+  // Planning ("plan pizza for Friday dinner") puts food on the plan for that day, never in the diary.
+  const planning = r.intent === 'PlanMeal';
+  const meal = (r.meal ?? (planning ? 'Dinner' : mealForNow())) as Meal;
   return (
     <View style={{ gap: spacing.sm }}>
       <Text style={font.body}>{r.reply}</Text>
-      {r.foodMatches.map((g, i) => <MatchGroup key={i} group={g} date={r.date} meal={meal} />)}
       {r.savedRecipes.map((s) => (
-        <Pressable key={s.id} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: s.id } })}>
-          <Card><Text style={font.heading}>{s.name}</Text><MacroLine n={s.perServing} /><Text style={font.tiny}>per serving · from your recipes</Text></Card>
+        <Pressable key={s.id} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: s.id, planDate: planning ? r.date : undefined } })}>
+          <Card style={{ gap: spacing.xs }}>
+            <Text style={font.heading}>{s.name}</Text><MacroLine n={s.perServing} /><Text style={font.tiny}>per serving · from your recipes</Text>
+            {planning ? <PlanRecipeButton recipeId={s.id} date={r.date} meal={meal} /> : null}
+          </Card>
         </Pressable>
       ))}
+      {r.foodMatches.map((g, i) => <MatchGroup key={i} group={g} date={r.date} meal={meal} planning={planning} />)}
       {r.recipeIdeas.map((idea, i) => <IdeaCard key={i} idea={idea} />)}
       {r.cookable.map((c) => (
         <Pressable key={c.recipe.id} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: c.recipe.id } })}>
@@ -110,23 +115,52 @@ function ResponseView({ r }: { r: AssistantResponse }) {
   );
 }
 
-function MatchGroup({ group, date, meal }: { group: FoodMatchGroup; date: string; meal: AssistantResponse['meal'] & string }) {
+/** "Plan for Fri · Dinner": short enough for a button, specific enough to trust. */
+const planLabel = (date: string, meal: Meal) => {
+  const day = date === today() || date === addDays(today(), 1) ? dayLabel(date).toLowerCase() : fromIsoDate(date).toLocaleDateString(undefined, { weekday: 'short' });
+  return `Plan for ${day} · ${meal}`;
+};
+
+function PlanRecipeButton({ recipeId, date, meal }: { recipeId: string; date: string; meal: Meal }) {
+  const plan = usePlanMutations();
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <View style={{ gap: spacing.xs, alignSelf: 'flex-start' }}>
+      <Button title={done ? 'Planned' : planLabel(date, meal)} icon={done ? Check : undefined} compact disabled={done} loading={plan.addRecipe.isPending}
+        onPress={async () => {
+          try { await plan.addRecipe.mutateAsync({ date, meal, recipeId, servings: 1 }); setDone(true); setError(null); }
+          catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+        }} />
+      {error ? <Text style={[font.small, { color: colors.danger }]}>{error}</Text> : null}
+    </View>
+  );
+}
+
+function MatchGroup({ group, date, meal, planning }: { group: FoodMatchGroup; date: string; meal: Meal; planning: boolean }) {
   const [selected, setSelected] = useState(0);
   const [added, setAdded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const log = useLogFood();
+  const plan = usePlanMutations();
   const match: FoodMatch | undefined = group.matches[selected];
   if (!match) return <Card><Text style={font.body}>No match for “{group.foodQuery}”.</Text></Card>;
+  const mode = planning ? 'plan' : 'log';
+  const busy = planning ? plan.addFood.isPending : log.isPending;
 
   const add = async () => {
     if (!match.quantity.grams) {
-      router.push({ pathname: '/food/[id]', params: { id: match.food.id, date, meal, mode: 'log' } });
+      router.push({ pathname: '/food/[id]', params: { id: match.food.id, date, meal, mode } });
       return;
     }
     try {
-      await log.mutateAsync({ date, meal, foodId: match.food.id, grams: match.quantity.grams });
+      if (planning) await plan.addFood.mutateAsync({ date, meal, foodId: match.food.id, grams: match.quantity.grams });
+      else await log.mutateAsync({ date, meal, foodId: match.food.id, grams: match.quantity.grams });
       setAdded(true);
+      setError(null);
     } catch (e) {
-      Alert.alert('Could not add', e instanceof Error ? e.message : String(e));
+      // Shown on screen: alerts don't appear in the web version.
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -148,9 +182,11 @@ function MatchGroup({ group, date, meal }: { group: FoodMatchGroup; date: string
       {match.nutrition && <MacroLine n={match.nutrition} />}
       <Text style={font.tiny}>{match.quantity.explanation}</Text>
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        <Button title={added ? 'Added' : `Add to ${meal}`} icon={added ? Check : undefined} compact disabled={added} loading={log.isPending} onPress={add} />
-        <Button title="Adjust" variant="secondary" compact onPress={() => router.push({ pathname: '/food/[id]', params: { id: match.food.id, date, meal, mode: 'log', grams: match.quantity.grams ? String(match.quantity.grams) : undefined } })} />
+        <Button title={added ? (planning ? 'Planned' : 'Added') : planning ? planLabel(date, meal) : `Add to ${meal}`} icon={added ? Check : undefined}
+          compact disabled={added} loading={busy} onPress={add} />
+        <Button title="Adjust" variant="secondary" compact onPress={() => router.push({ pathname: '/food/[id]', params: { id: match.food.id, date, meal, mode, grams: match.quantity.grams ? String(match.quantity.grams) : undefined } })} />
       </View>
+      {error ? <Text style={[font.small, { color: colors.danger }]}>{error}</Text> : null}
     </Card>
   );
 }

@@ -202,11 +202,62 @@ public class ServiceTests
     }
 
     [Fact]
+    public void Ranker_prefers_the_food_over_dishes_that_mention_it()
+    {
+        var pizza = new[] { Row("Topping from cheese pizza", FoodSource.UsdaSurvey), Row("Dessert pizza", FoodSource.UsdaSurvey), Row("Pizza, cheese, from restaurant or fast food, medium crust", FoodSource.UsdaSurvey) };
+        Assert.StartsWith("Pizza, cheese", FoodRanker.Rank("pizza", pizza)[0].Food.Name);
+    }
+
+    [Fact]
     public void Recipe_matching_ignores_logging_history()
     {
         var yogurt = new FoodSearchRow(MakeFood("Yogurt, whole milk, plain", FoodSource.UsdaSrLegacy), 0.4, 60);
         var milk = new FoodSearchRow(MakeFood("Milk, whole", FoodSource.UsdaSurvey), 0.4, 0);
         Assert.Equal("Milk, whole", FoodRanker.Rank("whole milk", [yogurt, milk], useHistory: false)[0].Food.Name);
+    }
+
+    // Saturday 21 Nov 2026
+    private static readonly DateOnly Sat = new(2026, 11, 21);
+
+    [Fact]
+    public void Planning_requests_are_plans_not_diary_entries()
+    {
+        var r = Assistant.RuleBasedInterpreter.Interpret("plan pizza for friday dinner", Sat);
+        Assert.Equal(Abstractions.AssistantIntent.PlanMeal, r.Intent);
+        Assert.Equal(new DateOnly(2026, 11, 27), r.Date); // the coming Friday
+        Assert.Equal(Domain.Diary.MealSlot.Dinner, r.Meal);
+        Assert.Equal("pizza", Assert.Single(r.Items).FoodQuery);
+    }
+
+    [Theory]
+    [InlineData("2 eggs for breakfast tomorrow")]
+    [InlineData("turkey chili for dinner on monday")]
+    [InlineData("add salmon to my plan for next saturday")]
+    public void Food_for_a_future_day_is_planned(string text) =>
+        Assert.Equal(Abstractions.AssistantIntent.PlanMeal, Assistant.RuleBasedInterpreter.Interpret(text, Sat).Intent);
+
+    [Fact]
+    public void Past_weekdays_are_still_logged()
+    {
+        var r = Assistant.RuleBasedInterpreter.Interpret("I had pizza on friday", Sat);
+        Assert.Equal(Abstractions.AssistantIntent.LogFood, r.Intent);
+        Assert.Equal(new DateOnly(2026, 11, 20), r.Date);
+    }
+
+    [Fact]
+    public void Food_words_are_not_weekdays()
+    {
+        var r = Assistant.RuleBasedInterpreter.Interpret("sun-dried tomatoes and saturated fat free yogurt", Sat);
+        Assert.Null(r.Date);
+        Assert.NotEqual(Abstractions.AssistantIntent.PlanMeal, r.Intent);
+    }
+
+    [Fact]
+    public void Language_model_logging_for_a_future_day_becomes_a_plan()
+    {
+        Assert.Equal(Abstractions.AssistantIntent.PlanMeal, Assistant.AssistantService.ResolveIntent(Abstractions.AssistantIntent.LogFood, Sat.AddDays(3), Sat));
+        Assert.Equal(Abstractions.AssistantIntent.LogFood, Assistant.AssistantService.ResolveIntent(Abstractions.AssistantIntent.LogFood, Sat, Sat));
+        Assert.Equal(Abstractions.AssistantIntent.FindRecipes, Assistant.AssistantService.ResolveIntent(Abstractions.AssistantIntent.FindRecipes, Sat.AddDays(3), Sat));
     }
 
     private static FoodSearchRow Row(string name, FoodSource source) => new(MakeFood(name, source), 0.3, 0);

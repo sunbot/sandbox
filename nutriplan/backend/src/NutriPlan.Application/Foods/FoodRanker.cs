@@ -38,7 +38,7 @@ public static partial class FoodRanker
     /// <summary>Signals a processed/derived product rather than the food itself.</summary>
     private static readonly HashSet<string> ProcessedWords =
     [
-        "breaded", "nugget", "tender", "roll", "patty", "patties", "stick", "imitation", "babyfood", "canned", "dried",
+        "breaded", "nugget", "tender", "topping", "roll", "patty", "patties", "stick", "imitation", "babyfood", "canned", "dried",
         "powder", "dehydrated", "frozen", "heated", "mix", "substitute", "flavored", "sweetened", "bar",
     ];
 
@@ -91,6 +91,10 @@ public static partial class FoodRanker
             // equally, so they still rank among themselves.)
             if (!headTokens.Any(querySet.Contains))
                 score -= 6;
+            // USDA names lead with the food itself ("Pizza, cheese"): a name that starts with a search word is that food,
+            // unlike "Topping from cheese pizza" or "Dessert pizza".
+            else if (headTokens.Count > 0 && querySet.Contains(headTokens[0]))
+                score += 8;
 
             // "Beans and brown rice", "Chicken with rice" for "brown rice": a combination dish you didn't ask for.
             if (!wantsCombination && CombinationDish().IsMatch(head))

@@ -64,6 +64,7 @@ public sealed class AssistantService(
 
         var date = interpreted.Date ?? today;
         var meal = interpreted.Meal?.ToString();
+        interpreted = interpreted with { Intent = ResolveIntent(interpreted.Intent, date, today) };
 
         switch (interpreted.Intent)
         {
@@ -123,6 +124,19 @@ public sealed class AssistantService(
                     var query = item.Brand is null ? item.FoodQuery : $"{item.Brand} {item.FoodQuery}";
                     groups.Add(await foodService.MatchAsync(label, query, item.Amount, item.Unit, item.CookedState, 6, ct));
                 }
+                if (interpreted.Intent == AssistantIntent.PlanMeal)
+                {
+                    // Planning: your own recipes with that name come first ("plan turkey chili for Friday").
+                    var name = string.Join(' ', interpreted.Items.Select(i => i.FoodQuery));
+                    var saved = name.Length < 3 ? [] : (await recipeService.ListAsync(name, null, ct)).Take(3).ToList();
+                    var when = date == today.AddDays(1) ? "tomorrow" : date.ToString("dddd, MMM d");
+                    var planReply = (groups.Count, saved.Count) switch
+                    {
+                        (0, 0) => "I didn't catch what to plan. Try \"plan turkey chili for Friday dinner\".",
+                        _ => $"Planning for {when}{(meal is null ? "" : $", {meal.ToLowerInvariant()}")}. Pick a match and tap Plan — it goes on your plan, not your diary.",
+                    };
+                    return Response(interpreted, planReply, usedModel, meal, date, foods: groups, saved: saved);
+                }
                 var reply = interpreted.Reply ?? (groups.Count switch
                 {
                     0 => "I didn't catch a food. Try something like \"2 eggs and toast\".",
@@ -133,6 +147,13 @@ public sealed class AssistantService(
             }
         }
     }
+
+    /// <summary>
+    /// Food for a future day can only be planned, never logged as eaten — whatever the interpreter said.
+    /// (Before this, "plan pizza for Friday" from the language model fell through to logging.)
+    /// </summary>
+    public static AssistantIntent ResolveIntent(AssistantIntent intent, DateOnly date, DateOnly today) =>
+        intent is AssistantIntent.LogFood or AssistantIntent.FindFood && date > today ? AssistantIntent.PlanMeal : intent;
 
     /// <summary>Calculates an idea's nutrition from USDA data via the normal ingredient matcher (not saved).</summary>
     private async Task<RecipeIdeaDto> PriceIdeaAsync(RecipeIdea idea, CancellationToken ct)
