@@ -142,7 +142,16 @@ export type ImportResult = { imported: number; updated: number; recipes: RecipeS
 export type PantryItem = { id: string; name: string; foodId?: string | null; grams?: number | null; expiresOn?: string | null; isStaple: boolean };
 export type Cookable = { recipe: RecipeSummary; matchPercent: number; have: string[]; missing: string[]; usesExpiringSoon: boolean };
 
-export type HeatmapRow = { nutrientId: number; name: string; unit: string; kind: string; target: number; weeklyAveragePercent: number; days: { date: string; amount: number; percent?: number | null; level: string }[] };
+/** missingFrom: entries that day with no value for the nutrient (the amount is a minimum). */
+export type HeatmapCell = { date: string; amount: number; percent?: number | null; level: string; missingFrom?: number };
+/**
+ * Averages cover finished logged days only (before today): `completedDays` of them, `incompleteDays` with missing data.
+ * `weeklyAveragePercent` is 0 and `averageAmount` null when there are none.
+ */
+export type HeatmapRow = {
+  nutrientId: number; name: string; unit: string; kind: string; target: number; weeklyAveragePercent: number; days: HeatmapCell[];
+  averageAmount?: number | null; completedDays?: number; incompleteDays?: number;
+};
 export type Heatmap = { from: string; to: string; rows: HeatmapRow[]; highlights: string[] };
 
 export type NutrientTarget = { nutrientId: number; name: string; unit: string; group: string; kind: string; target?: number | null; isCustom: boolean; isFocus: boolean };

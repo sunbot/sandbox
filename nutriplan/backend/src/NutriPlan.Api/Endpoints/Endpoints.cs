@@ -140,7 +140,7 @@ public static class InsightEndpoints
 {
     public static void MapInsightEndpoints(this RouteGroupBuilder api)
     {
-        api.MapGet("/insights/heatmap", (DateOnly? date, InsightsService s, CancellationToken ct) => s.GetHeatmapAsync(date, ct)).WithTags("Insights");
+        api.MapGet("/insights/heatmap", (DateOnly? date, DateOnly? today, InsightsService s, CancellationToken ct) => s.GetHeatmapAsync(date, today, ct)).WithTags("Insights");
     }
 }
 

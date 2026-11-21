@@ -44,7 +44,7 @@ export default function RootLayout() {
               <Stack.Screen name="gaps" options={{ title: 'Fill the gaps' }} />
               <Stack.Screen name="grocery" options={{ title: 'Grocery list' }} />
               <Stack.Screen name="pantry" options={{ title: 'Pantry' }} />
-              <Stack.Screen name="insights" options={{ title: 'Nutrients this week' }} />
+              <Stack.Screen name="insights" options={{ title: 'Nutrients' }} />
               <Stack.Screen name="targets" options={{ title: 'Targets' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings' }} />
             </Stack>

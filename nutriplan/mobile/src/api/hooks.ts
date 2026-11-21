@@ -51,7 +51,7 @@ export const useCreateFood = () =>
   });
 
 // ── Diary ─────────────────────────────────────────────────────────────
-export const useDay = (date: string) => useQuery({ queryKey: keys.day(date), queryFn: () => get<T.Day>(`/diary/${date}`) });
+export const useDay = (date: string, enabled = true) => useQuery({ queryKey: keys.day(date), queryFn: () => get<T.Day>(`/diary/${date}`), enabled });
 
 export const useQuickLog = (meal?: Meal) =>
   useQuery({ queryKey: keys.quickLog(meal), queryFn: () => get<T.QuickLogItem[]>(`/diary/quick-log?${q({ meal, limit: 12 })}`) });
@@ -222,7 +222,7 @@ export function usePantryMutations() {
 }
 
 // ── Insights, targets, assistant ──────────────────────────────────────
-export const useHeatmap = (date: string) => useQuery({ queryKey: keys.heatmap(date), queryFn: () => get<T.Heatmap>(`/insights/heatmap?date=${date}`) });
+export const useHeatmap = (date: string) => useQuery({ queryKey: keys.heatmap(date), queryFn: () => get<T.Heatmap>(`/insights/heatmap?${q({ date, today: today() })}`) });
 
 export const useTargets = () => useQuery({ queryKey: keys.targets, queryFn: () => get<T.Targets>('/targets') });
 

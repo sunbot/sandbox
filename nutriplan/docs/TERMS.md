@@ -38,3 +38,16 @@ ingredient weights (raw weight is not cooked weight) or invented densities.
 The macro donut splits *macro-derived* energy (protein 4, carbohydrate 4 including fiber, fat 9 kcal per gram). The centre shows the
 recipe's own calories; when the two differ noticeably the screen says so (fiber, alcohol, rounding) instead of forcing them to match.
 "Based on N% of ingredients" counts lines that have a food and an amount; it does not verify that each match is the right food.
+
+## Nutrients screen
+
+- **Overview** shows one day (today by default) or **Week average**: the average per *finished* logged day; today is never
+  averaged because it is still under way. The heatmap's "avg" column uses the same finished days.
+- Goal statuses: **Goal met** (100%+), **Nearly met** (90–99%, finished day), **Below goal** (under 90%, finished day),
+  **In progress** / **Behind pace** (today). Limit statuses: **Within limit** or **Over limit**; reaching a limit is never shown as an
+  achievement, and limit bars carry a marker at 100%.
+- **Some data missing**: at least one entry has no value for the nutrient (unknown, not zero). The amount is shown as "≥" and the
+  nutrient is never called below goal or within limit, because the real amount may be higher. A known amount that already
+  reaches a goal or exceeds a limit still counts.
+- Weekly notes ("Below goal on average…") need at least 3 finished logged days and skip nutrients with missing data.
+- **From** (food sources) is shown for a single day only, from each entry's saved nutrition snapshot.
