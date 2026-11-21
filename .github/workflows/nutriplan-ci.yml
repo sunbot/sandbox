@@ -1,5 +1,5 @@
 # NutriPlan CI: build + test the backend (incl. real Postgres), type-check + lint the app.
-# Optional deploy: on a push to main, after both jobs pass, ping a Render deploy hook (only if the secret exists).
+# Optional deploy: on a push to the default branch (master), after both jobs pass, ping a Render deploy hook (only if the secret exists).
 name: NutriPlan CI
 
 on:
@@ -81,7 +81,8 @@ jobs:
   deploy:
     name: Deploy (Render hook)
     needs: [backend, app]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The repo's default branch is master; derive it instead of hard-coding a name that can drift.
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     env:
       # Render → your service → Settings → Deploy Hook. Add it as a repository secret named RENDER_DEPLOY_HOOK_URL.

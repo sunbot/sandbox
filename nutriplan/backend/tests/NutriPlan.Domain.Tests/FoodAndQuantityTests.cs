@@ -93,4 +93,20 @@ public class FoodAndQuantityTests
         Assert.Equal(1, sum[NutrientIds.Iron]);
         Assert.Null(sum[NutrientIds.VitaminC]);
     }
+
+    [Fact]
+    public void A_count_word_never_matches_a_volume_measure()
+    {
+        // "1 piece ginger" must not become "1 cup (1\" pieces)" (118 g): leave it for the user to confirm instead.
+        var q = Units.QuantityResolver.Resolve([new FoodPortion("cup (1\" pieces)", 118), new FoodPortion("tsp", 2)], 1, "piece", "Burdock root, raw");
+        Assert.False(q.IsResolved);
+    }
+
+    [Fact]
+    public void One_item_is_the_whole_item_not_a_slice_or_variety()
+    {
+        var tomato = new[] { new FoodPortion("slice", 20), new FoodPortion("grape tomato", 8), new FoodPortion("whole", 125), new FoodPortion("cherry", 17) };
+        Assert.Equal(125, Units.QuantityResolver.Resolve(tomato, 1, "medium", "Tomatoes, raw").Grams);
+        Assert.Equal(250, Units.QuantityResolver.Resolve(tomato, 2, null, "Tomatoes, raw").Grams);
+    }
 }

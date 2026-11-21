@@ -48,6 +48,33 @@ public class ImportTests
     public void Recipe_words_map_to_usda_names(string text, string expected) => Assert.Equal(expected, IngredientQuery.Clean(text));
 
     [Theory]
+    [InlineData("1 tsp Italian seasoning", "dried oregano")]
+    [InlineData("gochugaru", "cayenne")]
+    [InlineData("mirin", "sake")]
+    [InlineData("smoked turkey necks", "smoked turkey meat")]
+    [InlineData("1 pound smoked turkey (necks, legs, or wings)", "smoked turkey meat")]
+    [InlineData("vegetable broth", "chicken broth")]
+    public void Close_substitutes_are_marked_as_stand_ins(string text, string mentions) =>
+        Assert.Contains(mentions, IngredientQuery.StandIn(text));
+
+    [Theory]
+    [InlineData("crushed red pepper flakes")]
+    [InlineData("chicken broth")]
+    [InlineData("chicken or vegetable broth")]
+    [InlineData("shaoxing wine")]
+    [InlineData("smoked turkey")]
+    [InlineData("80/20 ground beef")]
+    public void Same_food_aliases_are_not_stand_ins(string text) => Assert.Null(IngredientQuery.StandIn(text));
+
+    [Theory]
+    [InlineData("1 (6-8 pound) bone-in pork shoulder", true)]
+    [InlineData("1 whole chicken, 4–5 lb", true)]
+    [InlineData("pork neck bones", true)]
+    [InlineData("1½ lb boneless, skinless chicken thighs", false)]
+    [InlineData("2 lb chicken wings", false)]
+    public void Bone_in_weights_are_flagged(string raw, bool flagged) => Assert.Equal(flagged, IngredientQuery.WeightIncludesBone(raw));
+
+    [Theory]
     [InlineData("spaghetti squash")]
     [InlineData("whole milk")]
     [InlineData("chicken breast")]

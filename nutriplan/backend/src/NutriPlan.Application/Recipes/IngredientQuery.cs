@@ -24,83 +24,87 @@ public static partial class IngredientQuery
     /// Everyday recipe words → how USDA names the same food. Checked in order; the first match replaces the whole query.
     /// Only foods whose nutrition is the same (or a close stand-in, noted below) belong here.
     /// </summary>
-    private static readonly (Regex Pattern, string Query)[] Aliases =
+    private static readonly (Regex Pattern, string Query, string? StandIn)[] Aliases =
     [
-        (Rx(@"\b(\d{2})\s*/\s*(\d{1,2})\b.*\bground beef\b|\bground beef\b.*\b(\d{2})\s*/\s*(\d{1,2})\b"), "{beef}"),
-        (Rx(@"\b(\d{2})\s*%\s*lean\b.*\bground beef\b"), "{beefpct}"),
-        (Rx(@"\b(lean|extra lean)\s+ground beef\b"), "beef ground 90 lean meat 10 fat raw"),
-        (Rx(@"\b(ground beef|hamburger meat|minced beef|beef mince)\b"), "beef ground 80 lean meat 20 fat raw"),
-        (Rx(@"\b(italian|seasoned)\s+(bread\s*crumbs|breadcrumbs)\b"), "bread crumbs dry grated seasoned"),
-        (Rx(@"\b(panko|bread\s*crumbs|breadcrumbs)\b"), "bread crumbs dry grated plain"),
-        (Rx(@"\b(marinara|pasta sauce|spaghetti sauce|tomato basil sauce|arrabbiata)\b"), "spaghetti sauce"),
-        (Rx(@"\b(pork shoulder|pork butt|boston butt)\b"), "pork fresh shoulder whole separable lean and fat raw"),
-        (Rx(@"\bcumin\b"), "spices cumin seed"),
-        (Rx(@"\b(italian seasoning|herbes de provence|mixed herbs)\b"), "spices oregano dried"), // stand-in: dried herbs, ~3 kcal/tsp
-        (Rx(@"\b(kosher|sea|flaky|coarse|fine)\s+salt\b"), "salt table"),
-        (Rx(@"\b(extra[- ]virgin olive oil|olive oil|evoo)\b"), "oil olive salad or cooking"),
-        (Rx(@"\b(vegetable oil|canola oil|neutral oil)\b"), "oil canola"),
-        (Rx(@"\b(chicken (broth|stock))\b"), "soup chicken broth ready-to-serve"),
-        (Rx(@"\bheavy (whipping )?cream\b"), "cream fluid heavy whipping"),
-        (Rx(@"\bunsalted butter\b"), "butter without salt"),
-        (Rx(@"\bvanilla( extract| essence)?\b(?! (yogurt|ice cream|soymilk|milk))"), "vanilla extract"),
-        (Rx(@"\b(kombu|kelp)\b"), "seaweed kelp raw"),
-        (Rx(@"\b(frozen |green |sweet |garden )?peas\b(?! *(pods?|shoots))(?<!snow peas)(?<!snap peas)(?<!chick ?peas)(?<!black[- ]eyed peas)"), "peas green frozen unprepared"),
-        (Rx(@"\b(cooked|steamed|leftover)\s+brown rice\b"), "rice brown cooked no added fat"),
-        (Rx(@"\b(cooked|steamed|leftover)\b[\w\s]*?\brice\b(?! (vinegar|wine|noodles|paper|flour))"), "rice white cooked no added fat"),
-        (Rx(@"\bsalmon( fill?ets?| fillet| steaks?| sides?)?\b(?! *(smoked|lox|canned))"), "fish salmon atlantic farmed raw"),
-        (Rx(@"\b(fresh )?dill( weed)?\b(?! pickles?)"), "dill weed fresh"),
-        (Rx(@"\bturkey bacon\b"), "bacon turkey unprepared"),
-        (Rx(@"\bbacon\b"), "pork cured bacon unprepared"),
-        (Rx(@"\bsmoked turkey\b"), "turkey light or dark meat smoked skin eaten"),
-        (Rx(@"\bwhole chickens?\b"), "chicken broilers or fryers meat and skin raw"),
-        (Rx(@"^pepper$"), "spices pepper black"),
-        (Rx(@"\b(garlic cloves?|cloves? (of )?garlic|garlic)\b(?!\s*(powder|salt|cubes?))"), "garlic raw"),
-        (Rx(@"\bcelery (ribs?|stalks?|sticks?)\b|\bcelery\b"), "celery raw"),
-        (Rx(@"\b(dark|light|packed)?\s*brown sugar\b"), "sugars brown"),
-        (Rx(@"\b(semi-?sweet|bittersweet|dark|milk)?\s*chocolate chips\b"), "chocolate chips"),
-        (Rx(@"\b(semi-?sweet|bittersweet) chocolate\b"), "candies semisweet chocolate"),
-        (Rx(@"\b(dutch[- ]process(ed)?|unsweetened)?\s*cocoa( powder)?\b"), "cocoa dry powder unsweetened"),
-        (Rx(@"\ball[- ]purpose flour\b|\bap flour\b|^flour$"), "flour wheat all-purpose enriched bleached"),
-        (Rx(@"\b(crushed red pepper|red[- ]pepper flakes|chili flakes|gochugaru|korean (hot |red )?pepper (flakes|powder))\b"), "spices pepper red or cayenne"), // stand-in for gochugaru
-        (Rx(@"\bcayenne\b"), "spices pepper red or cayenne"),
-        (Rx(@"\b(smoked|sweet|hungarian|spanish)?\s*paprika\b"), "spices paprika"),
-        (Rx(@"\b(white pepper|ground white pepper)\b"), "spices pepper white"),
-        (Rx(@"\b(black pepper|peppercorns?|cracked pepper|ground pepper)\b"), "spices pepper black"),
-        (Rx(@"\b(ancho |chipotle )?chili powder\b"), "spices chili powder"),
-        (Rx(@"\b(dry|dried|ground) mustard\b|\bmustard (powder|seeds?)\b"), "spices mustard seed ground"),
-        (Rx(@"\b(dijon|yellow|whole[- ]grain|stone[- ]ground|brown)?\s*mustard\b(?!\s*greens)"), "mustard prepared yellow"),
-        (Rx(@"\b(lemon|lime|orange) (zest|peel)\b|\bzest of\b"), "lemon peel raw"),
-        (Rx(@"\b(ground|powdered) ginger\b"), "spices ginger ground"),
-        (Rx(@"\b(fresh )?ginger( root)?\b|\bginger cubes?\b"), "ginger root raw"),
-        (Rx(@"\b(toasted )?sesame oil\b"), "oil sesame salad or cooking"),
-        (Rx(@"\b(rice|white|distilled|wine|red wine|white wine|sherry)? ?vinegar\b"), "vinegar"),
-        (Rx(@"\b(apple )?cider vinegar\b"), "vinegar cider"),
-        (Rx(@"\bbalsamic\b"), "vinegar balsamic"),
-        (Rx(@"\b(white |yellow |red )?miso( paste)?\b"), "miso"),
-        (Rx(@"\b(green onions?|scallions?|spring onions?)\b"), "onions spring or scallions raw"),
-        (Rx(@"\b(reduced[- ]sodium|low[- ]sodium|lite) soy sauce\b"), "soy sauce reduced sodium"),
-        (Rx(@"\b(soy sauce|shoyu|tamari)\b"), "soy sauce"),
-        (Rx(@"\b(bouillon cubes?|bouillon|stock cubes?|better than bouillon)\b"), "soup chicken broth or bouillon dry"),
-        (Rx(@"\b(chicken|vegetable|veggie|turkey)( or (chicken|vegetable|veggie))? (broth|stock)\b|^(broth|stock)$"), "soup chicken broth ready-to-serve"),
-        (Rx(@"\bbeef (broth|stock)\b"), "soup beef broth ready-to-serve"),
-        (Rx(@"\bcinnamon( sticks?)?\b"), "spices cinnamon ground"),
-        (Rx(@"\b(whole |ground )?cloves\b"), "spices cloves ground"),
-        (Rx(@"\bcardamom( pods)?\b"), "spices cardamom"),
-        (Rx(@"\bbay leaf|bay leaves\b"), "spices bay leaf"),
-        (Rx(@"(?<!nutritional )\b(instant|active dry|rapid[- ]rise)? ?yeast\b"), "leavening agents yeast baker's active dry"),
-        (Rx(@"\b(nonfat )?dry milk( powder)?\b|\bmilk powder\b"), "milk dry nonfat regular"),
-        (Rx(@"\b(english |persian |hothouse )?cucumbers?\b"), "cucumber with peel raw"),
-        (Rx(@"\b(shaoxing|rice) wine\b|\bmirin\b|\bsake\b"), "alcoholic beverage rice sake"),
-        (Rx(@"\bkimchi\b(?! juice)"), "kimchi"),
-        (Rx(@"\bkalamata olives?\b|\bolives?\b"), "olives"),
-        (Rx(@"\broasted red peppers?\b"), "peppers sweet red canned solids and liquids"),
-        (Rx(@"\brice (stick )?noodles\b|\bvermicelli\b"), "rice noodles dry"),
-        (Rx(@"\bpita( breads?)?\b"), "bread pita"),
-        (Rx(@"\bsourdough( bread| loaf)?\b|\bfrench bread\b|\bbaguette\b|\bciabatta\b"), "bread french or vienna"),
-        (Rx(@"\bcollard( greens)?\b"), "collards raw"),
-        (Rx(@"\b(firm |extra[- ]firm |silken |soft )?tofu\b"), "tofu raw regular prepared with calcium sulfate"),
-        (Rx(@"\b(cooked|leftover)\s+(spaghetti|linguine|fettuccine|penne|rigatoni|macaroni|rotini|fusilli|farfalle|pasta|noodles)\b"), "pasta cooked enriched without added salt"),
-        (Rx(@"\b(spaghetti|linguine|fettuccine|fettucine|penne|rigatoni|ziti|elbow macaroni|macaroni|rotini|fusilli|farfalle|bucatini|angel hair|orzo|pasta)\b(?!\s*(sauce|squash))"), "pasta dry enriched"),
+        (Rx(@"\b(\d{2})\s*/\s*(\d{1,2})\b.*\bground beef\b|\bground beef\b.*\b(\d{2})\s*/\s*(\d{1,2})\b"), "{beef}", null),
+        (Rx(@"\b(\d{2})\s*%\s*lean\b.*\bground beef\b"), "{beefpct}", null),
+        (Rx(@"\b(lean|extra lean)\s+ground beef\b"), "beef ground 90 lean meat 10 fat raw", null),
+        (Rx(@"\b(ground beef|hamburger meat|minced beef|beef mince)\b"), "beef ground 80 lean meat 20 fat raw", null),
+        (Rx(@"\b(italian|seasoned)\s+(bread\s*crumbs|breadcrumbs)\b"), "bread crumbs dry grated seasoned", null),
+        (Rx(@"\b(panko|bread\s*crumbs|breadcrumbs)\b"), "bread crumbs dry grated plain", null),
+        (Rx(@"\b(marinara|pasta sauce|spaghetti sauce|tomato basil sauce|arrabbiata)\b"), "spaghetti sauce", null),
+        (Rx(@"\b(pork shoulder|pork butt|boston butt)\b"), "pork fresh shoulder whole separable lean and fat raw", null),
+        (Rx(@"\bcumin\b"), "spices cumin seed", null),
+        (Rx(@"\b(italian seasoning|herbes de provence|mixed herbs)\b"), "spices oregano dried", "dried oregano for a dried herb blend"),
+        (Rx(@"\b(kosher|sea|flaky|coarse|fine)\s+salt\b"), "salt table", null),
+        (Rx(@"\b(extra[- ]virgin olive oil|olive oil|evoo)\b"), "oil olive salad or cooking", null),
+        (Rx(@"\b(vegetable oil|canola oil|neutral oil)\b"), "oil canola", null),
+        (Rx(@"\b(chicken (broth|stock))\b"), "soup chicken broth ready-to-serve", null),
+        (Rx(@"\bheavy (whipping )?cream\b"), "cream fluid heavy whipping", null),
+        (Rx(@"\bunsalted butter\b"), "butter without salt", null),
+        (Rx(@"\bvanilla( extract| essence)?\b(?! (yogurt|ice cream|soymilk|milk))"), "vanilla extract", null),
+        (Rx(@"\b(kombu|kelp)\b"), "seaweed kelp raw", null),
+        (Rx(@"\b(frozen |green |sweet |garden )?peas\b(?! *(pods?|shoots))(?<!snow peas)(?<!snap peas)(?<!chick ?peas)(?<!black[- ]eyed peas)"), "peas green frozen unprepared", null),
+        (Rx(@"\b(cooked|steamed|leftover)\s+brown rice\b"), "rice brown cooked no added fat", null),
+        (Rx(@"\b(cooked|steamed|leftover)\b[\w\s]*?\brice\b(?! (vinegar|wine|noodles|paper|flour))"), "rice white cooked no added fat", null),
+        (Rx(@"\bsalmon( fill?ets?| fillet| steaks?| sides?)?\b(?! *(smoked|lox|canned))"), "fish salmon atlantic farmed raw", null),
+        (Rx(@"\b(fresh )?dill( weed)?\b(?! pickles?)"), "dill weed fresh", null),
+        (Rx(@"\bturkey bacon\b"), "bacon turkey unprepared", null),
+        (Rx(@"\bbacon\b"), "pork cured bacon unprepared", null),
+        (Rx(@"\bsmoked turkey\s*\(?\s*(necks?|wings?|legs?|parts|butts?)\b"), "turkey light or dark meat smoked skin eaten", "smoked turkey meat for bone-in parts (bones aren't eaten)"),
+        (Rx(@"\bsmoked turkey\b"), "turkey light or dark meat smoked skin eaten", null),
+        (Rx(@"\bwhole chickens?\b"), "chicken broilers or fryers meat and skin raw", null),
+        (Rx(@"^pepper$"), "spices pepper black", null),
+        (Rx(@"\b(garlic cloves?|cloves? (of )?garlic|garlic)\b(?!\s*(powder|salt|cubes?))"), "garlic raw", null),
+        (Rx(@"\bcelery (ribs?|stalks?|sticks?)\b|\bcelery\b"), "celery raw", null),
+        (Rx(@"\b(dark|light|packed)?\s*brown sugar\b"), "sugars brown", null),
+        (Rx(@"\b(semi-?sweet|bittersweet|dark|milk)?\s*chocolate chips\b"), "chocolate chips", null),
+        (Rx(@"\b(semi-?sweet|bittersweet) chocolate\b"), "candies semisweet chocolate", null),
+        (Rx(@"\b(dutch[- ]process(ed)?|unsweetened)?\s*cocoa( powder)?\b"), "cocoa dry powder unsweetened", null),
+        (Rx(@"\ball[- ]purpose flour\b|\bap flour\b|^flour$"), "flour wheat all-purpose enriched bleached", null),
+        (Rx(@"\b(gochugaru|korean (hot |red )?pepper (flakes|powder))\b"), "spices pepper red or cayenne", "cayenne for gochugaru (Korean chili flakes)"),
+        (Rx(@"\b(crushed red pepper|red[- ]pepper flakes|chili flakes)\b"), "spices pepper red or cayenne", null),
+        (Rx(@"\bcayenne\b"), "spices pepper red or cayenne", null),
+        (Rx(@"\b(smoked|sweet|hungarian|spanish)?\s*paprika\b"), "spices paprika", null),
+        (Rx(@"\b(white pepper|ground white pepper)\b"), "spices pepper white", null),
+        (Rx(@"\b(black pepper|peppercorns?|cracked pepper|ground pepper)\b"), "spices pepper black", null),
+        (Rx(@"\b(ancho |chipotle )?chili powder\b"), "spices chili powder", null),
+        (Rx(@"\b(dry|dried|ground) mustard\b|\bmustard (powder|seeds?)\b"), "spices mustard seed ground", null),
+        (Rx(@"\b(dijon|yellow|whole[- ]grain|stone[- ]ground|brown)?\s*mustard\b(?!\s*greens)"), "mustard prepared yellow", null),
+        (Rx(@"\b(lemon|lime|orange) (zest|peel)\b|\bzest of\b"), "lemon peel raw", null),
+        (Rx(@"\b(ground|powdered) ginger\b"), "spices ginger ground", null),
+        (Rx(@"\b(fresh )?ginger( root)?\b|\bginger cubes?\b"), "ginger root raw", null),
+        (Rx(@"\b(toasted )?sesame oil\b"), "oil sesame salad or cooking", null),
+        (Rx(@"\b(rice|white|distilled|wine|red wine|white wine|sherry)? ?vinegar\b"), "vinegar", null),
+        (Rx(@"\b(apple )?cider vinegar\b"), "vinegar cider", null),
+        (Rx(@"\bbalsamic\b"), "vinegar balsamic", null),
+        (Rx(@"\b(white |yellow |red )?miso( paste)?\b"), "miso", null),
+        (Rx(@"\b(green onions?|scallions?|spring onions?)\b"), "onions spring or scallions raw", null),
+        (Rx(@"\b(reduced[- ]sodium|low[- ]sodium|lite) soy sauce\b"), "soy sauce reduced sodium", null),
+        (Rx(@"\b(soy sauce|shoyu|tamari)\b"), "soy sauce", null),
+        (Rx(@"\b(bouillon cubes?|bouillon|stock cubes?|better than bouillon)\b"), "soup chicken broth or bouillon dry", null),
+        (Rx(@"\bchicken( or (vegetable|veggie))? (broth|stock)\b|^(broth|stock)$"), "soup chicken broth ready-to-serve", null),
+        (Rx(@"\b(vegetable|veggie|turkey) (broth|stock)\b"), "soup chicken broth ready-to-serve", "chicken broth for another broth"),
+        (Rx(@"\bbeef (broth|stock)\b"), "soup beef broth ready-to-serve", null),
+        (Rx(@"\bcinnamon( sticks?)?\b"), "spices cinnamon ground", null),
+        (Rx(@"\b(whole |ground )?cloves\b"), "spices cloves ground", null),
+        (Rx(@"\bcardamom( pods)?\b"), "spices cardamom", null),
+        (Rx(@"\bbay leaf|bay leaves\b"), "spices bay leaf", null),
+        (Rx(@"(?<!nutritional )\b(instant|active dry|rapid[- ]rise)? ?yeast\b"), "leavening agents yeast baker's active dry", null),
+        (Rx(@"\b(nonfat )?dry milk( powder)?\b|\bmilk powder\b"), "milk dry nonfat regular", null),
+        (Rx(@"\b(english |persian |hothouse )?cucumbers?\b"), "cucumber with peel raw", null),
+        (Rx(@"\bmirin\b"), "alcoholic beverage rice sake", "sake for mirin (mirin is sweeter)"),
+        (Rx(@"\b(shaoxing|rice) wine\b|\bsake\b"), "alcoholic beverage rice sake", null),
+        (Rx(@"\bkimchi\b(?! juice)"), "kimchi", null),
+        (Rx(@"\bkalamata olives?\b|\bolives?\b"), "olives", null),
+        (Rx(@"\broasted red peppers?\b"), "peppers sweet red canned solids and liquids", null),
+        (Rx(@"\brice (stick )?noodles\b|\bvermicelli\b"), "rice noodles dry", null),
+        (Rx(@"\bpita( breads?)?\b"), "bread pita", null),
+        (Rx(@"\bsourdough( bread| loaf)?\b|\bfrench bread\b|\bbaguette\b|\bciabatta\b"), "bread french or vienna", null),
+        (Rx(@"\bcollard( greens)?\b"), "collards raw", null),
+        (Rx(@"\b(firm |extra[- ]firm |silken |soft )?tofu\b"), "tofu raw regular prepared with calcium sulfate", null),
+        (Rx(@"\b(cooked|leftover)\s+(spaghetti|linguine|fettuccine|penne|rigatoni|macaroni|rotini|fusilli|farfalle|pasta|noodles)\b"), "pasta cooked enriched without added salt", null),
+        (Rx(@"\b(spaghetti|linguine|fettuccine|fettucine|penne|rigatoni|ziti|elbow macaroni|macaroni|rotini|fusilli|farfalle|bucatini|angel hair|orzo|pasta)\b(?!\s*(sauce|squash))"), "pasta dry enriched", null),
     ];
 
     /// <summary>
@@ -145,11 +149,32 @@ public static partial class IngredientQuery
     [GeneratedRegex(@"\b(reserved|pan juices|resting juices|drippings|pasta water|cooking liquid|zested(?! and juiced)|for the pan)\b", RegexOptions.IgnoreCase)]
     private static partial Regex NeverCounted();
 
+    /// <summary>
+    /// When the matching alias is a close stand-in rather than the same food, a short description of the swap
+    /// ("dried oregano for a dried herb blend"); otherwise null. Stand-ins are shown for confirmation.
+    /// </summary>
+    public static string? StandIn(string foodText)
+    {
+        var text = foodText.ToLowerInvariant();
+        foreach (var (pattern, _, standIn) in Aliases)
+            if (pattern.IsMatch(text)) return standIn;
+        return null;
+    }
+
+    /// <summary>
+    /// The amount includes bone ("bone-in pork shoulder", "1 whole chicken, 4–5 lb"), but the matched food is the edible part.
+    /// The edible share isn't known, so the line is flagged for you instead of guessed.
+    /// </summary>
+    public static bool WeightIncludesBone(string rawText) => BoneIn().IsMatch(rawText);
+
+    [GeneratedRegex(@"\bbone-?in\b|\bwhole (chickens?|turkeys?|ducks?|birds?)\b|\bneck bones?\b|\bwith (the )?bones?\b", RegexOptions.IgnoreCase)]
+    private static partial Regex BoneIn();
+
     /// <summary>Recipe wording → USDA wording, or null when no alias applies.</summary>
     public static string? Alias(string foodText)
     {
         var text = foodText.ToLowerInvariant();
-        foreach (var (pattern, query) in Aliases)
+        foreach (var (pattern, query, _) in Aliases)
         {
             var m = pattern.Match(text);
             if (!m.Success) continue;

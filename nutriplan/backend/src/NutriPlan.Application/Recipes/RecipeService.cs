@@ -346,13 +346,6 @@ public sealed partial class RecipeService(
                     break;
                 }
             }
-            // Fresh ginger/turmeric are measured by the inch: about 6 g per inch of root.
-            if (RootByTheInch().IsMatch(best.Food.Name) && InchSize().Match(ing.RawText) is { Success: true } inch)
-            {
-                var grams = 6 * double.Parse(inch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) * (ing.Amount ?? 1);
-                q = new ResolvedQuantity(grams, ResolutionMethod.NamedPortion, $"{inch.Value} piece ≈ {grams:0} g (about 6 g per inch)");
-            }
-
             ing.FoodId = best.Food.Id;
             ing.FoodName = best.Food.DisplayName;
             ing.Grams = q.Grams is null ? null : Math.Round(q.Grams.Value, 2);
@@ -362,15 +355,21 @@ public sealed partial class RecipeService(
                 ? Math.Max(0.8, Confidence(best.Score))
                 : Confidence(best.Score);
             ing.ResolutionNote = q.Explanation;
+            // Notes in parentheses count too: "1 lb smoked turkey (necks, legs or wings)".
+            if ((IngredientQuery.StandIn(ing.FoodText) ?? (IngredientQuery.Alias(ing.FoodText) is not null ? IngredientQuery.StandIn(ing.RawText) : null)) is { } standIn)
+            {
+                // A close substitute, not the same food: counted, but highlighted so you can confirm or pick another.
+                ing.MatchConfidence = Math.Min(ing.MatchConfidence, 0.4);
+                ing.ResolutionNote = $"Stand-in: {standIn} — check it's close enough. {q.Explanation}";
+            }
+            else if (IngredientQuery.WeightIncludesBone(ing.RawText) && ing.Grams is not null)
+            {
+                ing.MatchConfidence = Math.Min(ing.MatchConfidence, 0.4);
+                ing.ResolutionNote = $"This weight includes bone, so it overcounts — enter the edible weight if you know it. {q.Explanation}";
+            }
         }
         await RecalculateAsync(recipe, ct);
     }
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"^(Ginger|Turmeric) root", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
-    private static partial System.Text.RegularExpressions.Regex RootByTheInch();
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"(\d+(?:\.\d+)?)[- ]inch", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
-    private static partial System.Text.RegularExpressions.Regex InchSize();
 
     /// <summary>Same food named the same way: "Oats, rolled" and "Oats" (first word of the USDA name).</summary>
     private static bool SameHead(Food a, Food b)
