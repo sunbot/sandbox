@@ -1,42 +1,54 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, type Href } from 'expo-router';
+import { ScrollView, View } from 'react-native';
+import { router } from 'expo-router';
 import { useStatus } from '@/api/hooks';
-import { Card } from '@/components/ui';
+import { AppText, ListGroup, ListRow } from '@/components/ds';
+import { Grid3x3, Package, Settings, ShoppingBasket, Sparkles, Target } from '@/components/ds/icons';
 import { today } from '@/lib/format';
-import { colors, font, spacing } from '@/lib/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 
-const links: { title: string; hint: string; href: Href }[] = [
-  { title: '🛒  Grocery list', hint: 'From your plan, minus the pantry', href: '/grocery' },
-  { title: '🥫  Pantry', hint: 'What you have · what you can make', href: '/pantry' },
-  { title: '▦  Nutrient heatmap', hint: 'This week, nutrient by nutrient', href: { pathname: '/insights', params: { date: today() } } },
-  { title: '✨  Fill today\'s gaps', hint: 'Foods and recipes to round out the day', href: { pathname: '/gaps', params: { date: today() } } },
-  { title: '🎯  Targets', hint: 'Calories, macros, nutrients, weekly budget', href: '/targets' },
-  { title: '⚙️  Settings', hint: 'Server connection', href: '/settings' },
-];
-
+/**
+ * Everything that isn't a daily tab, grouped by purpose: planning and shopping, nutrition, and the app itself.
+ * One quiet surface per group with hairline dividers keeps it easy to scan.
+ */
 export default function MoreScreen() {
+  const t = useTheme();
   const status = useStatus();
+  const connected = !!status.data;
+
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      {links.map((l) => (
-        <Pressable key={l.title} onPress={() => router.push(l.href)}>
-          <Card style={styles.link}>
-            <View style={{ flex: 1 }}>
-              <Text style={font.heading}>{l.title}</Text>
-              <Text style={font.small}>{l.hint}</Text>
-            </View>
-            <Text style={{ fontSize: 22, color: colors.textMuted }}>›</Text>
-          </Card>
-        </Pressable>
-      ))}
-      <Text style={[font.tiny, { textAlign: 'center' }]}>
-        {status.data ? `${status.data.foods.toLocaleString()} foods · Claude ${status.data.languageModel ? 'on' : 'off'}` : status.error ? 'Not connected — check Settings' : ''}
-      </Text>
+    <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }}
+      contentContainerStyle={{ padding: t.screenPadding, paddingBottom: t.space.huge, gap: t.space.xxl }}>
+      <ListGroup title="Plan & shop">
+        <ListRow icon={ShoppingBasket} title="Grocery list" hint="From your plan, minus the pantry" onPress={() => router.push('/grocery')} />
+        <ListRow icon={Package} title="Pantry" hint="What you have and can make" onPress={() => router.push('/pantry')} />
+      </ListGroup>
+
+      <ListGroup title="Nutrition">
+        <ListRow icon={Sparkles} title="Fill today's gaps" hint="Ideas to round out the day"
+          onPress={() => router.push({ pathname: '/gaps', params: { date: today() } })} />
+        <ListRow icon={Grid3x3} title="Weekly nutrients" hint="Every nutrient, day by day"
+          onPress={() => router.push({ pathname: '/insights', params: { date: today() } })} />
+        <ListRow icon={Target} title="Targets" hint="Calories, macros and nutrients" onPress={() => router.push('/targets')} />
+      </ListGroup>
+
+      <ListGroup
+        title="App"
+        footer={status.isLoading ? null : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}
+            accessible accessibilityLabel={connected ? `Connected. ${status.data!.foods} foods.` : 'Not connected'}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: connected ? t.colors.success : t.colors.warning }} />
+            <AppText variant="caption" tone="muted" numeric>
+              {connected
+                ? `Connected · ${status.data!.foods.toLocaleString()} foods · AI assistant ${status.data!.languageModel ? 'on' : 'off'}`
+                : 'Not connected — open Settings to check the server address'}
+            </AppText>
+          </View>
+        )}
+      >
+        <ListRow icon={Settings} title="Settings" hint="Server connection" onPress={() => router.push('/settings')} />
+      </ListGroup>
+
+      <AppText variant="caption" tone="muted" align="center">Intake Grid</AppText>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  page: { padding: spacing.lg, gap: spacing.sm },
-  link: { flexDirection: 'row', alignItems: 'center', padding: spacing.md },
-});
