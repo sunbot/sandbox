@@ -25,7 +25,17 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  let data: any;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    // Not JSON: typically a proxy page (too large, timed out, bad gateway) rather than our API.
+    if (res.status === 413) throw new ApiError('That file is too large for the server.', 413);
+    if (res.status === 502 || res.status === 503 || res.status === 504) throw new ApiError('The server took too long or is restarting. Wait a minute and try again.', res.status);
+    if (!res.ok) throw new ApiError(`Request failed (${res.status})`, res.status);
+    throw new ApiError('The server sent a response the app could not read.', res.status);
+  }
+  if (res.status === 401) throw new ApiError('API key missing or wrong — enter it in More → Settings.', 401);
   if (!res.ok) throw new ApiError(data?.detail ?? data?.title ?? `Request failed (${res.status})`, res.status);
   return data as T;
 }

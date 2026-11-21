@@ -1,0 +1,95 @@
+# NutriPlan CI: build + test the backend (incl. real Postgres), type-check + lint the app.
+# Optional deploy: on a push to main, after both jobs pass, ping a Render deploy hook (only if the secret exists).
+name: NutriPlan CI
+
+on:
+  push:
+    paths: ["nutriplan/**", ".github/workflows/nutriplan-ci.yml"]
+  pull_request:
+    paths: ["nutriplan/**", ".github/workflows/nutriplan-ci.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: nutriplan-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (build + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nutriplan/backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nutriplan
+          POSTGRES_PASSWORD: nutriplan
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nutriplan"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The integration tests create and drop their own throwaway databases on this server.
+      NUTRIPLAN_TEST_DB: Host=localhost;Username=nutriplan;Password=nutriplan;Database=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
+      - name: Check the database model matches the migrations
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes --project src/NutriPlan.Infrastructure --startup-project src/NutriPlan.Api
+        env:
+          ConnectionStrings__NutriPlan: Host=localhost;Username=nutriplan;Password=nutriplan;Database=postgres
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: nutriplan/backend/tests/**/TestResults/*.trx
+
+  app:
+    name: App (type-check + lint + web build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nutriplan/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nutriplan/mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx expo lint
+      - name: Web export (same build the Docker image uses)
+        run: npx expo export --platform web
+
+  deploy:
+    name: Deploy (Render hook)
+    needs: [backend, app]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      # Render → your service → Settings → Deploy Hook. Add it as a repository secret named RENDER_DEPLOY_HOOK_URL.
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+    steps:
+      - name: Trigger Render deploy
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null && echo "Deploy requested"
+      - name: No deploy hook configured
+        if: env.RENDER_DEPLOY_HOOK_URL == ''
+        run: echo "RENDER_DEPLOY_HOOK_URL secret not set; skipping (Render may already auto-deploy on push)."

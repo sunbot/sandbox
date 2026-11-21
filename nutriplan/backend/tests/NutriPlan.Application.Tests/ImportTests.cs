@@ -31,6 +31,35 @@ public class ImportTests
     });
 
     [Fact]
+    public void One_corrupt_entry_does_not_block_the_rest_of_the_export()
+    {
+        using var zipStream = new MemoryStream();
+        using (var zip = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            void Add(string name, byte[] data) { using var w = zip.CreateEntry(name).Open(); w.Write(data); }
+            Add("Muffins.paprikarecipe", Gzip(PaprikaJson("U1", "Muffins")));
+            Add("Broken.paprikarecipe", Gzip("{ not json"));
+            Add("__MACOSX/._Muffins.paprikarecipe", [1, 2, 3]);
+            Add("Plain.paprikarecipe", [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(PaprikaJson("U3", "Plain JSON"))]);
+        }
+        zipStream.Position = 0;
+
+        var (recipes, errors) = PaprikaImporter.ReadAll(zipStream);
+
+        Assert.Equal(["Muffins", "Plain JSON"], recipes.Select(r => r.Name).ToArray());
+        Assert.Single(errors);
+        Assert.StartsWith("Broken:", errors[0]);
+    }
+
+    [Fact]
+    public void Tolerates_numbers_written_as_strings()
+    {
+        var json = """{"uid":"U4","name":"Soup","rating":"5","ingredients":"1 cup stock"}""";
+        var recipe = PaprikaImporter.ReadSingle(Encoding.UTF8.GetBytes(json));
+        Assert.Equal(5, recipe!.Rating);
+    }
+
+    [Fact]
     public void Reads_a_paprikarecipes_zip_of_gzipped_json()
     {
         using var zipStream = new MemoryStream();

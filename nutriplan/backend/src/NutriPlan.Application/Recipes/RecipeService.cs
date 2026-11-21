@@ -151,12 +151,18 @@ public sealed class RecipeService(
     public async Task<ImportResultDto> ImportPaprikaAsync(Stream file, CancellationToken ct = default)
     {
         IReadOnlyList<ImportedRecipe> imported;
-        try { imported = PaprikaImporter.Read(file); }
+        IReadOnlyList<string> readErrors;
+        try { (imported, readErrors) = PaprikaImporter.ReadAll(file); }
         catch (Exception ex) when (ex is InvalidDataException or System.Text.Json.JsonException)
         {
             throw new ValidationException($"That doesn't look like a Paprika export (.paprikarecipes / .paprikarecipe): {ex.Message}");
         }
-        return await SaveImportedAsync(imported, RecipeOrigin.Paprika, ct);
+        if (imported.Count == 0)
+            throw new ValidationException(readErrors.Count > 0
+                ? $"No recipes could be read from that file. {readErrors[0]}"
+                : "That file has no recipes in it. Export from Paprika with “Paprika Recipe Format” (.paprikarecipes).");
+        var result = await SaveImportedAsync(imported, RecipeOrigin.Paprika, ct);
+        return readErrors.Count == 0 ? result : result with { Errors = [.. result.Errors, .. readErrors] };
     }
 
     public async Task<RecipeDetailDto> ImportFromUrlAsync(string url, CancellationToken ct = default)
@@ -175,6 +181,7 @@ public sealed class RecipeService(
         int created = 0, updated = 0;
         var errors = new List<string>();
         var saved = new List<Recipe>();
+        var searchCache = new Dictionary<string, List<RankedFood>>(StringComparer.OrdinalIgnoreCase); // "onion" is searched once per import, not once per recipe
 
         foreach (var item in imported)
         {
@@ -214,7 +221,7 @@ public sealed class RecipeService(
                 if (!recipe.Ingredients.Select(i => i.RawText).SequenceEqual(item.IngredientLines.Select(l => l.Trim()).Where(l => l.Length > 0)))
                     recipe.SetIngredientLines(item.IngredientLines);
 
-                await MatchIngredientsAsync(recipe, onlyUnmatched: true, ct);
+                await MatchIngredientsAsync(recipe, onlyUnmatched: true, ct, searchCache);
                 saved.Add(recipe);
             }
             catch (Exception ex) when (ex is ArgumentException or ValidationException)
@@ -231,9 +238,10 @@ public sealed class RecipeService(
     /// Matches each ingredient to the best food and converts its amount to grams.
     /// Low-confidence matches and amounts that can't be converted are left visible for you to fix.
     /// </summary>
-    public async Task MatchIngredientsAsync(Recipe recipe, bool onlyUnmatched, CancellationToken ct)
+    public async Task MatchIngredientsAsync(Recipe recipe, bool onlyUnmatched, CancellationToken ct,
+        Dictionary<string, List<RankedFood>>? cache = null)
     {
-        var cache = new Dictionary<string, List<RankedFood>>(StringComparer.OrdinalIgnoreCase);
+        cache ??= new Dictionary<string, List<RankedFood>>(StringComparer.OrdinalIgnoreCase);
         foreach (var ing in recipe.Ingredients)
         {
             if (ing.Status is IngredientMatchStatus.Ignored or IngredientMatchStatus.Confirmed) continue;

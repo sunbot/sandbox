@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRecipeMutations, useRecipes } from '@/api/hooks';
@@ -18,15 +18,31 @@ export default function RecipesScreen() {
   const [server, setServer] = useState({ apiUrl: '', apiKey: '' });
   useEffect(() => { loadSettings().then(setServer); }, []);
 
+  // Shown on the screen (not in an alert, which doesn't appear in the web version).
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; title: string; lines: string[] } | null>(null);
+
   const importPaprika = async () => {
+    setNotice(null);
     const pick = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
     if (pick.canceled || !pick.assets?.[0]) return;
     const a = pick.assets[0];
     try {
-      const result = await m.importPaprika.mutateAsync({ uri: a.uri, name: a.name, mimeType: a.mimeType });
-      Alert.alert('Paprika import', `${result.imported} new, ${result.updated} updated.${result.errors.length ? `\n${result.errors.join('\n')}` : ''}\nOpen a recipe to check ingredient matches.`);
+      // On web the picker gives a real File; on Android a file:// copy in the cache.
+      const result = await m.importPaprika.mutateAsync({ uri: a.uri, name: a.name, mimeType: a.mimeType, file: a.file });
+      const total = result.imported + result.updated;
+      setNotice({
+        kind: total > 0 ? 'ok' : 'error',
+        title: total > 0
+          ? `Imported ${total} recipe${total === 1 ? '' : 's'} (${result.imported} new, ${result.updated} updated)`
+          : 'No recipes were imported',
+        lines: [
+          ...result.errors.slice(0, 5),
+          ...(result.errors.length > 5 ? [`…and ${result.errors.length - 5} more problems`] : []),
+          ...(total > 0 ? ['Open a recipe to check its ingredient matches.'] : []),
+        ],
+      });
     } catch (e) {
-      Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
+      setNotice({ kind: 'error', title: 'Import failed', lines: [e instanceof Error ? e.message : String(e)] });
     }
   };
 
@@ -36,7 +52,7 @@ export default function RecipesScreen() {
       setUrl('');
       router.push({ pathname: '/recipe/[id]', params: { id: r.summary.id } });
     } catch (e) {
-      Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
+      setNotice({ kind: 'error', title: 'Import failed', lines: [e instanceof Error ? e.message : String(e)] });
     }
   };
 
@@ -53,10 +69,19 @@ export default function RecipesScreen() {
           <Card style={{ gap: spacing.sm }}>
             <Text style={font.heading}>Import</Text>
             <Button title="Paprika export (.paprikarecipes)" variant="secondary" icon="📥" onPress={importPaprika} loading={m.importPaprika.isPending} />
+            {m.importPaprika.isPending ? (
+              <Text style={font.small}>Importing and matching ingredients… a large export can take a minute or two.</Text>
+            ) : null}
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
               <View style={{ flex: 1 }}><Field value={url} onChangeText={setUrl} placeholder="https://… recipe link" autoCapitalize="none" keyboardType="url" /></View>
               <Button title="Import" compact onPress={importUrl} disabled={!url.trim()} loading={m.importUrl.isPending} />
             </View>
+            {notice ? (
+              <View accessibilityLiveRegion="polite" style={[styles.notice, notice.kind === 'error' && styles.noticeError]}>
+                <Text style={[font.body, { fontWeight: '600', color: notice.kind === 'error' ? colors.high : colors.text }]}>{notice.title}</Text>
+                {notice.lines.map((l, i) => <Text key={i} style={font.small}>{l}</Text>)}
+              </View>
+            ) : null}
             <Text style={font.tiny}>In Paprika: select recipes → Share/Export → Paprika Recipe Format. Links work when the page publishes structured recipe data (most recipe sites do).</Text>
           </Card>
         </View>
@@ -89,4 +114,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', padding: spacing.md },
   photo: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.surfaceMuted },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
+  notice: { gap: 4, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceMuted },
+  noticeError: { borderWidth: 1, borderColor: colors.high },
 });

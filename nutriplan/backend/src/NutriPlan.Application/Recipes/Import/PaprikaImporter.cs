@@ -14,37 +14,58 @@ namespace NutriPlan.Application.Recipes.Import;
 /// </summary>
 public static class PaprikaImporter
 {
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
 
-    public static IReadOnlyList<ImportedRecipe> Read(Stream stream)
+    public static IReadOnlyList<ImportedRecipe> Read(Stream stream) => ReadAll(stream).Recipes;
+
+    /// <summary>
+    /// Reads every recipe it can. An unreadable entry is reported in <c>Errors</c> instead of failing the whole file,
+    /// so one corrupt recipe in a 300-recipe export doesn't block the rest.
+    /// </summary>
+    public static (IReadOnlyList<ImportedRecipe> Recipes, IReadOnlyList<string> Errors) ReadAll(Stream stream)
     {
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
         var bytes = buffer.ToArray();
+        var recipes = new List<ImportedRecipe>();
+        var errors = new List<string>();
 
         if (IsZip(bytes))
         {
             using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
-            var result = new List<ImportedRecipe>();
-            foreach (var entry in zip.Entries.Where(e => e.Length > 0))
+            foreach (var entry in zip.Entries.Where(e => e.Length > 0 && !e.FullName.StartsWith("__MACOSX/", StringComparison.Ordinal)
+                                                          && !Path.GetFileName(e.FullName).StartsWith('.')))
             {
-                using var entryStream = entry.Open();
-                using var entryBuffer = new MemoryStream();
-                entryStream.CopyTo(entryBuffer);
-                var recipe = ReadSingle(entryBuffer.ToArray());
-                if (recipe is not null) result.Add(recipe);
+                try
+                {
+                    using var entryStream = entry.Open();
+                    using var entryBuffer = new MemoryStream();
+                    entryStream.CopyTo(entryBuffer);
+                    var recipe = ReadSingle(entryBuffer.ToArray());
+                    if (recipe is not null) recipes.Add(recipe);
+                }
+                catch (Exception ex) when (ex is InvalidDataException or JsonException)
+                {
+                    errors.Add($"{Path.GetFileNameWithoutExtension(entry.FullName)}: skipped, the file is damaged or isn't a Paprika recipe");
+                }
             }
-            return result;
+            return (recipes, errors);
         }
 
         var single = ReadSingle(bytes);
-        return single is null ? [] : [single];
+        if (single is not null) recipes.Add(single);
+        return (recipes, errors);
     }
 
     /// <summary>One recipe: gzip JSON (normal) or plain JSON (tolerated).</summary>
     public static ImportedRecipe? ReadSingle(byte[] bytes)
     {
         var json = IsGzip(bytes) ? Gunzip(bytes) : bytes;
+        if (json.Length >= 3 && json[0] == 0xEF && json[1] == 0xBB && json[2] == 0xBF) json = json[3..];
         var dto = JsonSerializer.Deserialize<PaprikaRecipeDto>(json, Json);
         return dto is null || string.IsNullOrWhiteSpace(dto.Name) ? null : Map(dto);
     }
