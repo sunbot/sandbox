@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useCookable, usePantry, usePantryMutations } from '@/api/hooks';
 import { Button, Card, Chip, Empty, Field, Loading } from '@/components/ui';
 import { addDays, today } from '@/lib/format';
 import { colors, font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /** What you have at home, and what you can make with it. */
 export default function PantryScreen() {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set()); // removals waiting for their Undo window
   const pantry = usePantry();
   const cookable = useCookable();
   const m = usePantryMutations();
@@ -48,13 +51,17 @@ export default function PantryScreen() {
       ))}
 
       <Text style={font.heading}>In the pantry</Text>
-      {pantry.data?.map((p) => (
+      {pantry.data?.filter((p) => !hidden.has(p.id)).map((p) => (
         <View key={p.id} style={styles.item}>
           <View style={{ flex: 1 }}>
             <Text style={font.body}>{p.name}</Text>
             {p.expiresOn ? <Text style={[font.tiny, p.expiresOn <= addDays(today(), 2) && { color: colors.high }]}>use by {p.expiresOn}</Text> : null}
           </View>
-          <Button title="Remove" variant="ghost" compact onPress={() => Alert.alert('Remove?', p.name, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', onPress: () => m.remove.mutate(p.id) }])} />
+          <Button title="Remove" variant="ghost" compact onPress={() => {
+            setHidden((s) => new Set(s).add(p.id));
+            snackbar({ message: `Removed ${p.name}`, actionLabel: 'Undo', onAction: () => setHidden((s) => { const n = new Set(s); n.delete(p.id); return n; }),
+              onTimeout: () => m.remove.mutate(p.id, { onError: (e) => { setHidden((s) => { const n = new Set(s); n.delete(p.id); return n; }); snackbar({ message: e instanceof Error ? e.message : "Couldn't remove it" }); } }) });
+          }} />
         </View>
       ))}
       {pantry.data?.length === 0 ? <Empty title="Pantry is empty" /> : null}

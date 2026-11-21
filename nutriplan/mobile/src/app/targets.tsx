@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTargets, useUpdateTargets } from '@/api/hooks';
 import type { Targets } from '@/api/types';
 import { Button, Card, Chip, ErrorView, Field, Loading } from '@/components/ui';
 import { font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /** Daily calories and macros, weekly vs daily budgeting, and micronutrient targets. */
 export default function TargetsScreen() {
@@ -15,6 +16,7 @@ export default function TargetsScreen() {
 }
 
 function TargetsForm({ t }: { t: Targets }) {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const update = useUpdateTargets();
   const [form, setForm] = useState({ calories: String(t.calories), protein: String(t.proteinGrams), carbs: String(t.carbGrams), fat: String(t.fatGrams) });
   const [mode, setMode] = useState<'Daily' | 'Weekly'>(t.budgetMode);
@@ -30,9 +32,9 @@ function TargetsForm({ t }: { t: Targets }) {
         budgetMode: mode, nutrientOverrides: overrides,
       });
       setMicro({});
-      Alert.alert('Saved');
+      snackbar({ message: 'Targets saved' });
     } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+      snackbar({ message: e instanceof Error ? e.message : 'Could not save' });
     }
   };
 

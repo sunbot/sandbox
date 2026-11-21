@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
+import { useSnackbar } from '@/components/ds';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { Mic, Square } from '@/components/ds/icons';
 import { colors } from '@/lib/theme';
@@ -23,6 +24,7 @@ export function VoiceButton({ onText, onFinal, autoStart, onPermissionDenied, on
   /** Told when listening starts and stops, so the screen can show it (e.g. "Listening…"). */
   onListeningChange?: (listening: boolean) => void;
 }) {
+  const snackbar = useSnackbar(); // fallback when the screen doesn't handle voice problems itself (alerts don't show on web)
   const [listening, setListeningState] = useState(false);
   const setListening = useCallback((v: boolean) => { setListeningState(v); onListeningChange?.(v); }, [onListeningChange]);
   const started = useRef(false);
@@ -30,8 +32,8 @@ export function VoiceButton({ onText, onFinal, autoStart, onPermissionDenied, on
   const denied = useCallback(() => {
     setListening(false);
     if (onPermissionDenied) onPermissionDenied();
-    else Alert.alert('Microphone needed', 'Allow microphone and speech recognition to speak your food.');
-  }, [onPermissionDenied, setListening]);
+    else snackbar({ message: 'Allow microphone and speech recognition to speak your food.' });
+  }, [onPermissionDenied, setListening, snackbar]);
 
   useSpeechRecognitionEvent('start', () => setListening(true));
   useSpeechRecognitionEvent('end', () => setListening(false));
@@ -50,7 +52,7 @@ export function VoiceButton({ onText, onFinal, autoStart, onPermissionDenied, on
       event.error === 'language-not-supported' ? 'Voice input isn’t available for this language on your device.' :
       event.message || 'Voice input isn’t available right now.';
     if (onUnavailable) onUnavailable(reason);
-    else Alert.alert('Voice input', reason);
+    else snackbar({ message: reason });
   });
 
   const start = useCallback(async () => {

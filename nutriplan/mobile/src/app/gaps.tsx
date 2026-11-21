@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useGaps, usePlanMutations } from '@/api/hooks';
 import type { GapItem } from '@/api/types';
@@ -7,9 +7,11 @@ import { MacroLine } from '@/components/charts';
 import { Button, Card, Chip, Empty, ErrorView, Loading } from '@/components/ui';
 import { amount, dayLabel, mealForNow, type Meal, today } from '@/lib/format';
 import { font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /** "What can I add to round out the day?" — combinations chosen to land on calories, macros and nutrients. */
 export default function GapsScreen() {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const { date = today() } = useLocalSearchParams<{ date?: string }>();
   const [recipesOnly, setRecipesOnly] = useState(false);
   const gaps = useGaps(date, recipesOnly);
@@ -20,11 +22,15 @@ export default function GapsScreen() {
   const g = gaps.data!;
 
   const addAll = async (items: GapItem[], meal: Meal) => {
-    for (const i of items) {
-      if (i.recipeId) await plan.addRecipe.mutateAsync({ date, meal, recipeId: i.recipeId, servings: i.amount });
-      else if (i.foodId) await plan.addFood.mutateAsync({ date, meal, foodId: i.foodId, grams: i.amount });
+    try {
+      // Foods go in one all-or-nothing request; recipes are planned one by one.
+      const foods = items.filter((i) => i.foodId && !i.recipeId).map((i) => ({ foodId: i.foodId!, grams: i.amount }));
+      if (foods.length) await plan.addFoods.mutateAsync({ date, meal, items: foods });
+      for (const i of items.filter((x) => x.recipeId)) await plan.addRecipe.mutateAsync({ date, meal, recipeId: i.recipeId!, servings: i.amount });
+      snackbar({ message: `Planned ${items.length} ${items.length === 1 ? 'item' : 'items'} for ${dayLabel(date)}. Log them on Week or Today when you eat them.` });
+    } catch (e) {
+      snackbar({ message: e instanceof Error ? e.message : "Couldn't add to the plan" });
     }
-    Alert.alert('Added to plan', `${items.length} item(s) planned for ${dayLabel(date)}. Tap "I ate this" on the Week tab when you do.`);
   };
 
   return (

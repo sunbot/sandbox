@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCreateFood } from '@/api/hooks';
 import { Button, Field } from '@/components/ui';
 import { font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /**
  * Add a packaged food from its Nutrition Facts label. Values are per serving as printed;
@@ -28,6 +29,7 @@ const fields: { id: number; label: string }[] = [
 ];
 
 export default function CustomFood() {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const params = useLocalSearchParams<{ barcode?: string; date?: string; meal?: string; mode?: string }>();
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -38,15 +40,15 @@ export default function CustomFood() {
 
   const save = async () => {
     const grams = Number(serving.replace(',', '.'));
-    if (!name.trim() || !grams) return Alert.alert('Name and serving size (g) are required');
+    if (!name.trim() || !grams) return snackbar({ message: 'Name and serving size (g) are required' });
     const nutrients: Record<number, number> = {};
     for (const [id, v] of Object.entries(values)) if (v.trim() !== '') nutrients[Number(id)] = Number(v.replace(',', '.'));
-    if (nutrients[1008] === undefined) return Alert.alert('Calories are required');
+    if (nutrients[1008] === undefined) return snackbar({ message: 'Calories are required' });
     try {
       const food = await create.mutateAsync({ name, brand: brand || undefined, barcode: params.barcode, servingGrams: grams, servingDescription: servingText || undefined, nutrientsPerServing: nutrients });
       router.replace({ pathname: '/food/[id]', params: { ...params, id: food.id } });
     } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+      snackbar({ message: e instanceof Error ? e.message : 'Could not save' });
     }
   };
 

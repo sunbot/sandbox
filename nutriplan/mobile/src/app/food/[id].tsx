@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFood, useLogFood, usePlanMutations, useRecipeMutations } from '@/api/hooks';
 import { AmountPicker, type AmountSelection } from '@/components/AmountPicker';
 import { Button, Card, Chip, ErrorView, Loading, QualityBadge } from '@/components/ui';
 import { dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { colors, font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /** Pick an amount and a meal, then log it (or put it on the plan). */
 export default function FoodAmount() {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient'; grams?: string; recipeId?: string; position?: string }>();
   const food = useFood(params.id);
   const [meal, setMeal] = useState<Meal>(params.meal ?? mealForNow());
@@ -25,7 +27,7 @@ export default function FoodAmount() {
   const f = food.data!;
 
   const save = async () => {
-    if (selection.grams <= 0) return Alert.alert('Enter an amount');
+    if (selection.grams <= 0) return snackbar({ message: 'Enter an amount' });
     try {
       const grams = Math.round(selection.grams * 10) / 10;
       if (forIngredient) {
@@ -38,7 +40,7 @@ export default function FoodAmount() {
       else await log.mutateAsync(body);
       router.dismissAll();
     } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+      snackbar({ message: e instanceof Error ? e.message : 'Could not save' });
     }
   };
 

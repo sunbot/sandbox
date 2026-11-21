@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { get } from '@/api/client';
 import { Button, Card, Field } from '@/components/ui';
 import { loadSettings, saveSettings } from '@/lib/settings';
 import { font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /** Where Intake Grid finds your server. */
 export default function SettingsScreen() {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const [apiUrl, setApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [testing, setTesting] = useState(false);
@@ -22,10 +24,10 @@ export default function SettingsScreen() {
     setTesting(true);
     try {
       const status = await get<{ languageModel: boolean; foods: number }>('/status');
-      Alert.alert('Connected', `${status.foods.toLocaleString()} foods in the database.\nClaude: ${status.languageModel ? 'on' : 'off (offline parsing)'}`);
+      snackbar({ message: `Connected · ${status.foods.toLocaleString()} foods · AI assistant ${status.languageModel ? 'on' : 'off'}` });
       qc.invalidateQueries();
     } catch (e) {
-      Alert.alert('Saved, but could not connect', e instanceof Error ? e.message : String(e));
+      snackbar({ message: `Saved, but couldn't connect: ${e instanceof Error ? e.message : String(e)}` });
     } finally {
       setTesting(false);
     }

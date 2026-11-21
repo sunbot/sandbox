@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLogQuick } from '@/api/hooks';
 import { Button, Field } from '@/components/ui';
 import { mealForNow, type Meal, today } from '@/lib/format';
 import { font, spacing } from '@/lib/theme';
+import { useSnackbar } from '@/components/ds';
 
 /** For restaurant meals or anything without data: just the numbers you know. */
 export default function QuickAdd() {
+  const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const params = useLocalSearchParams<{ date?: string; meal?: Meal }>();
   const [name, setName] = useState('');
   const [kcal, setKcal] = useState('');
@@ -19,7 +21,7 @@ export default function QuickAdd() {
 
   const save = async () => {
     const calories = num(kcal);
-    if (!calories || calories <= 0) return Alert.alert('Enter calories');
+    if (!calories || calories <= 0) return snackbar({ message: 'Enter calories' });
     await log.mutateAsync({ date: params.date ?? today(), meal: params.meal ?? mealForNow(), name: name || 'Quick entry', calories, protein: num(p), carbs: num(c), fat: num(f) });
     router.back();
   };
