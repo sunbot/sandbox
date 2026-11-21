@@ -105,7 +105,7 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         await db.SaveChangesAsync();
 
         var found = await new FoodService(new FoodRepository(db), [], db).LookupBarcodeAsync("0012345678905"); // scanner reports EAN-13 for a UPC-A label
-        Assert.Equal("My granola", found!.Name);
+        Assert.Equal("My granola", found.Food!.Name);
     }
 
     [PostgresFact]

@@ -51,21 +51,34 @@ public sealed class OpenFoodFactsProvider(HttpClient http, ILogger<OpenFoodFacts
         ("alcohol_100g", NutrientIds.Alcohol, 0.789 * 1), // % vol → g per 100 ml (density of ethanol)
     ];
 
-    public async Task<Food?> LookupAsync(string normalizedBarcode, CancellationToken ct = default)
+    public async Task<BarcodeLookup> LookupAsync(string normalizedBarcode, CancellationToken ct = default)
     {
         try
         {
             using var response = await http.GetAsync($"api/v2/product/{normalizedBarcode}.json?fields={Fields}", ct);
-            if (response.StatusCode == HttpStatusCode.NotFound) return null;
-            response.EnsureSuccessStatusCode();
+            if (response.StatusCode == HttpStatusCode.TooManyRequests) return BarcodeLookup.Failed(ProviderFailure.RateLimited);
+            if ((int)response.StatusCode >= 500) return BarcodeLookup.Failed(ProviderFailure.Network);
+            // OFF answers an unknown code with 404 and {"status":0}: a real "not found".
+            if (response.StatusCode == HttpStatusCode.NotFound) return BarcodeLookup.NotFound;
+            if (!response.IsSuccessStatusCode) return BarcodeLookup.Failed(ProviderFailure.BadResponse);
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            return Parse(doc.RootElement, normalizedBarcode);
+            return Parse(doc.RootElement, normalizedBarcode) is { } food ? BarcodeLookup.Found(food) : BarcodeLookup.NotFound;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Open Food Facts lookup failed for {Barcode}", normalizedBarcode);
-            return null;
+            logger.LogWarning("Open Food Facts lookup timed out for {Barcode}", normalizedBarcode);
+            return BarcodeLookup.Failed(ProviderFailure.Timeout);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Open Food Facts unreachable for {Barcode}", normalizedBarcode);
+            return BarcodeLookup.Failed(ProviderFailure.Network);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Open Food Facts sent an unreadable response for {Barcode}", normalizedBarcode);
+            return BarcodeLookup.Failed(ProviderFailure.BadResponse);
         }
     }
 
