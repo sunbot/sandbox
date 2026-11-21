@@ -14,6 +14,13 @@ public enum FoodSource
     Recipe = 6,           // a saved recipe exposed as a food (per serving)
 }
 
+/// <summary>
+/// What the nutrient amounts are per. Mass: per 100 g (every USDA generic food). Volume: per 100 ml (drinks labelled in ml,
+/// e.g. USDA Branded shakes). For a Volume food every "amount" (portions, resolved quantities) is in ml, and it is never
+/// converted to grams: that would need a density nobody measured.
+/// </summary>
+public enum NutrientBasis { Mass = 0, Volume = 1 }
+
 /// <summary>How much the app trusts a food's numbers. Drives search ranking and UI badges.</summary>
 public enum DataQuality { Verified = 0, Standard = 1, Unverified = 2, Flagged = 3 }
 
@@ -37,7 +44,8 @@ public sealed class Food
         string? brand = null,
         string? barcode = null,
         string? category = null,
-        IEnumerable<FoodPortion>? portions = null)
+        IEnumerable<FoodPortion>? portions = null,
+        NutrientBasis basis = NutrientBasis.Mass)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
         Id = Guid.NewGuid();
@@ -49,6 +57,7 @@ public sealed class Food
         Category = category;
         NutrientsPer100g = nutrientsPer100g;
         _portions = portions?.ToList() ?? [];
+        Basis = basis;
         Quality = DefaultQualityFor(source);
         CreatedAt = UpdatedAt = DateTimeOffset.UtcNow;
         ReassessQuality();
@@ -66,6 +75,11 @@ public sealed class Food
     public string? QualityNote { get; private set; }
     public NutrientProfile NutrientsPer100g { get; private set; } = NutrientProfile.Empty;
     public IReadOnlyList<FoodPortion> Portions => _portions;
+    /// <summary>Per 100 g (Mass) or per 100 ml (Volume). <see cref="NutrientsPer100g"/> and portion "gram" weights are then ml.</summary>
+    public NutrientBasis Basis { get; private set; }
+    public bool IsVolume => Basis == NutrientBasis.Volume;
+    /// <summary>"g" or "ml": the unit of this food's base amount.</summary>
+    public string BaseUnit => IsVolume ? "ml" : "g";
     public bool IsArchived { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -80,6 +94,24 @@ public sealed class Food
         Touch();
         ReassessQuality();
     }
+
+    /// <summary>Replace the label data from the source (a refreshed manufacturer label). Never used on foods you've verified.</summary>
+    public void RefreshFromSource(string name, string? brand, NutrientProfile per100, IEnumerable<FoodPortion> portions, NutrientBasis basis)
+    {
+        if (Quality == DataQuality.Verified && !IsLabAnalyzed) return;
+        Name = name.Trim();
+        Brand = string.IsNullOrWhiteSpace(brand) ? null : brand.Trim();
+        NutrientsPer100g = per100;
+        _portions = portions.ToList();
+        Basis = basis;
+        Quality = DefaultQualityFor(Source);
+        QualityNote = null;
+        Touch();
+        ReassessQuality();
+    }
+
+    /// <summary>A note about where a number came from (e.g. calories calculated because the label didn't list them).</summary>
+    public void AddQualityNote(string note) => QualityNote = string.IsNullOrWhiteSpace(QualityNote) ? note : $"{QualityNote} {note}";
 
     public void ReplacePortions(IEnumerable<FoodPortion> portions)
     {

@@ -20,9 +20,19 @@ export type Food = {
   quality: 'Verified' | 'Standard' | 'Unverified' | 'Flagged';
   qualityNote?: string | null;
   barcode?: string | null;
+  /** Nutrients per 100 g, or per 100 ml when baseUnit is "ml" (drinks labelled by volume); portion grams are then ml. */
   per100g: Nutrition;
   portions: Portion[];
+  baseUnit?: 'g' | 'ml';
 };
+
+/** A packaged product from USDA FoodData Central (not saved until opened). perServing only when the label gives a size. */
+export type BrandedFood = {
+  source: string; sourceId: string; name: string; brand?: string | null; barcode?: string | null; baseUnit: 'g' | 'ml';
+  servingDescription?: string | null; servingAmount?: number | null; per100: Nutrition; perServing?: Nutrition | null;
+  caloriesCalculated: boolean; caloriesMissing: boolean; localFoodId?: string | null; labelDate?: string | null;
+};
+export type BrandedResults = { results: BrandedFood[]; failure?: string | null; attribution: string };
 
 export type Item = {
   kind: 'Food' | 'Recipe' | 'QuickCalories';

@@ -37,6 +37,9 @@ public static class FoodEndpoints
         var g = api.MapGroup("/foods").WithTags("Foods");
         g.MapGet("/search", (string q, int? limit, FoodService s, CancellationToken ct) => s.SearchAsync(q, Math.Clamp(limit ?? 25, 1, 100), ct));
         g.MapGet("/match", (string text, FoodService s, CancellationToken ct) => s.MatchTextAsync(text, 8, ct));
+        // Branded/packaged products from USDA FoodData Central: search (nothing saved), then add one to log it.
+        g.MapGet("/branded", (string q, int? limit, BrandedFoodService s, CancellationToken ct) => s.SearchAsync(q, limit ?? 20, ct)).RequireRateLimiting("external-food");
+        g.MapPost("/branded/{sourceId}", (string sourceId, BrandedFoodService s, CancellationToken ct) => s.AddAsync(sourceId, ct)).RequireRateLimiting("external-food");
         g.MapGet("/barcode/{code}", async (string code, FoodService s, CancellationToken ct) => await s.LookupBarcodeAsync(code, ct) switch
         {
             { Food: { } food } => Results.Ok(food),

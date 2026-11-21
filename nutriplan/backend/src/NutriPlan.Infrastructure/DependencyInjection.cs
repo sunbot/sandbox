@@ -44,6 +44,15 @@ public static class DependencyInjection
         services.AddSingleton<IClock, SystemClock>();
 
         var appOptions = config.GetSection(AppOptions.Section).Get<AppOptions>() ?? new AppOptions();
+        // USDA Branded: text search and barcodes (manufacturer labels). Registered before Open Food Facts so barcode
+        // lookups try USDA first. Without Usda:ApiKey both quietly do nothing.
+        services.Configure<UsdaOptions>(config.GetSection(UsdaOptions.Section));
+        services.AddHttpClient<IBrandedFoodProvider, UsdaBrandedProvider>(c =>
+        {
+            c.BaseAddress = new Uri("https://api.nal.usda.gov/fdc/v1/");
+            c.Timeout = TimeSpan.FromSeconds(6);
+        });
+        services.AddScoped<IBarcodeProvider, UsdaBarcodeProvider>();
         services.AddHttpClient<IBarcodeProvider, OpenFoodFactsProvider>(c =>
         {
             c.BaseAddress = new Uri("https://world.openfoodfacts.org/");

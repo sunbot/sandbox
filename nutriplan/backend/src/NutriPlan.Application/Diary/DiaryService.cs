@@ -61,6 +61,10 @@ public sealed class DiaryService(
             grams = resolved.Grams ?? throw new ValidationException(resolved.Explanation);
         }
         if (grams <= 0) throw new ValidationException("Amount must be greater than zero.");
+        // A volume food's base amount ("grams" in the request) is millilitres.
+        if (food.IsVolume)
+            return ItemSnapshot.ForVolumeFood(food.Id, food.DisplayName, grams.Value, food.NutrientsFor(grams.Value),
+                amount ?? grams, amount is null ? "ml" : unit ?? "serving");
         return ItemSnapshot.ForFood(food.Id, food.DisplayName, grams.Value, food.NutrientsFor(grams.Value),
             amount ?? grams, amount is null ? "g" : unit ?? "serving");
     }

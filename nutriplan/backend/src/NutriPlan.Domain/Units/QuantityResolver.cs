@@ -3,7 +3,7 @@ using NutriPlan.Domain.Foods;
 
 namespace NutriPlan.Domain.Units;
 
-public enum ResolutionMethod { Mass, VolumeViaPortion, NamedPortion, DefaultPortion, Unresolved }
+public enum ResolutionMethod { Mass, VolumeViaPortion, NamedPortion, DefaultPortion, Unresolved, Volume }
 
 public sealed record ResolvedQuantity(double? Grams, ResolutionMethod Method, string Explanation, FoodPortion? Portion = null)
 {
@@ -27,8 +27,24 @@ public static partial class QuantityResolver
 
     private static readonly string[] DefaultPortionHints = ["medium", "whole", "regular", "large", "each", "item", "unit", "serving", "piece"];
 
-    public static ResolvedQuantity Resolve(Food food, double amount, string? unitText) =>
-        Resolve(food.Portions, amount, unitText, food.Name);
+    /// <summary>
+    /// For a <see cref="NutrientBasis.Volume"/> food the result's "grams" are millilitres: volumes convert exactly, named
+    /// portions use their labelled ml, and weights can't be converted (no density is invented).
+    /// </summary>
+    public static ResolvedQuantity Resolve(Food food, double amount, string? unitText)
+    {
+        if (!food.IsVolume) return Resolve(food.Portions, amount, unitText, food.Name);
+        if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+        var unit = Units.Find(unitText);
+        if (unit is { Kind: UnitKind.Volume })
+            return new(unit.ToBaseAmount(amount), ResolutionMethod.Volume, $"{amount:0.##} {unit.Name} = {unit.ToBaseAmount(amount):0.#} ml");
+        if (unit is { Kind: UnitKind.Mass })
+            return new(null, ResolutionMethod.Unresolved,
+                $"This drink's label is per 100 ml, so {amount:0.##} {unit.Name} can't be converted without its density. Use ml or a serving.");
+        // Named or default portion: the portion's amount is in ml for a volume food.
+        var r = Resolve(food.Portions, amount, unitText, food.Name);
+        return r.Grams is null ? r : r with { Explanation = r.Explanation.Replace(" g each", " ml each").Replace(" g)", " ml)").Replace(" g", " ml") };
+    }
 
     public static ResolvedQuantity Resolve(IReadOnlyList<FoodPortion> portions, double amount, string? unitText, string? foodName = null)
     {

@@ -154,6 +154,35 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         }
     }
 
+    [PostgresFact]
+    public async Task A_branded_product_is_stored_once_and_a_drink_keeps_its_volume_basis()
+    {
+        var per100 = new Domain.Nutrients.NutrientProfile(new Dictionary<int, double> { [1008] = 48, [1003] = 9.1 });
+        await using (var db = NewContext())
+        {
+            db.Foods.Add(new Food("High Protein Shake", FoodSource.UsdaBranded, per100, sourceId: "111", brand: "Premier Protein",
+                portions: [new FoodPortion("shake", 330)], basis: NutrientBasis.Volume));
+            await db.SaveChangesAsync();
+        }
+        await using (var db = NewContext())
+        {
+            var shake = await new FoodRepository(db).FindBySourceAsync(FoodSource.UsdaBranded, "111");
+            Assert.Equal(NutrientBasis.Volume, shake!.Basis);
+            Assert.Equal("ml", Application.Common.FoodSummaryDto.From(shake).BaseUnit);
+
+            db.Foods.Add(new Food("High Protein Shake (again)", FoodSource.UsdaBranded, per100, sourceId: "111"));
+            var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            Assert.Equal("23505", (ex.InnerException as PostgresException)?.SqlState);
+        }
+        await using (var db = NewContext())
+        {
+            // Other sources may share ids (e.g. a USDA generic and a user food): the rule is only for cached branded products.
+            db.Foods.Add(new Food("Shake I made", FoodSource.User, per100, sourceId: "111"));
+            await db.SaveChangesAsync();
+            Assert.Equal(NutrientBasis.Mass, (await new FoodRepository(db).FindBySourceAsync(FoodSource.User, "111"))!.Basis);
+        }
+    }
+
     private sealed class FixedClock(DateOnly today) : Application.Abstractions.IClock
     {
         public DateOnly Today => today;

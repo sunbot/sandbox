@@ -12,13 +12,14 @@ export type AmountSelection = { grams: number; label: string };
  * Shows live nutrition for the chosen amount, computed from the food's per-100 g data.
  */
 export function AmountPicker({ food, initialGrams, onChange }: { food: Food; initialGrams?: number; onChange: (s: AmountSelection) => void }) {
+  // Drinks labelled per 100 ml are measured in ml / fl oz (never converted to grams: no density is invented).
+  const base = food.baseUnit ?? 'g';
   const units = useMemo(
     () => [
       ...food.portions.map((p) => ({ label: p.description, grams: p.grams })),
-      { label: 'g', grams: 1 },
-      { label: 'oz', grams: 28.3495 },
+      ...(base === 'ml' ? [{ label: 'ml', grams: 1 }, { label: 'fl oz', grams: 29.5735 }] : [{ label: 'g', grams: 1 }, { label: 'oz', grams: 28.3495 }]),
     ],
-    [food],
+    [food, base],
   );
   const firstPortion = food.portions.length > 0 ? 0 : units.length - 2;
   const [unitIndex, setUnitIndex] = useState(initialGrams ? units.length - 2 : firstPortion);
@@ -40,18 +41,18 @@ export function AmountPicker({ food, initialGrams, onChange }: { food: Food; ini
           <Field label="Amount" value={count} onChangeText={setCount} keyboardType="decimal-pad" selectTextOnFocus />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={font.small}>{grams > 0 ? `= ${Math.round(grams)} g` : 'Enter an amount'}</Text>
+          <Text style={font.small}>{grams > 0 ? `= ${Math.round(grams)} ${base}` : 'Enter an amount'}</Text>
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
         {units.map((u, i) => (
-          <Chip key={`${u.label}-${i}`} label={u.label === 'g' || u.label === 'oz' ? u.label : `${u.label} (${Math.round(u.grams)} g)`} selected={i === unitIndex}
-            onPress={() => { setUnitIndex(i); if (u.label === 'g' && unit.label !== 'g') setCount('100'); else if (unit.label === 'g' && u.label !== 'g') setCount('1'); }} />
+          <Chip key={`${u.label}-${i}`} label={u.label === base || i >= units.length - 2 ? u.label : `${u.label} (${Math.round(u.grams)} ${base})`} selected={i === unitIndex}
+            onPress={() => { setUnitIndex(i); if (u.label === base && unit.label !== base) setCount('100'); else if (unit.label === base && u.label !== base) setCount('1'); }} />
         ))}
       </ScrollView>
       <View style={styles.preview}>
         <MacroLine n={nutrition} />
-        <Text style={font.tiny}>Fiber {nutrition.fiber.toFixed(1)} g · from {food.source.replace('Usda', 'USDA ')} data per 100 g</Text>
+        <Text style={font.tiny}>Fiber {nutrition.fiber.toFixed(1)} g · from {food.source.replace('Usda', 'USDA ')} data per 100 {base}</Text>
       </View>
     </View>
   );

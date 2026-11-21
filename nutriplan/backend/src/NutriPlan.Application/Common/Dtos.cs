@@ -36,12 +36,15 @@ public sealed record FoodSummaryDto(
     string? QualityNote,
     string? Barcode,
     NutritionDto Per100g,
-    IReadOnlyList<PortionDto> Portions)
+    IReadOnlyList<PortionDto> Portions,
+    string BaseUnit = "g")
 {
+    /// <remarks>When <c>BaseUnit</c> is "ml", <c>Per100g</c> is per 100 ml and portion "grams" are millilitres.</remarks>
     public static FoodSummaryDto From(Food f) => new(
         f.Id, f.Name, f.Brand, f.Source.ToString(), f.Quality.ToString(), f.QualityNote, f.Barcode,
         NutritionDto.From(f.NutrientsPer100g),
-        f.Portions.Select(p => new PortionDto(p.Description, Math.Round(p.GramsPerUnit, 2))).ToList());
+        f.Portions.Select(p => new PortionDto(p.Description, Math.Round(p.GramsPerUnit, 2))).ToList(),
+        f.BaseUnit);
 }
 
 public sealed record ItemDto(
