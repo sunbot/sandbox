@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Beta.Messages;
+using Anthropic.Exceptions;
 using Microsoft.Extensions.Options;
+using NutriPlan.Application.Common;
 
 namespace NutriPlan.Infrastructure.Ai;
 
@@ -54,7 +56,16 @@ public sealed class ClaudeJsonClient(IOptions<ClaudeOptions> options)
             };
         }
 
-        var response = await _client.Value.Beta.Messages.Create(parameters, ct);
+        Anthropic.Models.Beta.Messages.BetaMessage response;
+        try
+        {
+            response = await _client.Value.Beta.Messages.Create(parameters, ct);
+        }
+        catch (AnthropicApiException ex)
+        {
+            // Anthropic's own explanation (e.g. "credit balance is too low", "model not found") is safe to show: it never contains the key.
+            throw new SafeDiagnosticException($"Anthropic rejected the request: {Describe(ex.Message)}", ex);
+        }
 
         if (response.StopReason == BetaStopReason.Refusal)
             throw new ClaudeRefusedException("The model declined this request.");
@@ -63,5 +74,13 @@ public sealed class ClaudeJsonClient(IOptions<ClaudeOptions> options)
 
         var text = string.Concat(response.Content.Select(b => b.Value).OfType<BetaTextBlock>().Select(t => t.Text));
         return JsonDocument.Parse(text);
+    }
+
+    /// <summary>One line, no newlines, capped, and any token that looks like a key removed.</summary>
+    internal static string Describe(string message)
+    {
+        var oneLine = System.Text.RegularExpressions.Regex.Replace(message, @"\s+", " ").Trim();
+        oneLine = System.Text.RegularExpressions.Regex.Replace(oneLine, @"sk-[A-Za-z0-9_\-]{8,}", "[key removed]");
+        return oneLine.Length <= 300 ? oneLine : oneLine[..300] + "…";
     }
 }
