@@ -92,6 +92,7 @@ public class UsdaBrandedProviderTests
     [InlineData("2 tbsp", "2 tbsp serving")]
     [InlineData("1 BOTTLE", "bottle")]
     [InlineData("about 3 crackers", "serving")]
+    [InlineData("105 GRM", "serving")]
     [InlineData(null, "serving")]
     public void Label_unit_codes_read_as_words(string? household, string expected)
     {
@@ -144,5 +145,29 @@ public class UsdaBrandedProviderTests
         Assert.Equal(FoodSource.UsdaBranded, found.Food.Source);
         Assert.Equal(BarcodeLookupStatus.NotFound, (await new UsdaBarcodeProvider(p).LookupAsync("0000000000017")).Status);
         Assert.Equal(BarcodeLookupStatus.Failed, (await new UsdaBarcodeProvider(Provider(_ => Json("{}", HttpStatusCode.TooManyRequests))).LookupAsync("0013764027220")).Status);
+    }
+
+    [Fact]
+    public void Barcodes_are_searched_in_every_form_USDA_stores()
+    {
+        Assert.Equal(["818290019790", "00818290019790", "0818290019790"], UsdaBrandedProvider.BarcodeForms("0818290019790"));
+        Assert.Equal(["96385074".PadLeft(14, '0'), "96385074"], UsdaBrandedProvider.BarcodeForms("96385074"));
+    }
+
+    [Fact]
+    public async Task A_product_stored_as_GTIN_14_is_found_by_its_scan()
+    {
+        var queries = new List<string>();
+        var p = Provider(req =>
+        {
+            var q = Uri.UnescapeDataString(req.RequestUri!.Query.Split("query=")[1]);
+            queries.Add(q);
+            return Json(q == "00818290019790"
+                ? """{"foods":[{"fdcId":5,"description":"Chobani Honey Vanilla Greek Yogurt","brandOwner":"Chobani","gtinUpc":"00818290019790","foodNutrients":[{"nutrientId":1003,"unitName":"G","value":8}]}]}"""
+                : """{"foods":[]}""");
+        });
+        var r = await new UsdaBarcodeProvider(p).LookupAsync("0818290019790");
+        Assert.Equal(BarcodeLookupStatus.Found, r.Status);
+        Assert.Equal(["818290019790", "00818290019790"], queries);   // stops at the first form that matches
     }
 }

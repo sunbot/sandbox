@@ -51,7 +51,8 @@ public sealed class BrandedFoodService(IFoodRepository foods, IBrandedFoodProvid
         var results = new List<BrandedFoodDto>(ranked.Count);
         foreach (var p in ranked)
         {
-            var local = await foods.FindBySourceAsync(p.Source, p.SourceId, ct);
+            // Saved under its provider id, or already scanned under its barcode (the twin AddAsync would return).
+            var local = await foods.FindBySourceAsync(p.Source, p.SourceId, ct) ?? (p.Barcode is { } code ? await foods.FindByBarcodeAsync(code, ct) : null);
             var (done, calculated) = Complete(p);
             results.Add(ToDto(done, calculated, local?.Id));
         }
@@ -152,7 +153,10 @@ public sealed class BrandedFoodService(IFoodRepository foods, IBrandedFoodProvid
         var serving = p.Portions.FirstOrDefault();
         var perServing = serving is { GramWeight: > 0 } ? NutritionDto.From(p.Per100.ForGrams(serving.GramWeight)) : null;
         var unit = p.Basis == NutrientBasis.Volume ? "ml" : "g";
-        string? servingText = serving is null ? null : $"{Amount(serving.Amount)} {serving.Description} ({serving.GramWeight:0.#} {unit})".Trim();
+        // "1 slice (40 g)", "11.5 fl oz serving (340 ml)" (a description that already starts with its amount isn't given another).
+        string? servingText = serving is null ? null
+            : char.IsDigit(serving.Description[0]) ? $"{serving.Description} ({serving.GramWeight:0.#} {unit})"
+            : $"{Amount(serving.Amount)} {serving.Description} ({serving.GramWeight:0.#} {unit})";
         return new(p.Source.ToString(), p.SourceId, p.Name, p.Brand, p.Barcode, unit, servingText, serving?.GramWeight,
             NutritionDto.From(p.Per100), perServing, calculated, !p.Per100.Has(NutrientIds.Energy), localId, p.LabelDate);
     }

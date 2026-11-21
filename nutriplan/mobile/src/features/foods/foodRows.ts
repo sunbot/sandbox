@@ -83,3 +83,20 @@ export function brandedNotice(failure?: string | null): string | null {
     default: return 'Couldn’t reach USDA for branded products. Your own foods still work.';
   }
 }
+
+const words = (s: string) => s.toLowerCase().replace(/['’]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+
+/**
+ * Show packaged products above your foods when the search names a brand (it matches a brand among the top branded
+ * results) that none of the top local results mention: "Core Power" shouldn't sit under three Powerade drinks. Generic
+ * searches ("chicken breast") and brands already in your foods keep your foods first.
+ */
+export function packagedFirst(query: string, local: Pick<Food, 'name' | 'brand'>[], branded: Pick<BrandedFood, 'brand'>[]): boolean {
+  const q = new Set(words(query));
+  const brandWords = new Set(branded.slice(0, 3).flatMap((b) => words(b.brand ?? '')));
+  const named = [...q].filter((w) => brandWords.has(w));
+  if (named.length === 0) return false;
+  const localWords = new Set(local.slice(0, 3).flatMap((f) => words(`${f.name} ${f.brand ?? ''}`)));
+  // "Dave's Killer Bread" isn't covered by plain breads: every word of the brand you typed must appear locally.
+  return named.some((w) => !localWords.has(w));
+}
