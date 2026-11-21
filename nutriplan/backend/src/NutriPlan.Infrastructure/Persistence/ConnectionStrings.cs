@@ -30,9 +30,13 @@ public static class ConnectionStrings
         foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
             var kv = pair.Split('=', 2);
-            if (kv.Length == 2 && kv[0].Equals("sslmode", StringComparison.OrdinalIgnoreCase) &&
+            if (kv.Length != 2) continue;
+            if (kv[0].Equals("sslmode", StringComparison.OrdinalIgnoreCase) &&
                 Enum.TryParse<SslMode>(kv[1].Replace("-", ""), ignoreCase: true, out var mode))
                 builder.SslMode = mode;
+            else if (kv[0].Equals("channel_binding", StringComparison.OrdinalIgnoreCase) &&
+                     Enum.TryParse<ChannelBinding>(kv[1], ignoreCase: true, out var binding))
+                builder.ChannelBinding = binding;
         }
         return builder.ConnectionString;
     }

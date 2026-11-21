@@ -23,7 +23,9 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         // DATABASE_URL (what most hosts provide) wins over appsettings so a deployment needs no config files.
-        var raw = config["DATABASE_URL"] ?? config.GetConnectionString("NutriPlan")
+        // Neon writes both DATABASE_URL (pooled) and DATABASE_URL_UNPOOLED (direct). The app creates/updates its tables
+        // at startup, which needs a direct connection, and a single-user app needs few connections, so prefer direct.
+        var raw = config["DATABASE_URL_UNPOOLED"] ?? config["DATABASE_URL"] ?? config.GetConnectionString("NutriPlan")
             ?? throw new InvalidOperationException("Set DATABASE_URL or ConnectionStrings:NutriPlan.");
         var connectionString = ConnectionStrings.FromUrlOrRaw(raw);
 

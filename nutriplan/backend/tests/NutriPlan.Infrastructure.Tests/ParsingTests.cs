@@ -139,6 +139,7 @@ public class ParsingTests
         Assert.Equal("alex", cs.Username);
         Assert.Equal("p@ss", cs.Password);
         Assert.Equal(Npgsql.SslMode.Require, cs.SslMode);
+        Assert.Equal(Npgsql.ChannelBinding.Require, cs.ChannelBinding);
 
         const string raw = "Host=localhost;Database=nutriplan;Username=u;Password=p";
         Assert.Equal(raw, Persistence.ConnectionStrings.FromUrlOrRaw(raw));
