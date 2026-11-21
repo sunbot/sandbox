@@ -34,7 +34,7 @@ public sealed record SaveRecipeRequest(
 
 public sealed record UpdateIngredientRequest(Guid? FoodId, double? Grams, double? Amount, string? Unit, bool? Ignore);
 
-public sealed class RecipeService(
+public sealed partial class RecipeService(
     IRecipeRepository recipes,
     IFoodRepository foods,
     FoodService foodService,
@@ -257,26 +257,57 @@ public sealed class RecipeService(
         Dictionary<string, List<RankedFood>>? cache = null)
     {
         cache ??= new Dictionary<string, List<RankedFood>>(StringComparer.OrdinalIgnoreCase);
+        async Task<List<RankedFood>> SearchCachedAsync(string q)
+        {
+            if (!cache.TryGetValue(q, out var found))
+            {
+                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false)).ToList();
+                cache[q] = found;
+            }
+            return found;
+        }
+
         foreach (var ing in recipe.Ingredients)
         {
             if (ing.Status is IngredientMatchStatus.Ignored or IngredientMatchStatus.Confirmed) continue;
             if (onlyUnmatched && ing.Status == IngredientMatchStatus.AutoMatched && ing.Grams is not null) continue;
 
-            if (ing.Amount is null && (ing.Preparation?.Contains("to taste") == true || ing.Preparation?.Contains("optional") == true))
+            if (IngredientQuery.IsNeverCounted(ing.RawText))
             {
+                (ing.FoodId, ing.FoodName, ing.Grams) = (null, null, null);
                 ing.Status = IngredientMatchStatus.Ignored;
-                ing.ResolutionNote = "No amount (to taste / optional) — not counted";
+                ing.ResolutionNote = "Not a separate ingredient (reserved liquid / zest only) — not counted";
                 continue;
             }
 
-            var query = IngredientQuery.Clean(ing.FoodText);
-            if (!cache.TryGetValue(query, out var top))
+            if (ing.Amount is null && IngredientQuery.IsMinorWithoutAmount(ing.RawText, ing.FoodText))
             {
-                top = (await foodService.SearchRankedAsync(query, 12, ct, dedupe: false, useHistory: false)).ToList();
-                cache[query] = top;
+                // "Kosher salt", "Lime wedges, for serving", "Oil for the pan": no amount to count, and not a real portion.
+                (ing.FoodId, ing.FoodName, ing.Grams) = (null, null, null);
+                ing.Status = IngredientMatchStatus.Ignored;
+                ing.ResolutionNote = "No amount (to taste / for serving) — not counted";
+                continue;
             }
 
+            // Search the food words; a known recipe term may only show up with the preparation ("sunflower, safflower or canola oil").
+            var query = IngredientQuery.Alias(ing.FoodText) is null && ing.Preparation is not null && IngredientQuery.Alias($"{ing.FoodText} {ing.Preparation}") is { } fromPrep
+                ? fromPrep
+                : IngredientQuery.Clean(ing.FoodText);
+            var top = await SearchCachedAsync(query);
             var best = top.FirstOrDefault();
+
+            // Nothing confident: try the main noun ("toasted sesame oil" → "sesame oil", "Dijon mustard" → "mustard"),
+            // keeping it only if the food found is that noun ("Sugars, brown" for "brown sugar", not "Rice" for "rice vinegar").
+            if (best is null || best.Score < MinAutoMatchScore)
+            {
+                foreach (var shorter in IngredientQuery.ShorterQueries(query))
+                {
+                    var alt = (await SearchCachedAsync(shorter)).FirstOrDefault();
+                    if (alt is null || alt.Score < MinAutoMatchScore || !IngredientQuery.NamesTheFood(alt.Food.Name, shorter)) continue;
+                    (best, top) = (alt, await SearchCachedAsync(shorter));
+                    break;
+                }
+            }
             if (best is null || best.Score < MinAutoMatchScore)
             {
                 (ing.FoodId, ing.FoodName, ing.Grams, ing.Status) = (null, null, null, IngredientMatchStatus.Unmatched);
@@ -288,30 +319,38 @@ public sealed class RecipeService(
             // Many lab-analysed foods have no cup/tbsp weights. If the top match can't convert this amount,
             // use the next close match that can (e.g. SR Legacy "Oats" instead of a Foundation sample).
             var q = QuantityResolver.Resolve(best.Food, ing.Amount ?? 1, ing.Unit);
-            if (!q.IsResolved)
+            if (!q.IsResolved || QuantityResolver.IsPartGuess(q))
             {
-                // Only the same kind of food ("Oats" for "Oats, rolled"), never a different one that happens to have the
-                // measure (that's how "olive oil" once became mayonnaise).
-                foreach (var alternative in top.Skip(1).Where(a => a.Score >= best.Score - 20
-                             && (SameHead(a.Food, best.Food) || NutritionallyEquivalent(a.Food, best.Food))))
-                {
-                    var altQ = QuantityResolver.Resolve(alternative.Food, ing.Amount ?? 1, ing.Unit);
-                    if (!altQ.IsResolved) continue;
-                    (best, q) = (alternative, altQ);
-                    break;
-                }
+                // Many lab-analysed foods have no cup/tbsp weights. Use the next close match of the same kind that can
+                // convert the amount ("Oats" for "Oats, rolled") — never a different food that happens to have the
+                // measure (that's how "olive oil" once became mayonnaise). A whole-item measure beats a piece ("1 pepper"
+                // is a pepper, not a 10 g ring).
+                var options = top.Skip(1)
+                    .Where(a => a.Score >= best.Score - 20 && (SameHead(a.Food, best.Food) || NutritionallyEquivalent(a.Food, best.Food)))
+                    .Select(a => (Food: a, Q: QuantityResolver.Resolve(a.Food, ing.Amount ?? 1, ing.Unit)))
+                    .Where(x => x.Q.IsResolved)
+                    .ToList();
+                var pick = options.FirstOrDefault(x => !QuantityResolver.IsPartGuess(x.Q));
+                if (pick.Food is not null) (best, q) = (pick.Food, pick.Q);
+                else if (!q.IsResolved && options.Count > 0) (best, q) = (options[0].Food, options[0].Q);
             }
             if (!q.IsResolved)
             {
                 // Still nothing: borrow the measure from a nutritionally equivalent food ("Oats, raw" has a cup
                 // weight; "Oats, rolled" doesn't). Same composition ⇒ same density, so the grams are sound.
-                foreach (var alternative in top.Skip(1).Where(a => NutritionallyEquivalent(a.Food, best.Food)))
+                foreach (var alternative in top.Skip(1).Where(a => NutritionallyEquivalent(a.Food, best.Food) && SameHead(a.Food, best.Food)))
                 {
                     var altQ = QuantityResolver.Resolve(alternative.Food, ing.Amount ?? 1, ing.Unit);
                     if (!altQ.IsResolved) continue;
                     q = altQ with { Explanation = $"{altQ.Explanation} — measure from \"{alternative.Food.Name}\"" };
                     break;
                 }
+            }
+            // Fresh ginger/turmeric are measured by the inch: about 6 g per inch of root.
+            if (RootByTheInch().IsMatch(best.Food.Name) && InchSize().Match(ing.RawText) is { Success: true } inch)
+            {
+                var grams = 6 * double.Parse(inch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) * (ing.Amount ?? 1);
+                q = new ResolvedQuantity(grams, ResolutionMethod.NamedPortion, $"{inch.Value} piece ≈ {grams:0} g (about 6 g per inch)");
             }
 
             ing.FoodId = best.Food.Id;
@@ -326,6 +365,12 @@ public sealed class RecipeService(
         }
         await RecalculateAsync(recipe, ct);
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(Ginger|Turmeric) root", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex RootByTheInch();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(\d+(?:\.\d+)?)[- ]inch", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex InchSize();
 
     /// <summary>Same food named the same way: "Oats, rolled" and "Oats" (first word of the USDA name).</summary>
     private static bool SameHead(Food a, Food b)

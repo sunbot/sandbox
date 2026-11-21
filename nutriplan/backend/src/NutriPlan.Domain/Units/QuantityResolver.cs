@@ -19,7 +19,7 @@ public static partial class QuantityResolver
 {
     private static readonly HashSet<string> SizeWords = ["small", "medium", "large", "extra-large", "jumbo", "regular"];
 
-    private static readonly string[] DefaultPortionHints = ["serving", "medium", "piece", "item", "each", "whole", "unit", "large"];
+    private static readonly string[] DefaultPortionHints = ["medium", "whole", "regular", "large", "each", "item", "unit", "serving", "piece"];
 
     public static ResolvedQuantity Resolve(Food food, double amount, string? unitText) =>
         Resolve(food.Portions, amount, unitText, food.Name);
@@ -41,6 +41,7 @@ public static partial class QuantityResolver
                 .Select(p => (Portion: p, Unit: LeadingVolumeUnit(p.Description)))
                 .Where(x => x.Unit is not null)
                 .OrderBy(x => Math.Abs(Math.Log(Math.Max(requestedMl, 0.01) / (x.Unit!.ToBase * Math.Max(x.Portion.Amount, 0.01)))))
+                .ThenByDescending(x => Shelled().IsMatch(x.Portion.Description)) // recipes measure nuts shelled
                 .ThenBy(x => x.Portion.Description.Length)
                 .FirstOrDefault();
             if (best.Unit is not null)
@@ -60,7 +61,8 @@ public static partial class QuantityResolver
             var wanted = Singular(unitText.Trim().ToLowerInvariant());
             // Several can match ("slice, snack-size", "medium or regular slice"): prefer the regular one.
             var match = portions
-                .Where(p => Words(p.Description).Contains(wanted))
+                // "1 piece" is never "cup (1\" pieces)": a count word doesn't match a volume measure.
+                .Where(p => Words(p.Description).Contains(wanted) && LeadingVolumeUnit(p.Description) is null)
                 .OrderByDescending(p => PlainnessScore(p.Description, wanted))
                 .ThenBy(p => p.Description.Length)
                 .FirstOrDefault();
@@ -81,8 +83,11 @@ public static partial class QuantityResolver
 
         // Best default: a portion named after the food itself ("1 banana" for "Banana, raw").
         var nameWord = foodName is null ? null : Singular(WordSplit().Split(foodName.ToLowerInvariant()).FirstOrDefault(w => w.Length > 2) ?? "");
-        var fallback = (nameWord is null ? null : usable.FirstOrDefault(p => Words(p.Description).Contains(nameWord)))
-            ?? hints.Select(h => usable.FirstOrDefault(p => Words(p.Description).Contains(h))).FirstOrDefault(p => p is not null)
+        // Never a part or a variety as "one": a slice, ring or leaf, or "grape tomato" for "Tomatoes, raw".
+        var whole = usable.Where(p => !Words(p.Description).Overlaps(PartOrVarietyWords)).ToList();
+        var fallback = (nameWord is null ? null : whole.FirstOrDefault(p => Words(p.Description).Contains(nameWord)))
+            ?? hints.Select(h => whole.FirstOrDefault(p => Words(p.Description).Contains(h))).FirstOrDefault(p => p is not null)
+            ?? whole.FirstOrDefault()
             ?? usable.FirstOrDefault();
 
         if (fallback is not null)
@@ -97,6 +102,10 @@ public static partial class QuantityResolver
     private static readonly string[] RegularWords = ["regular", "medium", "standard", "average"];
     private static readonly string[] OddWords = ["snack", "thin", "small", "mini", "miniature", "baby", "crust", "bite", "cocktail", "thick", "large"];
 
+    /// <summary>Portions that are a piece of the food or a different variety, not "one" of it.</summary>
+    private static readonly HashSet<string> PartOrVarietyWords =
+        ["slice", "ring", "strip", "wedge", "leaf", "sprig", "grape", "cherry", "plum", "italian", "cube", "floret", "segment", "section", "spear", "stalk", "chopped", "nlea"];
+
     private static int PlainnessScore(string description, string wanted)
     {
         var words = Words(description);
@@ -104,6 +113,7 @@ public static partial class QuantityResolver
         if (words.Count == 1) score += 4;
         if (RegularWords.Any(words.Contains)) score += 3;
         if (OddWords.Any(w => words.Contains(w) && w != wanted)) score -= 2;
+        if (SizeWords.Contains(wanted) && words.Overlaps(PartOrVarietyWords)) score -= 6; // "1 medium" is the whole item, not "slice, medium"
         return score;
     }
 
@@ -132,6 +142,13 @@ public static partial class QuantityResolver
 
     [GeneratedRegex(@"^[A-Za-z]+\.?")]
     private static partial Regex LeadingWord();
+
+    [GeneratedRegex(@"without shell|shelled|kernels", RegexOptions.IgnoreCase)]
+    private static partial Regex Shelled();
+
+    /// <summary>A default portion that is only a piece of the food (a ring, strip or "piece"), a weak guess for "1 pepper".</summary>
+    public static bool IsPartGuess(ResolvedQuantity q) =>
+        q is { Method: ResolutionMethod.DefaultPortion, Portion: { } p } && Words(p.Description).Overlaps(PartOrVarietyWords.Append("piece"));
 
     [GeneratedRegex(@"[^a-z]+")]
     private static partial Regex WordSplit();

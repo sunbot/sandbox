@@ -49,6 +49,18 @@ public static partial class QuantityTextParser
         "link", "links", "strip", "strips", "patty", "patties", "envelope", "envelopes", "box", "boxes", "bag", "bags",
     };
 
+    private static readonly HashSet<string> MeasureAdjectives = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "packed", "heaping", "heaped", "level", "generous", "scant", "loosely", "firmly", "lightly", "rounded", "big", "full",
+    };
+
+    /// <summary>Describing words that recipes separate with commas ("boneless, skinless chicken").</summary>
+    private static readonly HashSet<string> Descriptors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "boneless", "skinless", "bone-in", "skin-on", "fresh", "frozen", "ripe", "unsalted", "salted", "low-sodium",
+        "reduced-sodium", "sweet", "hot", "mild", "large", "small", "medium", "lean", "extra-lean", "organic", "plain",
+    };
+
     private static readonly string[] NoQuantityPhrases = ["to taste", "as needed", "for garnish", "for serving", "optional"];
 
     public static ParsedFoodText Parse(string raw)
@@ -60,9 +72,11 @@ public static partial class QuantityTextParser
         string? note = null;
         var paren = Parenthetical().Match(text);
         string? parenContent = null;
+        var parenIsPerItem = false; // "2 (15-ounce) cans": size of each item, right after the count
         if (paren.Success)
         {
             parenContent = paren.Groups[1].Value.Trim();
+            parenIsPerItem = LeadingAmountOnly().IsMatch(text[..paren.Index]);
             note = parenContent;
             text = (text[..paren.Index] + " " + text[(paren.Index + paren.Length)..]).Trim();
             text = MultiSpace().Replace(text, " ");
@@ -71,6 +85,13 @@ public static partial class QuantityTextParser
         // Preparation after the first comma: "chicken breast, diced".
         string? preparation = null;
         var comma = text.IndexOf(',');
+        // "4 boneless, skinless chicken breasts": a comma between describing words isn't the start of the preparation.
+        while (comma > 0 && Descriptors.Contains(text[..comma].Trim().Split(' ')[^1]))
+        {
+            var next = text.IndexOf(',', comma + 1);
+            text = text[..comma] + text[(comma + 1)..];
+            comma = next < 0 ? -1 : next - 1;
+        }
         if (comma > 0)
         {
             preparation = text[(comma + 1)..].Trim().TrimEnd('.');
@@ -90,6 +111,10 @@ public static partial class QuantityTextParser
         var tokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
         var index = 0;
         var amount = ReadAmount(tokens, ref index);
+        // "5 packed cups", "2 heaping tbsp": the measuring word comes after the adjective.
+        if (amount is not null && index + 1 < tokens.Count && MeasureAdjectives.Contains(tokens[index])
+            && (Units.Units.Find(tokens[index + 1]) is not null || CountUnits.Contains(tokens[index + 1])))
+            tokens.RemoveAt(index);
 
         string? unit = null;
         if (amount is not null || index == 0)
@@ -113,25 +138,45 @@ public static partial class QuantityTextParser
             }
         }
 
-        // "2 (14.5 oz) cans tomatoes" → 2 × 14.5 oz.
-        if (amount is not null && parenContent is not null && (unit is null || CountUnits.Contains(unit)))
+        var innerQty = parenContent is null ? null : Parse(Approximately().Replace(ParenSeparator().Replace(parenContent, " "), ""));
+        var innerUnit = innerQty?.Amount is null ? null : Units.Units.Find(innerQty.Unit);
+
+        if (amount is not null && innerUnit is not null && parenIsPerItem && (unit is null || CountUnits.Contains(unit)))
         {
-            var inner = Parse(parenContent);
-            if (inner.Amount is not null && Units.Units.Find(inner.Unit) is { Kind: UnitKind.Mass or UnitKind.Volume })
+            // "2 (14.5 oz) cans tomatoes" → 2 × 14.5 oz.
+            if (innerUnit.Kind is UnitKind.Mass or UnitKind.Volume)
             {
-                amount *= inner.Amount;
-                unit = inner.Unit;
+                amount *= innerQty!.Amount;
+                unit = innerQty.Unit;
             }
+        }
+        else if (amount is not null && innerUnit is { Kind: UnitKind.Mass } && !parenIsPerItem
+                 && (unit is null || CountUnits.Contains(unit) || Units.Units.Find(unit) is { Kind: UnitKind.Volume or UnitKind.Mass }))
+        {
+            // A weight in the note is the most precise amount there is: "1 cup (220 g) brown sugar" → 220 g,
+            // "4 chicken breasts (about 1½ pounds)" → 1.5 lb in total.
+            amount = innerQty!.Amount;
+            unit = innerQty.Unit;
         }
 
         // "Olive oil (about 2 tbsp for searing)": no amount up front, but the note has one.
-        if (amount is null && parenContent is not null)
+        if (amount is null && innerUnit is not null)
         {
-            var inner = Parse(Approximately().Replace(parenContent, ""));
-            if (inner.Amount is not null && inner.Unit is not null && Units.Units.Find(inner.Unit) is not null)
+            amount = innerQty!.Amount;
+            unit = innerQty.Unit;
+        }
+
+        // "1 whole chicken, 4–5 lb": a weight right after the comma is the amount.
+        if ((amount is null || unit is null || CountUnits.Contains(unit)) && preparation is not null && preparation.Any(char.IsDigit))
+        {
+            var first = preparation.Split(',')[0];
+            var prepQty = Parse(Approximately().Replace(first, ""));
+            if (prepQty.Amount is not null && Units.Units.Find(prepQty.Unit) is { Kind: UnitKind.Mass })
             {
-                amount = inner.Amount;
-                unit = inner.Unit;
+                // "2 chicken breasts, 8 oz each" → 16 oz.
+                var each = first.Contains("each", StringComparison.OrdinalIgnoreCase) && amount is > 1 ? amount.Value : 1;
+                amount = prepQty.Amount * each;
+                unit = prepQty.Unit;
             }
         }
 
@@ -205,6 +250,14 @@ public static partial class QuantityTextParser
                 continue;
             }
 
+            // "1 16 ounce jar" → one 16-ounce jar (a count, then the size), not 17.
+            if (total is { } count && count == Math.Floor(count) && WholeNumber().IsMatch(token) && value.Value >= 2)
+            {
+                total = count * value.Value;
+                index++;
+                continue;
+            }
+
             total = (total ?? 0) + value.Value;
             index++;
         }
@@ -248,6 +301,10 @@ public static partial class QuantityTextParser
         // List markers from copied recipes: "- ", "• ", "▢ ", "☐ ", "✓ ", and numbered steps "1. 1/4 cup" / "2) 3 eggs".
         s = ListMarker().Replace(s, "");
         s = NumberedMarker().Replace(s, "");
+        // "1 ½ cups/340 grams butter" → "1 ½ cups (340 grams) butter".
+        s = SlashWeight().Replace(s, "$1 ($2)");
+        // "15-ounce can", "1-inch piece" → "15 ounce", "1 inch".
+        s = HyphenSize().Replace(s, "$1 $2");
         // Markdown emphasis: "2 tsp garlic powder *(or 4 cloves)*", "**1 cup** milk".
         s = s.Replace("*", "").Replace("__", "");
         // "1-1/2" → "1 1/2" ; space between number and unicode fraction "1 ½" handled by tokenizer.
@@ -259,6 +316,11 @@ public static partial class QuantityTextParser
 
     [GeneratedRegex(@"\(([^)]*)\)")] private static partial Regex Parenthetical();
     [GeneratedRegex(@"^[\s\-*•·▪◦●○▢□☐✓✔➤>]+")] private static partial Regex ListMarker();
+    [GeneratedRegex(@"(\d)-(ounce|ounces|oz|pound|pounds|lb|inch|gram|grams|g)\b", RegexOptions.IgnoreCase)] private static partial Regex HyphenSize();
+    [GeneratedRegex(@"^\s*[\d\s./½¼¾⅓⅔⅛⅜⅝⅞-]+\s*$")] private static partial Regex LeadingAmountOnly();
+    [GeneratedRegex(@"[:;]")] private static partial Regex ParenSeparator();
+    [GeneratedRegex(@"^\d+$")] private static partial Regex WholeNumber();
+    [GeneratedRegex(@"([A-Za-z.]+)\s*/\s*(\d+(?:\.\d+)?\s*(?:g|grams?|ml|milliliters?|oz|ounces?))\b", RegexOptions.IgnoreCase)] private static partial Regex SlashWeight();
     /// <summary>"1. " or "2) " only when another amount follows, so "2) eggs"-style lines aren't stripped of their count by accident.</summary>
     [GeneratedRegex(@"^\d{1,2}[.)]\s+(?=[\d½¼¾⅓⅔⅛⅜⅝⅞])")] private static partial Regex NumberedMarker();
     [GeneratedRegex(@"^(?:about|approx\.?|approximately|roughly|around|~)\s*", RegexOptions.IgnoreCase)] private static partial Regex Approximately();

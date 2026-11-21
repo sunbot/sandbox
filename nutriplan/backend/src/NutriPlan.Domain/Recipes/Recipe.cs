@@ -52,10 +52,15 @@ public sealed class RecipeIngredient
     /// <summary>Paprika and many sites use lines like "For the sauce:" or "SAUCE" as headers.</summary>
     public static bool IsSectionHeader(string line)
     {
-        var t = line.Trim();
+        var t = line.Trim().TrimStart('-', '*', '•', '#').Trim();
         if (t.Length == 0) return true;
         if (t.EndsWith(':')) return true;
-        return t.Length < 40 && t.Any(char.IsLetter) && !t.Any(char.IsDigit) && t == t.ToUpperInvariant();
+        // "Ingredients (for 4 servings)", recipe-site scaling buttons "1X 2X 3X".
+        if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^(ingredients|for the\b[^,]*$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return true;
+        if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^(\d+\s*[xX]\s*)+$")) return true;
+        // ALL-CAPS headings, ignoring notes in parentheses: "AROMATICS (BOWL 2)".
+        var bare = System.Text.RegularExpressions.Regex.Replace(t, @"\([^)]*\)", "").Trim();
+        return bare.Length is > 0 and < 40 && bare.Any(char.IsLetter) && !bare.Any(char.IsDigit) && bare == bare.ToUpperInvariant();
     }
 }
 

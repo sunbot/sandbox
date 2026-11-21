@@ -89,7 +89,7 @@ public static partial class FoodRanker
             // "Yogurt, whole milk" for "whole milk", "Mayonnaise, with olive oil" for "olive oil": the query words are
             // only details of a different food. (Foods named by their category, like "Cheese, parmesan", are hit
             // equally, so they still rank among themselves.)
-            if (queryTokens.Count >= 2 && !headTokens.Any(querySet.Contains))
+            if (!headTokens.Any(querySet.Contains))
                 score -= 6;
 
             // "Beans and brown rice", "Chicken with rice" for "brown rice": a combination dish you didn't ask for.

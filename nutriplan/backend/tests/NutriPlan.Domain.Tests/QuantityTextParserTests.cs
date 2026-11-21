@@ -54,7 +54,7 @@ public class QuantityTextParserTests
         Assert.Equal(1, result.Amount);
         Assert.Equal("lb", result.Unit);
         Assert.Equal("boneless skinless chicken thighs", result.FoodText);
-        Assert.Equal("cut into 1-inch pieces", result.Preparation);
+        Assert.Equal("cut into 1 inch pieces", result.Preparation); // sizes are normalised ("15-ounce" → "15 ounce"); the original line is kept as RawText
     }
 
     [Fact]
