@@ -129,6 +129,10 @@ export type RecipeDetail = {
   sourceName?: string | null;
   sourceUrl?: string | null;
   sourceNutritionText?: string | null;
+  prepTime?: string | null;
+  cookTime?: string | null;
+  /** Weight of the finished dish in grams, only when entered or supplied; never estimated. Enables per-100 g. */
+  cookedWeightGrams?: number | null;
   ingredients: Ingredient[];
   warnings: string[];
 };

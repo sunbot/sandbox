@@ -183,12 +183,12 @@ export function useRecipeMutations() {
       onSuccess: refresh,
     }),
     create: useMutation({
-      mutationFn: (r: { name: string; servings: number; ingredients: string[]; directions?: string; description?: string; categories?: string[] }) =>
+      mutationFn: (r: { name: string; servings: number; ingredients: string[]; directions?: string; description?: string; categories?: string[]; cookedWeightGrams?: number | null }) =>
         post<T.RecipeDetail>('/recipes', r),
       onSuccess: refresh,
     }),
     edit: useMutation({
-      mutationFn: ({ id, ...r }: { id: string; name: string; servings: number; ingredients: string[]; directions?: string | null; description?: string | null; categories?: string[]; notes?: string | null }) =>
+      mutationFn: ({ id, ...r }: { id: string; name: string; servings: number; ingredients: string[]; directions?: string | null; description?: string | null; categories?: string[]; notes?: string | null; cookedWeightGrams?: number | null }) =>
         put<T.RecipeDetail>(`/recipes/${id}`, r),
       onSuccess: refresh,
     }),

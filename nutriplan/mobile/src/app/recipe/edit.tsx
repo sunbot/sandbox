@@ -41,13 +41,16 @@ function Form({ recipe }: { recipe: RecipeDetail | null }) {
   const [lines, setLines] = useState((recipe?.ingredients ?? []).map((i) => i.rawText).join('\n'));
   const [directions, setDirections] = useState(recipe?.directions ?? '');
   const [description, setDescription] = useState(recipe?.description ?? '');
+  const [cooked, setCooked] = useState(recipe?.cookedWeightGrams ? String(recipe.cookedWeightGrams) : '');
   const [error, setError] = useState<string | null>(null);
   const ingredients = lines.split('\n').map((l) => l.trim()).filter(Boolean);
-  const valid = name.trim().length > 0 && Number(servings) > 0 && ingredients.length > 0;
+  const cookedValue = cooked.trim() === '' ? null : Number(cooked.replace(',', '.'));
+  const cookedOk = cookedValue === null || (Number.isFinite(cookedValue) && cookedValue > 0);
+  const valid = name.trim().length > 0 && Number(servings) > 0 && ingredients.length > 0 && cookedOk;
 
   const save = async () => {
     setError(null);
-    const body = { name: name.trim(), servings: Number(servings), ingredients, directions: directions.trim() || undefined, description: description.trim() || undefined };
+    const body = { name: name.trim(), servings: Number(servings), ingredients, directions: directions.trim() || undefined, description: description.trim() || undefined, cookedWeightGrams: cookedValue };
     try {
       const saved = recipe
         ? await m.edit.mutateAsync({ id: recipe.summary.id, ...body, categories: recipe.summary.categories, notes: recipe.notes ?? null })
@@ -66,6 +69,9 @@ function Form({ recipe }: { recipe: RecipeDetail | null }) {
         <AppText variant="caption" tone="muted">Each line is matched to USDA foods when you save. Anything uncertain is highlighted on the recipe for you to check.</AppText>
         <Field label="Directions (optional)" value={directions} onChangeText={setDirections} multiline />
         <Field label="Description (optional)" value={description} onChangeText={setDescription} />
+        <Field label="Finished dish weight in grams (optional)" value={cooked} onChangeText={setCooked} keyboardType="decimal-pad" placeholder="e.g. 1200" />
+        <AppText variant="caption" tone="muted">Weigh the cooked dish to see nutrition per 100 g. Leave it empty if you don’t know: it is never estimated from the ingredients.</AppText>
+        {!cookedOk ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">Enter the weight as a positive number of grams, or leave it empty.</AppText> : null}
         {error ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">{error}</AppText> : null}
         <PrimaryButton label={recipe ? 'Save recipe' : 'Create recipe'} icon={Check} disabled={!valid} loading={m.edit.isPending || m.create.isPending} onPress={save} fullWidth />
       </ScrollView>
