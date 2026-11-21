@@ -45,13 +45,28 @@ public sealed partial class UsdaBrandedProvider(HttpClient http, IOptions<UsdaOp
         using (doc) return new(Parse(doc.RootElement));
     }
 
-    /// <summary>USDA stores UPCs as printed (12 digits) or zero-padded; both forms are searched and compared normalized.</summary>
+    /// <summary>
+    /// USDA's search matches a UPC only exactly as stored, and it stores some as printed (12 digits) and others as GTIN-14
+    /// (zero-padded). Each form is tried in turn (at most three calls) and results are compared normalized.
+    /// </summary>
     public async Task<BrandedFetch> FindByBarcodeAsync(string normalizedBarcode, CancellationToken ct = default)
     {
-        var upc = normalizedBarcode.Length == 13 && normalizedBarcode[0] == '0' ? normalizedBarcode[1..] : normalizedBarcode;
-        var found = await SearchAsync(upc, 10, ct);
-        if (found.Failure is not null) return new(null, found.Failure);
-        return new(found.Products.FirstOrDefault(p => p.Barcode == normalizedBarcode));
+        foreach (var form in BarcodeForms(normalizedBarcode))
+        {
+            var found = await SearchAsync(form, 10, ct);
+            if (found.Failure is not null) return new(null, found.Failure);
+            if (found.Products.FirstOrDefault(p => p.Barcode == normalizedBarcode) is { } hit) return new(hit);
+        }
+        return new(null);
+    }
+
+    public static IEnumerable<string> BarcodeForms(string normalized)
+    {
+        var forms = new List<string>();
+        if (normalized.Length == 13 && normalized[0] == '0') forms.Add(normalized[1..]);   // UPC-A as printed
+        if (normalized.Length < 14) forms.Add(normalized.PadLeft(14, '0'));                  // GTIN-14
+        forms.Add(normalized);
+        return forms.Distinct();
     }
 
     private async Task<(JsonDocument? Doc, ProviderFailure? Failure)> GetJsonAsync(string path, CancellationToken ct)
@@ -113,6 +128,8 @@ public sealed partial class UsdaBrandedProvider(HttpClient http, IOptions<UsdaOp
         {
             var word = m.Groups[2].Value.Trim().ToLowerInvariant().TrimEnd('.');
             word = UnitCodes.GetValueOrDefault(word, word); // label codes: ONZ → oz, OZA → fl oz
+            // "105 GRM" just restates the size in the base unit: it's simply the serving.
+            if (word is "g" or "ml") return new FoodPortion("serving", baseAmount);
             if (word.Length > 0 && word.Length <= 40 && !word.Any(char.IsDigit))
                 // "0.5 bar": keep the label's serving as one tap ("0.5 bar serving") rather than a whole bar the label never weighed.
                 return n == 1 ? new FoodPortion(word, baseAmount) : new FoodPortion($"{n.ToString("0.##", CultureInfo.InvariantCulture)} {word} serving", baseAmount);

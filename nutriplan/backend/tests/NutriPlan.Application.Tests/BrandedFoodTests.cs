@@ -288,6 +288,25 @@ public class BrandedFoodTests
         Assert.Equal("Chobani", top.Food.Brand);
     }
 
+    [Fact]
+    public async Task A_product_already_scanned_under_its_barcode_shows_as_saved_in_search()
+    {
+        var scanned = new Food("Organic Bread", FoodSource.OpenFoodFacts, new NutrientProfile(new Dictionary<int, double> { [NutrientIds.Energy] = 275 }), barcode: "0013764027220");
+        _store.Foods.Add(scanned);
+        _provider.Products = [P("2755534", "White Bread", "Dave's Killer Bread", barcode: "0013764027220")];
+        Assert.Equal(scanned.Id, (await Service().SearchAsync("daves killer bread")).Results.Single().LocalFoodId);
+    }
+
+    [Theory]
+    [InlineData("slice", 1, "1 slice (40 g)")]
+    [InlineData("11.5 fl oz serving", 1, "11.5 fl oz serving (40 g)")]
+    [InlineData("serving", 1, "1 serving (40 g)")]
+    public void Serving_text_never_doubles_its_amount(string description, double amount, string expected)
+    {
+        var p = P("1", "X", "Y", serving: 40) with { Portions = [new FoodPortion(description, 40, amount)] };
+        Assert.Equal(expected, BrandedFoodService.ToDto(p, false, null).ServingDescription);
+    }
+
     private sealed class BrandedBarcode(IBrandedFoodProvider p) : IBarcodeProvider
     {
         public string Name => "usda";

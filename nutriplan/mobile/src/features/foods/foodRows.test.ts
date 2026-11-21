@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { BrandedFood, Food, Nutrition } from '../../api/types';
-import { brandedNotice, brandedRow, localRow, rowLabel, withoutSaved } from './foodRows.ts';
+import { brandedNotice, brandedRow, localRow, packagedFirst, rowLabel, withoutSaved } from './foodRows.ts';
 
 const n = (calories: number, protein: number, carbs: number, fat: number, withKcal = true): Nutrition =>
   ({ calories, protein, carbs, fat, fiber: 0, nutrients: withKcal ? { '1008': calories, '1003': protein } : { '1003': protein } });
@@ -65,4 +65,21 @@ test('provider problems are explained and never block local results', () => {
   assert.equal(brandedNotice(null), null);
   for (const f of ['RateLimited', 'Timeout', 'Network', 'BadResponse']) assert.match(brandedNotice(f)!, /Your own foods still work/);
   assert.match(brandedNotice('NotConfigured')!, /USDA API key/);
+});
+
+
+test('a brand search not covered by your foods shows packaged products first', () => {
+  const powerade = [{ name: 'Sports drink (Powerade)', brand: null }, { name: 'Beverages, POWERADE, Zero', brand: null }];
+  assert.equal(packagedFirst('Fairlife Core Power', powerade, [{ brand: 'Core Power' }]), true);   // whole words: "power" ≠ "powerade"
+});
+
+test('generic searches and brands already in your foods keep your foods first', () => {
+  const chicken = [{ name: 'Chicken, breast, meat and skin, raw', brand: null }];
+  assert.equal(packagedFirst('chicken breast', chicken, [{ brand: 'Giant Eagle' }, { brand: 'Tyson' }]), false);
+  const chobani = [{ name: 'Yogurt, Greek, whole, plain, CHOBANI', brand: null }];
+  assert.equal(packagedFirst('Chobani greek yogurt', chobani, [{ brand: 'Chobani' }]), false);
+  const daves = [{ name: 'Organic Bread', brand: "Dave's Killer Bread" }];
+  assert.equal(packagedFirst("Dave's Killer Bread", daves, [{ brand: "Dave's Killer Bread" }]), false);
+  assert.equal(packagedFirst("daves killer bread", [{ name: 'Bread, whole wheat', brand: null }], [{ brand: "Dave's Killer Bread" }]), true);
+  assert.equal(packagedFirst('anything', [], []), false);
 });

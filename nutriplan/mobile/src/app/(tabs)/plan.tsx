@@ -12,6 +12,8 @@ import {
 import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
 import { displayName } from '@/features/today/sections';
 import { CopyDaySheet, PlanEntrySheet, type PlanAction } from '@/features/week/PlanEntrySheet';
+import { WeekChart } from '@/features/week/WeekChart';
+import { chartDays, weekSummary } from '@/features/week/weekChart';
 import { addDays, amount as fmtQty, fromIsoDate, mealForNow, shortDay, today } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -117,7 +119,8 @@ export default function WeekScreen() {
 
   const w = week.data;
   const days = w.days.map((d) => ({ ...d, planned: d.planned.filter((p) => !hidden.has(p.id)), logged: d.logged.filter((l) => !hidden.has(l.id)) }));
-  const projectedRatio = w.weeklyCalorieTarget > 0 ? w.projectedTotal / w.weeklyCalorieTarget : 0;
+  const summary = weekSummary(w);
+  const chart = chartDays(w);
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
@@ -133,21 +136,38 @@ export default function WeekScreen() {
           <IconButton icon={ChevronRight} label="Next week" onPress={() => setAnchor(addDays(w.weekStart, 7))} />
         </View>
 
-        <AppCard sheen style={{ gap: t.space.sm }}>
+        <AppCard sheen style={{ gap: t.space.md }}>
           <AppText variant="label" tone="muted">{w.budgetMode === 'Weekly' ? 'WEEKLY BUDGET' : 'DAILY TARGETS'}</AppText>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-            <AppText variant="display" numeric>{k(w.projectedTotal)}</AppText>
-            <AppText variant="secondary" tone="secondary" numeric>/ {k(w.weeklyCalorieTarget)} kcal eaten + planned</AppText>
+            <AppText variant="display" numeric>{k(summary.projected)}</AppText>
+            <AppText variant="secondary" tone="secondary" numeric>/ {k(summary.target)} kcal eaten + planned</AppText>
           </View>
-          <Bar eaten={w.eatenSoFar} planned={Math.max(0, w.projectedTotal - w.eatenSoFar)} target={w.weeklyCalorieTarget} height={8} />
-          <AppText variant="secondary" tone="secondary" numeric>
-            {k(w.eatenSoFar)} eaten so far · {projectedRatio > 1.02 ? `${k(w.projectedTotal - w.weeklyCalorieTarget)} over if you follow the plan` : projectedRatio < 0.98 ? `${k(w.weeklyCalorieTarget - w.projectedTotal)} kcal not planned yet` : 'right on budget'}
-          </AppText>
+          <Bar eaten={summary.eaten} planned={summary.planned} target={summary.target} height={8} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: t.space.sm }}>
+            {[
+              { label: 'Weekly target', value: `${k(summary.target)} kcal` },
+              { label: 'Eaten', value: `${k(summary.eaten)} kcal` },
+              { label: 'Still planned', value: `${k(summary.planned)} kcal` },
+              summary.capacity >= 0
+                ? { label: 'Not planned yet', value: `${k(summary.capacity)} kcal` }
+                : { label: 'Over if you follow the plan', value: `${k(-summary.capacity)} kcal`, warn: true },
+            ].map((x) => (
+              <View key={x.label} accessible accessibilityLabel={`${x.label}: ${x.value}`} style={{ width: '50%', paddingRight: t.space.sm, gap: 2 }}>
+                <AppText variant="caption" tone="muted">{x.label}</AppText>
+                <AppText variant="bodyStrong" numeric tone={'warn' in x && x.warn ? 'warning' : 'default'}>{x.value}</AppText>
+              </View>
+            ))}
+          </View>
           {w.unabsorbedCarryover !== 0 ? (
             <AppText variant="caption" tone="muted">
               {k(Math.abs(w.unabsorbedCarryover))} kcal {w.unabsorbedCarryover < 0 ? 'over' : 'under'} can’t be evened out this week without going past the daily limit.
             </AppText>
           ) : null}
+        </AppCard>
+
+        <AppCard style={{ gap: t.space.sm }}>
+          <AppText variant="label" tone="muted">BY DAY</AppText>
+          <WeekChart days={chart} selected={open} onSelect={(d) => { haptic.select(); setOpen(d); }} />
         </AppCard>
 
         {rebalance.data?.map((r) => (
@@ -229,7 +249,7 @@ function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
     <AppCard padded={false} style={day.isToday ? { borderColor: t.colors.primary } : undefined}>
       <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: open }}
         accessibilityLabel={`${day.isToday ? 'Today' : shortDay(day.date)} ${fromIsoDate(day.date).getDate()}. ${k(day.projected.calories)} of ${k(day.adjustedCalorieTarget)} calories. ${status}`}
-        style={({ pressed }) => [{ padding: t.space.lg, gap: t.space.sm }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+        style={({ pressed }) => [{ paddingHorizontal: t.space.lg, paddingVertical: t.space.md, gap: 2, minHeight: t.sizes.touch }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: t.space.sm }}>
           <AppText variant="cardTitle" style={{ flex: 1 }}>
             {day.isToday ? 'Today' : shortDay(day.date)} <AppText variant="secondary" tone="muted" numeric>{fromIsoDate(day.date).getDate()}</AppText>
@@ -237,7 +257,6 @@ function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
           <AppText variant="secondary" tone="secondary" numeric>{k(day.projected.calories)} / {k(day.adjustedCalorieTarget)}{adjusted ? ' adj.' : ''}</AppText>
           {open ? <ChevronUp size={18} color={t.colors.textMuted} /> : <ChevronDown size={18} color={t.colors.textMuted} />}
         </View>
-        <Bar eaten={day.eaten.calories} planned={day.plannedRemaining.calories} target={day.adjustedCalorieTarget} />
         <AppText variant="caption" tone="muted" numeric>
           {status} · P {Math.round(day.projected.protein)} · C {Math.round(day.projected.carbs)} · F {Math.round(day.projected.fat)}
         </AppText>
