@@ -40,6 +40,19 @@ export const useFoodSearch = (text: string) =>
     staleTime: 60_000,
   });
 
+/** USDA branded products; call with an already debounced query (it reaches an external service). */
+export const useBrandedSearch = (text: string) =>
+  useQuery({
+    queryKey: ['brandedSearch', text.trim().toLowerCase()],
+    queryFn: () => get<T.BrandedResults>(`/foods/branded?${q({ q: text.trim(), limit: 15 })}`),
+    enabled: text.trim().length >= 3,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+/** Saves a branded product (once) so it can be logged; returns the stored food. */
+export const addBrandedFood = (sourceId: string) => post<T.Food>(`/foods/branded/${encodeURIComponent(sourceId)}`);
+
 export const useFood = (id: string) => useQuery({ queryKey: keys.food(id), queryFn: () => get<T.Food>(`/foods/${id}`) });
 
 export const lookupBarcode = (code: string) => get<T.Food>(`/foods/barcode/${encodeURIComponent(code)}`);

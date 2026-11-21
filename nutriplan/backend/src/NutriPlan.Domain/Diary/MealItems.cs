@@ -24,6 +24,10 @@ public sealed record ItemSnapshot(
     public static ItemSnapshot ForFood(Guid foodId, string name, double grams, NutrientProfile nutrients, double? quantity = null, string? unit = null) =>
         new(ItemKind.Food, foodId, null, name, quantity ?? grams, unit ?? "g", grams, nutrients.Rounded());
 
+    /// <summary>A drink measured by volume: no gram weight is recorded (it isn't known); quantity and unit say how much.</summary>
+    public static ItemSnapshot ForVolumeFood(Guid foodId, string name, double ml, NutrientProfile nutrients, double? quantity = null, string? unit = null) =>
+        new(ItemKind.Food, foodId, null, name, quantity ?? Math.Round(ml, 1), unit ?? "ml", null, nutrients.Rounded());
+
     public static ItemSnapshot ForRecipe(Guid recipeId, string name, double servings, NutrientProfile nutrientsPerServing) =>
         new(ItemKind.Recipe, null, recipeId, name, servings, servings == 1 ? "serving" : "servings", null,
             nutrientsPerServing.Scale(servings).Rounded());

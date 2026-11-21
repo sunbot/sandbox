@@ -40,6 +40,7 @@ The code must be in a GitHub repo Render can see. This project lives in the `nut
    | `Api__Key` | a long random password you make up. **The app and your data are protected by this.** |
    | `App__TimeZone` | your time zone, e.g. `America/Chicago` (so "today" flips at your midnight) |
    | `Claude__ApiKey` | *(optional)* your Anthropic API key for smarter chat and recipe ideas |
+   | `Usda__ApiKey` | *(optional)* free api.data.gov key for USDA FoodData Central: branded product search and USDA barcode lookups. Without it, branded search says it isn't set up and barcodes use Open Food Facts only |
    | `Claude__InterpreterModel` | *(optional)* `claude-haiku-5-5` to keep chat costs to cents a month |
 
 5. **Create Web Service.** The first build takes several minutes (it builds the app and downloads USDA data).

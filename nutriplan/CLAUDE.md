@@ -96,12 +96,24 @@ Check current version-specific Expo SDK 58 documentation for native APIs and use
 
 Keep the USDA importer and Open Food Facts barcode fallback. The existing `IBarcodeProvider` is barcode-only; introduce a separate provider abstraction for restaurant/branded text search. Normalize external data and source identity at the boundary. Support serving-based restaurant items explicitly where gram weight is unknown rather than fabricating mass. Define caching/licensing constraints per provider. Evaluate search changes using representative ingredient, branded, restaurant, synonym and misspelling queries; track result relevance and latency.
 
+Current providers:
+- **USDA FoodData Central Branded** (`IBrandedFoodProvider` → `UsdaBrandedProvider`, key `Usda:ApiKey`, header only): live text search
+  (`/api/foods/branded`, re-ranked by `BrandedFoodService.Rank`, cached 30 min in memory with one in-flight call per query) and
+  barcode lookup before Open Food Facts. Nothing is stored until a product is opened (`POST /api/foods/branded/{fdcId}`); it is then saved
+  once (unique index on branded `source_id`) and refreshed when opened after 90 days unless verified. Public domain (CC0); credit
+  "USDA FoodData Central". Limit 1,000 requests/hour per IP; the API rate-limits these routes to 60/min.
+- **Open Food Facts**: barcodes only (ODbL: attribution; share-alike for a publicly used adapted database).
+- Drinks labelled in ml are stored per 100 ml (`Food.Basis = Volume`): amounts are ml, snapshots record no gram weight, and they are
+  excluded from recipe matching and gap suggestions. Labels without calories get calories calculated 4/4/9 from macros, with a note.
+
 ## Known gaps against these rules (keep this list current)
 
 - `ApiKeyMiddleware` allows all requests when `Api:Key` is unset (fails open). Requiring a key needs coordinating with the Render config and the app's Settings first.
 - The APK workflow doesn't wait for CI, overwrites the mutable `android-latest` release, and signs with the Expo template debug key. Moving to a protected key forces a one-time reinstall.
 - Daily nutrient totals still add known values only; entries missing a nutrient are counted per nutrient (`missingFrom`) and the app marks those totals as minimums (≥). The weekly heatmap now flags this per cell and per row (`missingFrom`, `incompleteDays`), and its averages cover finished days only.
 - The API key is stored in AsyncStorage (not secure storage).
+- Branded search: no restaurant provider yet; Ask doesn't search USDA Branded (only saved foods); USDA's own search order is weak, so
+  some brand queries (e.g. "Fairlife protein shake" → fairlife's shakes are listed under "Core Power") need the exact USDA brand name.
 - Ask quantity/state limits: a unitless amount of a food whose only USDA portion is a size ("a coffee" → "1 medium", 480 g) is
   labelled Given; "Understood by" in Ask and `/api/status` show whether Claude or the built-in rules handled a request.
   `IdempotencyStore` is in-memory (single instance); the unique index on `diary_entries.plan_entry_id` is the durable guard.

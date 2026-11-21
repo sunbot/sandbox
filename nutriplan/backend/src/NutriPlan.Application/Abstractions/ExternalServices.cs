@@ -1,5 +1,6 @@
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
+using NutriPlan.Domain.Nutrients;
 
 namespace NutriPlan.Application.Abstractions;
 
@@ -84,4 +85,38 @@ public interface IRecipeIdeaGenerator
 {
     bool IsAvailable { get; }
     Task<IReadOnlyList<RecipeIdea>> GenerateAsync(string request, int count, string? constraints, CancellationToken ct = default);
+}
+
+/// <summary>
+/// A packaged product from an external text-searchable database (USDA FoodData Central Branded), already normalized:
+/// nutrients per 100 g or per 100 ml (<see cref="Basis"/>), only values the label reported (missing stays missing),
+/// the labelled serving as a portion when its size is known. Nothing here is estimated.
+/// </summary>
+public sealed record BrandedProduct(
+    FoodSource Source,
+    string SourceId,
+    string Name,
+    string? Brand,
+    string? Barcode,
+    NutrientProfile Per100,
+    NutrientBasis Basis,
+    IReadOnlyList<FoodPortion> Portions,
+    DateOnly? LabelDate);
+
+public sealed record BrandedSearch(IReadOnlyList<BrandedProduct> Products, ProviderFailure? Failure = null);
+
+public sealed record BrandedFetch(BrandedProduct? Product, ProviderFailure? Failure = null);
+
+/// <summary>
+/// Text search over branded/packaged foods. Separate from <see cref="IBarcodeProvider"/> (barcode-only). Implementations
+/// live in Infrastructure; failures are reported, never thrown, so local search keeps working.
+/// </summary>
+public interface IBrandedFoodProvider
+{
+    string Name { get; }
+    /// <summary>False when no API key is configured: searches return nothing instead of calling the service.</summary>
+    bool IsConfigured { get; }
+    Task<BrandedSearch> SearchAsync(string query, int limit, CancellationToken ct = default);
+    Task<BrandedFetch> GetAsync(string sourceId, CancellationToken ct = default);
+    Task<BrandedFetch> FindByBarcodeAsync(string normalizedBarcode, CancellationToken ct = default);
 }

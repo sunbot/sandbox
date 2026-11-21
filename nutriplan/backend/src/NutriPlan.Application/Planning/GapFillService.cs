@@ -122,13 +122,13 @@ public sealed class GapFillService(
         var foodMap = await foods.GetManyAsync(foodFreq.Select(f => f.Item.FoodId!.Value), ct);
         foreach (var f in foodFreq)
         {
-            if (!foodMap.TryGetValue(f.Item.FoodId!.Value, out var food)) continue;
+            if (!foodMap.TryGetValue(f.Item.FoodId!.Value, out var food) || food.IsVolume) continue; // suggestions are sized in grams
             candidates.TryAdd($"f:{food.Id}", FoodCandidate(food, f.Item.Grams!.Value, 0.08));
         }
 
         // 3) What's in the pantry.
         var pantryFoodIds = (await pantry.ListAsync(ct)).Where(p => p.FoodId is not null && !p.IsStaple).Select(p => p.FoodId!.Value).ToList();
-        foreach (var food in (await foods.GetManyAsync(pantryFoodIds, ct)).Values)
+        foreach (var food in (await foods.GetManyAsync(pantryFoodIds, ct)).Values.Where(f => !f.IsVolume))
             candidates.TryAdd($"f:{food.Id}", FoodCandidate(food, TypicalGrams(food), 0.1));
 
         // 4) Staples so there's always something to suggest.
@@ -137,7 +137,7 @@ public sealed class GapFillService(
             foreach (var query in StarterFoods)
             {
                 var best = (await foodService.SearchRankedAsync(query, 1, ct)).FirstOrDefault();
-                if (best is null) continue;
+                if (best is null || best.Food.IsVolume) continue;
                 candidates.TryAdd($"f:{best.Food.Id}", FoodCandidate(best.Food, TypicalGrams(best.Food), 0));
             }
         }

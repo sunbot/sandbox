@@ -83,6 +83,14 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("barcode");
 
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasDefaultValue("Mass")
+                        .HasColumnName("basis");
+
                     b.Property<string>("Brand")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
@@ -154,6 +162,11 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("SourceId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_foods_usda_branded_source_id")
+                        .HasFilter("source = 'UsdaBranded' AND source_id IS NOT NULL");
 
                     b.HasIndex("Source", "SourceId")
                         .HasDatabaseName("ix_foods_source_source_id");

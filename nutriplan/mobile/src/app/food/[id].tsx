@@ -49,6 +49,7 @@ export default function FoodAmount() {
       <View style={{ gap: 6 }}>
         <Text style={font.title}>{f.name}</Text>
         {f.brand ? <Text style={font.small}>{f.brand}</Text> : null}
+        {f.source === 'UsdaBranded' ? <Text style={font.tiny}>Label data from USDA FoodData Central.</Text> : null}
         <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
           <QualityBadge quality={f.quality} source={f.source} />
           {f.qualityNote ? <Text style={[font.tiny, { flex: 1 }]}>{f.qualityNote}</Text> : null}
@@ -66,10 +67,10 @@ export default function FoodAmount() {
         </View>
       </View>}
 
-      <Button title={forIngredient ? 'Use for this ingredient' : planning ? 'Add to plan' : `Add ${Math.round(selection.grams)} g`} onPress={save} loading={log.isPending || addFood.isPending || updateIngredient.isPending} disabled={selection.grams <= 0} />
+      <Button title={forIngredient ? 'Use for this ingredient' : planning ? 'Add to plan' : `Add ${Math.round(selection.grams)} ${f.baseUnit ?? 'g'}`} onPress={save} loading={log.isPending || addFood.isPending || updateIngredient.isPending} disabled={selection.grams <= 0} />
 
       <Card>
-        <Text style={[font.heading, { marginBottom: spacing.sm }]}>Per 100 g</Text>
+        <Text style={[font.heading, { marginBottom: spacing.sm }]}>Per 100 {f.baseUnit ?? 'g'}</Text>
         {Object.entries(f.per100g.nutrients).slice(0, 40).map(([id, v]) => (
           <NutrientLine key={id} id={Number(id)} value={v} />
         ))}

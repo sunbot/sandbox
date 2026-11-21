@@ -253,7 +253,8 @@ public sealed partial class RecipeService(
         {
             if (!cache.TryGetValue(q, out var found))
             {
-                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false, assumeCookedStaples: false)).ToList();
+                // Ingredients are weighed or measured into grams: drinks labelled per 100 ml can't be summed by weight.
+                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false, assumeCookedStaples: false)).Where(r => !r.Food.IsVolume).ToList();
                 cache[q] = found;
             }
             return found;

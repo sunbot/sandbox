@@ -50,7 +50,12 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.Ignore(x => x.Portions);
             e.Ignore(x => x.DisplayName);
             e.Ignore(x => x.IsLabAnalyzed);
+            e.Ignore(x => x.IsVolume);
+            e.Ignore(x => x.BaseUnit);
+            e.Property(x => x.Basis).HasConversion<string>().HasMaxLength(8).HasDefaultValue(NutrientBasis.Mass).HasSentinel((NutrientBasis)(-1));
             e.HasIndex(x => x.Barcode);
+            // A cached USDA Branded product is stored once per FDC id, however many times it's searched or scanned.
+            e.HasIndex(x => x.SourceId).IsUnique().HasFilter("source = 'UsdaBranded' AND source_id IS NOT NULL").HasDatabaseName("ux_foods_usda_branded_source_id");
             e.HasIndex(x => new { x.Source, x.SourceId });
             e.HasIndex(x => x.Name).HasMethod("gin").HasOperators("gin_trgm_ops").HasDatabaseName("ix_foods_name_trgm");
         });
