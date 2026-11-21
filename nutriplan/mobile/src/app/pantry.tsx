@@ -39,7 +39,7 @@ export default function PantryScreen() {
           <Card style={{ gap: 2 }}>
             <Text style={font.heading}>{c.recipe.name}</Text>
             <Text style={font.small}>
-              {c.missing.length === 0 ? '✓ You have everything' : `Need: ${c.missing.join(', ')}`}
+              {c.missing.length === 0 ? 'You have everything' : `Need: ${c.missing.join(', ')}`}
               {c.usesExpiringSoon ? '  ·  uses something expiring soon' : ''}
             </Text>
             <Text style={font.tiny}>{Math.round(c.recipe.perServing.calories)} kcal per serving · {c.matchPercent}% on hand</Text>

@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useGrocery } from '@/api/hooks';
 import { Button, Card, Empty, ErrorView, Loading } from '@/components/ui';
 import { addDays, today } from '@/lib/format';
+import { Square, SquareCheck } from '@/components/ds/icons';
 import { colors, font, spacing } from '@/lib/theme';
 
 /** Everything the remaining plan needs, merged, minus the pantry, grouped by aisle. Tap to check off. */
@@ -40,8 +41,9 @@ export default function GroceryScreen() {
             const key = `${a.aisle}:${i.name}`;
             const done = checked[key] || i.inPantry;
             return (
-              <Pressable key={key} onPress={() => setChecked((c) => ({ ...c, [key]: !c[key] }))} style={styles.row}>
-                <Text style={styles.box}>{done ? '☑' : '☐'}</Text>
+              <Pressable key={key} onPress={() => setChecked((c) => ({ ...c, [key]: !c[key] }))} style={styles.row}
+                accessibilityRole="checkbox" accessibilityState={{ checked: !!done }} accessibilityLabel={`${i.name}, ${i.display}`}>
+                {done ? <SquareCheck size={22} strokeWidth={1.8} color={colors.primary} /> : <Square size={22} strokeWidth={1.8} color={colors.textMuted} />}
                 <View style={{ flex: 1 }}>
                   <Text style={[font.body, done && styles.done]}>{i.name}</Text>
                   <Text style={font.tiny}>{i.inPantry ? 'In your pantry' : i.display}{i.unconvertedAmounts.length ? ` · also ${i.unconvertedAmounts.join(', ')}` : ''}  ·  {i.usedIn.join(', ')}</Text>

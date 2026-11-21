@@ -6,6 +6,7 @@
 /* eslint-disable no-restricted-imports */
 export type { LucideIcon, LucideProps } from 'lucide-react-native';
 
+export { default as BadgeCheck } from 'lucide-react-native/icons/badge-check';
 export { default as CalendarClock } from 'lucide-react-native/icons/calendar-clock';
 export { default as CalendarDays } from 'lucide-react-native/icons/calendar-days';
 export { default as Check } from 'lucide-react-native/icons/check';
@@ -19,6 +20,7 @@ export { default as CircleCheck } from 'lucide-react-native/icons/circle-check';
 export { default as CircleDashed } from 'lucide-react-native/icons/circle-dashed';
 export { default as Clock } from 'lucide-react-native/icons/clock';
 export { default as CloudOff } from 'lucide-react-native/icons/cloud-off';
+export { default as Download } from 'lucide-react-native/icons/download';
 export { default as Flame } from 'lucide-react-native/icons/flame';
 export { default as Grid3x3 } from 'lucide-react-native/icons/grid-3x3';
 export { default as House } from 'lucide-react-native/icons/house';
@@ -34,7 +36,10 @@ export { default as Settings } from 'lucide-react-native/icons/settings';
 export { default as ShoppingBasket } from 'lucide-react-native/icons/shopping-basket';
 export { default as Sparkles } from 'lucide-react-native/icons/sparkles';
 export { default as Square } from 'lucide-react-native/icons/square';
+export { default as SquareCheck } from 'lucide-react-native/icons/square-check';
+export { default as Star } from 'lucide-react-native/icons/star';
 export { default as Target } from 'lucide-react-native/icons/target';
 export { default as Trash2 } from 'lucide-react-native/icons/trash-2';
 export { default as TriangleAlert } from 'lucide-react-native/icons/triangle-alert';
+export { default as Utensils } from 'lucide-react-native/icons/utensils';
 export { default as X } from 'lucide-react-native/icons/x';

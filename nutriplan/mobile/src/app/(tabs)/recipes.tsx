@@ -6,6 +6,7 @@ import { useRecipeMutations, useRecipes } from '@/api/hooks';
 import { loadSettings } from '@/lib/settings';
 import { MacroLine } from '@/components/charts';
 import { Button, Card, Empty, ErrorView, Field, Loading } from '@/components/ui';
+import { Star, Utensils } from '@/components/ds/icons';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
 /** Your recipe box. Import from Paprika (export file) or any recipe page link. */
@@ -68,7 +69,7 @@ export default function RecipesScreen() {
           <Field value={search} onChangeText={setSearch} placeholder="Search recipes or categories" />
           <Card style={{ gap: spacing.sm }}>
             <Text style={font.heading}>Import</Text>
-            <Button title="Paprika export (.paprikarecipes)" variant="secondary" icon="📥" onPress={importPaprika} loading={m.importPaprika.isPending} />
+            <Button title="Import Paprika export (.paprikarecipes)" variant="secondary" onPress={importPaprika} loading={m.importPaprika.isPending} />
             {m.importPaprika.isPending ? (
               <Text style={font.small}>Importing and matching ingredients… a large export can take a minute or two.</Text>
             ) : null}
@@ -93,10 +94,13 @@ export default function RecipesScreen() {
             {r.hasPhoto || r.imageUrl ? (
               <Image source={r.hasPhoto ? { uri: `${server.apiUrl}/api/recipes/${r.id}/photo`, headers: server.apiKey ? { 'X-Api-Key': server.apiKey } : undefined } : { uri: r.imageUrl! }} style={styles.photo} />
             ) : (
-              <View style={[styles.photo, styles.placeholder]}><Text style={{ fontSize: 24 }}>🍲</Text></View>
+              <View style={[styles.photo, styles.placeholder]}><Utensils size={22} strokeWidth={1.6} color={colors.textMuted} /></View>
             )}
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={font.heading} numberOfLines={2}>{r.isFavorite ? '★ ' : ''}{r.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {r.isFavorite ? <Star size={16} strokeWidth={1.8} color={colors.accent} fill={colors.accent} accessibilityLabel="Favorite" /> : null}
+                <Text style={[font.heading, { flexShrink: 1 }]} numberOfLines={2}>{r.name}</Text>
+              </View>
               <MacroLine n={r.perServing} compact />
               <Text style={font.tiny}>
                 per serving · {r.servings} servings{r.coverage < 1 ? ` · ${Math.round(r.coverage * 100)}% matched` : ''}{r.categories.length ? ` · ${r.categories.slice(0, 2).join(', ')}` : ''}

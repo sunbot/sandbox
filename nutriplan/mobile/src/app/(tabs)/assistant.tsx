@@ -7,6 +7,7 @@ import { MacroLine } from '@/components/charts';
 import { Button, Card, Chip, Field, QualityBadge } from '@/components/ui';
 import { VoiceButton } from '@/components/VoiceButton';
 import { mealForNow, today } from '@/lib/format';
+import { Check } from '@/components/ds/icons';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
 type Turn = { id: number; text: string; response?: AssistantResponse; error?: string };
@@ -91,7 +92,7 @@ function ResponseView({ r }: { r: AssistantResponse }) {
       {r.foodMatches.map((g, i) => <MatchGroup key={i} group={g} date={r.date} meal={meal} />)}
       {r.savedRecipes.map((s) => (
         <Pressable key={s.id} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: s.id } })}>
-          <Card><Text style={font.heading}>🍲 {s.name}</Text><MacroLine n={s.perServing} /><Text style={font.tiny}>per serving · from your recipes</Text></Card>
+          <Card><Text style={font.heading}>{s.name}</Text><MacroLine n={s.perServing} /><Text style={font.tiny}>per serving · from your recipes</Text></Card>
         </Pressable>
       ))}
       {r.recipeIdeas.map((idea, i) => <IdeaCard key={i} idea={idea} />)}
@@ -147,7 +148,7 @@ function MatchGroup({ group, date, meal }: { group: FoodMatchGroup; date: string
       {match.nutrition && <MacroLine n={match.nutrition} />}
       <Text style={font.tiny}>{match.quantity.explanation}</Text>
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        <Button title={added ? 'Added ✓' : `Add to ${meal}`} compact disabled={added} loading={log.isPending} onPress={add} />
+        <Button title={added ? 'Added' : `Add to ${meal}`} icon={added ? Check : undefined} compact disabled={added} loading={log.isPending} onPress={add} />
         <Button title="Adjust" variant="secondary" compact onPress={() => router.push({ pathname: '/food/[id]', params: { id: match.food.id, date, meal, mode: 'log', grams: match.quantity.grams ? String(match.quantity.grams) : undefined } })} />
       </View>
     </Card>
@@ -163,7 +164,8 @@ function IdeaCard({ idea }: { idea: RecipeIdea }) {
   };
   return (
     <Card style={{ gap: spacing.xs }}>
-      <Text style={font.heading}>✨ {idea.name}</Text>
+      <Text style={[font.tiny, { letterSpacing: 0.6 }]}>RECIPE IDEA</Text>
+      <Text style={font.heading}>{idea.name}</Text>
       <Text style={font.small}>{idea.description}</Text>
       <MacroLine n={idea.perServing} />
       <Text style={font.tiny}>per serving · {idea.servings} servings · {Math.round(idea.coverage * 100)}% of ingredients matched</Text>

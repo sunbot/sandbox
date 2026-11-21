@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodSearch } from '@/api/hooks';
 import { Button, Empty, Field, Loading, QualityBadge } from '@/components/ui';
 import { VoiceButton } from '@/components/VoiceButton';
+import { ScanBarcode } from '@/components/ds/icons';
 import { colors, font, spacing } from '@/lib/theme';
 
 /** Type or speak a food; results are USDA/your foods ranked by match, trust and how often you eat them. */
@@ -21,7 +22,7 @@ export default function FoodSearch() {
         <VoiceButton onText={setText} onFinal={setText} />
       </View>
       <View style={styles.actions}>
-        <Button title="Scan barcode" icon="▥" variant="secondary" compact onPress={() => router.replace({ pathname: '/scan', params })} />
+        <Button title="Scan barcode" icon={ScanBarcode} variant="secondary" compact onPress={() => router.replace({ pathname: '/scan', params })} />
         <Button title="From label" variant="secondary" compact onPress={() => router.push({ pathname: '/custom-food', params })} />
       </View>
 

@@ -7,6 +7,7 @@ import { DayCalorieBar } from '@/components/charts';
 import { ItemRow } from '@/components/ItemRow';
 import { Button, Card, ErrorView, Loading } from '@/components/ui';
 import { addDays, fromIsoDate, mealForNow, shortDay, today } from '@/lib/format';
+import { Check, Minus } from '@/components/ds/icons';
 import { colors, font, spacing } from '@/lib/theme';
 
 /**
@@ -68,8 +69,8 @@ export default function WeekScreen() {
       ))}
 
       <View style={styles.footer}>
-        <Button title="Grocery list" icon="🛒" variant="secondary" onPress={() => router.push({ pathname: '/grocery', params: { from: maxDate(today(), w.weekStart), to: w.weekEnd } })} />
-        <Button title="Nutrient heatmap" icon="▦" variant="secondary" onPress={() => router.push({ pathname: '/insights', params: { date: w.weekStart } })} />
+        <Button title="Grocery list" variant="secondary" onPress={() => router.push({ pathname: '/grocery', params: { from: maxDate(today(), w.weekStart), to: w.weekEnd } })} />
+        <Button title="Weekly nutrients" variant="secondary" onPress={() => router.push({ pathname: '/insights', params: { date: w.weekStart } })} />
       </View>
     </ScrollView>
   );
@@ -98,7 +99,9 @@ function DayCard({ day, maxValue, open, onToggle, onEntry }: { day: PlanDay; max
         <View style={{ marginTop: spacing.sm }}>
           {day.planned.map((e) => (
             <ItemRow key={e.id} item={e.item} muted={e.status !== 'Planned'} onPress={() => onEntry(e)}
-              right={<Text style={font.tiny}>{e.status === 'Eaten' ? '✓' : e.status === 'Skipped' ? '–' : e.meal.slice(0, 1)}</Text>} />
+              right={e.status === 'Eaten' ? <Check size={18} strokeWidth={2} color={colors.good} accessibilityLabel="Eaten" />
+                : e.status === 'Skipped' ? <Minus size={18} strokeWidth={2} color={colors.textMuted} accessibilityLabel="Skipped" />
+                : <Text style={font.tiny} accessibilityLabel={`Planned for ${e.meal}`}>{e.meal.slice(0, 1)}</Text>} />
           ))}
           {day.logged.filter((l) => !l.planEntryId).map((l) => (
             <ItemRow key={l.id} item={l.item} right={<Text style={font.tiny}>logged</Text>} />

@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 import { router } from 'expo-router';
+import { BadgeCheck, CircleAlert, type LucideIcon } from '@/components/ds/icons';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
 /** Small, dependency-free UI kit. Every screen builds from these so the look stays consistent. */
@@ -18,18 +19,25 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
   );
 }
 
-type ButtonProps = { title: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; disabled?: boolean; loading?: boolean; icon?: string; compact?: boolean };
+type ButtonProps = { title: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; disabled?: boolean; loading?: boolean; icon?: LucideIcon; iconFilled?: boolean; compact?: boolean; accessibilityLabel?: string };
 
-export function Button({ title, onPress, variant = 'primary', disabled, loading, icon, compact }: ButtonProps) {
+/** Icons are optional and only for actions that benefit from one; 20 dp, same stroke as the rest of the app. */
+export function Button({ title, onPress, variant = 'primary', disabled, loading, icon: Icon, iconFilled, compact, accessibilityLabel }: ButtonProps) {
   const v = buttonVariants[variant];
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [styles.button, compact && styles.buttonCompact, { backgroundColor: v.bg, borderColor: v.border, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 }]}
     >
-      {loading ? <ActivityIndicator color={v.fg} /> : <Text style={[styles.buttonText, { color: v.fg }]}>{icon ? `${icon}  ` : ''}{title}</Text>}
+      {loading ? <ActivityIndicator color={v.fg} /> : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {Icon ? <Icon size={20} strokeWidth={1.9} color={v.fg} fill={iconFilled ? v.fg : 'none'} /> : null}
+          <Text style={[styles.buttonText, { color: v.fg }]}>{title}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -90,9 +98,15 @@ export function Empty({ title, hint }: { title: string; hint?: string }) {
 
 /** Data-quality badge: makes it obvious where numbers came from. */
 export function QualityBadge({ quality, source }: { quality: string; source: string }) {
-  const label = quality === 'Verified' ? '✓ USDA' : quality === 'Flagged' ? '⚠ Check label' : quality === 'Unverified' ? 'Unverified' : source === 'User' ? 'Yours' : 'Label';
+  const label = quality === 'Verified' ? 'USDA' : quality === 'Flagged' ? 'Check label' : quality === 'Unverified' ? 'Unverified' : source === 'User' ? 'Yours' : 'Label';
   const color = quality === 'Verified' ? colors.good : quality === 'Flagged' ? colors.high : colors.textMuted;
-  return <Text style={[styles.badge, { color, borderColor: color }]}>{label}</Text>;
+  const Icon = quality === 'Verified' ? BadgeCheck : quality === 'Flagged' ? CircleAlert : null;
+  return (
+    <View style={[styles.badge, { borderColor: color, flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }]}>
+      {Icon ? <Icon size={14} strokeWidth={2} color={color} /> : null}
+      <Text style={{ fontSize: 11, fontWeight: '600', color }}>{label}</Text>
+    </View>
+  );
 }
 
 export function Divider() {

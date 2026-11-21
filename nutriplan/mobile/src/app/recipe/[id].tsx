@@ -6,6 +6,7 @@ import type { Ingredient } from '@/api/types';
 import { MacroLine } from '@/components/charts';
 import { Button, Card, Chip, ErrorView, Field, Loading } from '@/components/ui';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
+import { Star } from '@/components/ds/icons';
 import { colors, font, spacing } from '@/lib/theme';
 
 /**
@@ -113,7 +114,9 @@ export default function RecipeScreen() {
           <Button title={planDate ? `Plan for ${dayLabel(planDate)}` : 'Plan for today'} compact onPress={addToPlan} loading={plan.addRecipe.isPending} />
           <Button title="Log now" variant="secondary" compact loading={logRecipe.isPending}
             onPress={async () => { await logRecipe.mutateAsync({ date: today(), meal: mealForNow(), recipeId: s.id, servings: n }); setNotice(`Logged ${n} serving${n === 1 ? '' : 's'} to ${mealForNow().toLowerCase()} today.`); }} />
-          <Button title={s.isFavorite ? '★ Favorite' : '☆ Favorite'} variant="ghost" compact onPress={() => m.favorite.mutate({ id: s.id, favorite: !s.isFavorite })} />
+          <Button title={s.isFavorite ? 'Favorite' : 'Add to favorites'} icon={Star} iconFilled={s.isFavorite} variant="ghost" compact
+            accessibilityLabel={s.isFavorite ? 'Favorite. Tap to remove from favorites' : 'Add to favorites'}
+            onPress={() => m.favorite.mutate({ id: s.id, favorite: !s.isFavorite })} />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' }}>
           <View style={{ width: 90 }}><Field label="Batch days" value={batchDays} onChangeText={setBatchDays} keyboardType="number-pad" /></View>
