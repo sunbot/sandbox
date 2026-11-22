@@ -1,17 +1,19 @@
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { useDeleteEntry, useFoodSearch, useLogFoods, usePlanMutations } from '@/api/hooks';
-import type { AssistantResponse, Food } from '@/api/types';
-import { AppCard, AppText, Badge, BottomSheet, FilterChip, IconButton, PrimaryButton, SearchField, SecondaryButton, TextButton, useSnackbar } from '@/components/ds';
-import { CalendarClock, Check, ChevronRight, CircleAlert, Minus, Plus, Trash2, Undo2 } from '@/components/ds/icons';
+import type { AssistantResponse, Food, Measure } from '@/api/types';
+import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
+import { formatQuantity, matchMeasure, parseQuantity } from '@/features/quantity/quantity';
+import { AppCard, AppText, Badge, BottomSheet, FilterChip, PrimaryButton, SearchField, SecondaryButton, TextButton, useSnackbar } from '@/components/ds';
+import { CalendarClock, Check, ChevronRight, CircleAlert, Trash2, Undo2 } from '@/components/ds/icons';
 import { friendlyFoodName } from '@/lib/foodName';
 import { dayLabel, mealForNow, meals, today, type Meal } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import {
   amountOptions, blockers, draftFrom, otherPreparationIndex, preview, replaceItem, selectMatch, selectedMatch, setAmount, setRemoved, toRequest, totals, withPickedFood,
-  type AmountOption, type DraftItem,
+  type DraftItem,
 } from './draft';
 
 /** A fresh random key per review; computed once, in a state initializer, so renders stay pure. */
@@ -229,7 +231,6 @@ function FoodEditSheet({ item, onChange, onClose }: { item: DraftItem | null; on
 
   const m = selectedMatch(it);
   const p = preview(it);
-  const options = m ? amountOptions(m.food.portions) : [];
 
   return (
     <BottomSheet visible={!!item} onClose={onClose} title={m ? friendlyFoodName(m.food.name) : `“${it.group.foodQuery}”`}
@@ -240,7 +241,7 @@ function FoodEditSheet({ item, onChange, onClose }: { item: DraftItem | null; on
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: t.space.lg, paddingBottom: t.space.sm }} keyboardShouldPersistTaps="handled">
         <AppText variant="secondary" tone="muted">You said “{it.group.text}”</AppText>
 
-        {m ? <AmountEditor key={`${it.key}:${it.matchIndex}`} item={it} options={options} onChange={onChange} /> : null}
+        {m ? <AmountEditor key={`${it.key}:${it.matchIndex}`} item={it} food={m.food} onChange={onChange} /> : null}
         {m ? (
           <AppText variant="secondary" tone="secondary" numeric>
             {it.grams != null ? `${r0(it.grams)} g · ${p ? r0(p.calories) : '—'} kcal` : 'Choose an amount to see calories'}
@@ -294,41 +295,27 @@ function OtherFoodSearch({ initial, onPick }: { initial: string; onPick: (f: Foo
   );
 }
 
-/** Count × unit, where units are this food's USDA portions plus grams and ounces. Grams come from USDA data only. */
-function AmountEditor({ item, options, onChange }: { item: DraftItem; options: AmountOption[]; onChange: (i: DraftItem) => void }) {
-  const t = useTheme();
-  // Start on the unit you said if this food has it, else its first portion (or grams).
-  const said = (item.amountLabel ?? '').replace(/^[\d.]+\s*/, '').toLowerCase();
-  const initial = options.find((o) => o.label.toLowerCase() === said) ?? (item.grams != null && said === 'g' ? options.find((o) => o.label === 'g') : undefined) ?? options[0];
-  const [unit, setUnit] = useState<AmountOption>(initial);
-  const [count, setCount] = useState(() => (item.grams != null && unit ? String(Math.round((item.grams / unit.grams) * 100) / 100) : ''));
-  const step = unit?.label === 'g' ? 10 : unit?.label === 'oz' ? 1 : 0.5;
-  const apply = (c: string, u: AmountOption) => { const n = Number(c); if (n > 0) onChange(setAmount(item, n, u)); };
-
-  if (!unit) return null;
-  return (
-    <View style={{ gap: t.space.sm }}>
-      <AppText variant="label" tone="secondary">Amount</AppText>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md }}>
-        <IconButton icon={Minus} label="Less" variant="outline" disabled={!(Number(count) - step > 0)}
-          onPress={() => { const c = String(Math.round((Number(count) - step) * 100) / 100); setCount(c); apply(c, unit); }} />
-        <TextInput value={count} onChangeText={(v) => { setCount(v); apply(v, unit); }} keyboardType="decimal-pad" placeholder="0"
-          placeholderTextColor={t.colors.textMuted} accessibilityLabel={`Amount in ${unit.label}`}
-          style={[t.type.sectionTitle, { flex: 1, minWidth: 0, textAlign: 'center', color: t.colors.text, minHeight: 48, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted }]} />
-        <IconButton icon={Plus} label="More" variant="outline"
-          onPress={() => { const c = String(Math.round(((Number(count) || 0) + step) * 100) / 100); setCount(c); apply(c, unit); }} />
-      </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.space.sm }}>
-        {options.map((o) => (
-          <FilterChip key={o.label} label={o.label} selected={o.label === unit.label}
-            onPress={() => {
-              haptic.select();
-              // Keep the same weight when switching units, so changing "1 cup" to grams shows the grams, not "1 g".
-              const c = item.grams != null ? String(Math.round((item.grams / o.grams) * 100) / 100) : count;
-              setUnit(o); setCount(c); apply(c, o);
-            }} />
-        ))}
-      </View>
-    </View>
-  );
+/**
+ * Amount in one of the measures the server says this food supports (the same picker used for logging and editing).
+ * Falls back to the food's raw portions plus g/oz for a food sent without measures.
+ */
+function AmountEditor({ item, food, onChange }: { item: DraftItem; food: Food; onChange: (i: DraftItem) => void }) {
+  const measures: Measure[] = food.measures?.length ? food.measures
+    : amountOptions(food.portions).map((o) => ({ unit: o.label, label: o.label, plural: o.label, base: o.grams, kind: o.label === 'g' || o.label === 'oz' ? 'Mass' : 'Count', source: null, countable: false }));
+  const base = food.baseUnit ?? 'g';
+  // Start on the measure you said if this food has it, else its first one; the amount keeps the same weight.
+  const said = (item.amountLabel ?? '').replace(/^[\d.,/ ]+\s*/, '');
+  const [value, setValue] = useState<QuantityValue>(() => {
+    const m = matchMeasure(measures, said) ?? measures[0];
+    return { unit: m?.unit ?? base, text: item.grams != null && m && m.base > 0 ? formatQuantity(item.grams / m.base) : '' };
+  });
+  const change = (v: QuantityValue) => {
+    setValue(v);
+    const q = parseQuantity(v.text);
+    const m = matchMeasure(measures, v.unit);
+    if (q !== null && q > 0 && m) onChange(setAmount(item, q, { label: Math.abs(q - 1) < 1e-9 ? m.label : m.plural, grams: m.base, unit: food.measures?.length ? m.unit : undefined }));
+  };
+  const q = parseQuantity(value.text);
+  return <QuantityPicker measures={measures} value={value} onChange={change} baseUnit={base}
+    error={value.text.trim() && (q === null || q <= 0) ? 'Enter an amount, like 12, 0.5 or 1/2.' : null} />;
 }

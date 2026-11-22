@@ -153,3 +153,11 @@ test('the save request carries only food ids and grams', () => {
 });
 
 function selectedFoodId(i: ReturnType<typeof draftFrom>[number]) { return i.group.matches[i.matchIndex].food.id; }
+
+test('an amount chosen in one of the food’s measures is logged in that measure', () => {
+  const items = draftFrom([granola]);
+  const chosen = setAmount(items[0], 12, { label: 'almonds', grams: 1.2, unit: 'almond' });
+  assert.equal(chosen.grams, 14.4);
+  assert.equal(chosen.amountLabel, '12 almonds');
+  assert.deepEqual(toRequest([chosen]), [{ foodId: 'granola', amount: 12, unit: 'almond' }]);
+});

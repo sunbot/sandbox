@@ -9,7 +9,7 @@ import {
 import {
   CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, Copy, Grid3x3, Minus, Plus, ShoppingBasket, Sparkles,
 } from '@/components/ds/icons';
-import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
+import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { displayName } from '@/features/today/sections';
 import { CopyDaySheet, PlanEntrySheet, type PlanAction } from '@/features/week/PlanEntrySheet';
 import { WeekChart } from '@/features/week/WeekChart';
@@ -41,7 +41,7 @@ export default function WeekScreen() {
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({});
   const [copyFrom, setCopyFrom] = useState<PlanDay | null>(null);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set()); // deletes waiting for their Undo window
-  const busy = m.eaten.isPending || m.skip.isPending || m.move.isPending || m.swapRecipe.isPending || m.reopen.isPending;
+  const busy = m.eaten.isPending || m.skip.isPending || m.move.isPending || m.swapRecipe.isPending || m.reopen.isPending || m.setAmount.isPending;
 
   const hide = (id: string) => setHidden((s) => new Set(s).add(id));
   const unhide = (id: string) => setHidden((s) => { const n = new Set(s); n.delete(id); return n; });
@@ -67,6 +67,9 @@ export default function WeekScreen() {
       } else if (a.kind === 'swapRecipe') {
         await m.swapRecipe.mutateAsync({ id: e.id, recipeId: a.recipeId, servings: e.item.quantity || 1 });
         snackbar({ message: `Swapped for ${a.name}` });
+      } else if (a.kind === 'amount') {
+        await m.setAmount.mutateAsync({ id: e.id, amount: a.amount, unit: a.unit });
+        snackbar({ message: `Updated ${name}`, actionLabel: 'Undo', onAction: () => m.setAmount.mutate({ id: e.id, amount: e.item.quantity, unit: e.item.unit }) });
       } else if (a.kind === 'remove') {
         hide(e.id);
         snackbar({ message: `Removed ${name}`, actionLabel: 'Undo', onAction: () => unhide(e.id),
@@ -78,16 +81,14 @@ export default function WeekScreen() {
     }
   };
 
-  const saveLogged = async (e: DiaryEntry, d: EntryDraft) => {
-    const scale = e.item.quantity > 0 ? d.quantity / e.item.quantity : 1;
-    const scaled = Math.abs(scale - 1) > 1e-9;
-    const moved = d.meal !== e.meal;
+  const saveLogged = async (e: DiaryEntry, c: EntryChange) => {
+    if (update.isPending) return;
     try {
-      await update.mutateAsync({ id: e.id, scale: scaled ? scale : undefined, meal: moved ? d.meal : undefined });
+      await update.mutateAsync({ id: e.id, amount: c.amount, unit: c.unit, meal: c.meal });
       setDrafts(({ [e.id]: _, ...rest }) => rest);
       setEditing(null);
       snackbar({ message: `Updated ${displayName(e.item)}`, actionLabel: 'Undo',
-        onAction: () => update.mutate({ id: e.id, scale: scaled ? 1 / scale : undefined, meal: moved ? e.meal : undefined }) });
+        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, meal: c.meal ? e.meal : undefined }) });
     } catch (err) { fail(err, "Couldn't save changes"); }
   };
 

@@ -7,7 +7,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/
 import { useDeleteEntry, useLogFood, useLogRecipe, usePlanMutations, useUpdateEntry } from '@/api/hooks';
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
 import { AppText, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
-import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
+import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
@@ -72,21 +72,20 @@ export default function TodayScreen() {
     }
   }, [plan.eaten, snackbar]);
 
-  const saveEntry = useCallback(async (e: DiaryEntry, d: EntryDraft) => {
-    const scale = e.item.quantity > 0 ? d.quantity / e.item.quantity : 1;
-    const scaled = Math.abs(scale - 1) > 1e-9;
-    const moved = d.meal !== e.meal;
+  const saveEntry = useCallback(async (e: DiaryEntry, c: EntryChange) => {
+    if (update.isPending) return; // no double submit
     try {
-      await update.mutateAsync({ id: e.id, scale: scaled ? scale : undefined, meal: moved ? d.meal : undefined });
+      await update.mutateAsync({ id: e.id, amount: c.amount, unit: c.unit, meal: c.meal });
       setDrafts(({ [e.id]: _, ...rest }) => rest);
       setEditing(null);
       snackbar({
         message: `Updated ${displayName(e.item)}`,
         actionLabel: 'Undo',
-        onAction: () => update.mutate({ id: e.id, scale: scaled ? 1 / scale : undefined, meal: moved ? e.meal : undefined }),
+        // Undo puts back exactly what was there: the same amount in the same measure, and the same meal.
+        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, meal: c.meal ? e.meal : undefined }),
       });
     } catch (err) {
-      snackbar({ message: errorText(err, "Couldn't save changes") });
+      snackbar({ message: errorText(err, "Couldn't save changes") }); // the draft is kept, so nothing typed is lost
     }
   }, [update, snackbar]);
 

@@ -18,6 +18,8 @@ export type DraftItem = {
   grams: number | null;
   /** How the amount reads, e.g. "2 large", "150 g". */
   amountLabel: string | null;
+  /** When chosen in one of the food's measures: the amount and measure, sent as-is so the entry reads "12 almonds". */
+  amount?: { count: number; unit: string } | null;
   status: DraftStatus;
   removed: boolean;
 };
@@ -78,7 +80,7 @@ export function setAmount(item: DraftItem, count: number, option: AmountOption):
   if (!(count > 0)) return item;
   const grams = round(count * option.grams);
   const label = option.label === 'g' ? `${fmtNumber(round(count, 1))} g` : `${fmtNumber(round(count, 2))} ${option.label}`;
-  return { ...item, grams, amountLabel: label, status: 'Edited' };
+  return { ...item, grams, amountLabel: label, status: 'Edited', amount: option.unit ? { count, unit: option.unit } : null };
 }
 
 export const setRemoved = (item: DraftItem, removed: boolean): DraftItem => ({ ...item, removed });
@@ -87,7 +89,8 @@ export function replaceItem(items: DraftItem[], next: DraftItem): DraftItem[] {
   return items.map((i) => (i.key === next.key ? next : i));
 }
 
-export type AmountOption = { label: string; grams: number };
+/** `unit` is set when the option is one of the server's measures for the food (then the amount is logged in it). */
+export type AmountOption = { label: string; grams: number; unit?: string };
 
 /** Ways to say an amount for this food: its USDA portions first, then grams and ounces. */
 export function amountOptions(portions: Portion[]): AmountOption[] {
@@ -137,10 +140,15 @@ export function blockers(items: DraftItem[]): DraftItem[] {
   return active(items).filter((i) => !selectedMatch(i) || i.grams == null);
 }
 
-/** The request body for /diary/foods or /plan/foods. Grams only: the server computes the nutrition snapshot. */
+/**
+ * The request body for /diary/foods or /plan/foods. An amount chosen in one of the food's measures is sent as that
+ * measure (the server converts it the same way); otherwise grams. The server computes the nutrition snapshot either way.
+ */
 export function toRequest(items: DraftItem[]): FoodAmount[] {
   if (blockers(items).length) throw new Error('Some foods still need a match or an amount.');
-  return active(items).map((i) => ({ foodId: selectedMatch(i)!.food.id, grams: i.grams! }));
+  return active(items).map((i) => i.amount
+    ? { foodId: selectedMatch(i)!.food.id, amount: i.amount.count, unit: i.amount.unit }
+    : { foodId: selectedMatch(i)!.food.id, grams: i.grams! });
 }
 
 /**
