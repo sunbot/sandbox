@@ -85,6 +85,8 @@ itself), the source's trust and your own history all count for more.
 - Typing "1,000" is refused (it could mean 1000 or 1.000); a decimal comma like "1,5" is fine.
 - The app's `features/quantity` model (parse, convert, preview) mirrors this exactly for the live preview; the server is
   authoritative. One `QuantityPicker` is used by the diary editor, new logs/plans/recipe ingredients, planned items and Ask.
+- The diary and planned-item editors keep the height they opened at (`BottomSheet` `steadyKey`): opening the measure list
+  scrolls inside the editor instead of pushing the sheet's top and title up (#52). The sheet still gives way to the keyboard.
 - Typing: decimals with `.` or `,`, fractions `1/2`, `1 1/2`, `½`, `1½`. Switching measure keeps the physical amount.
 - Save is disabled for invalid amounts and while saving; a failed save keeps the draft; Undo restores the previous amount
   and measure (and meal).
@@ -148,7 +150,8 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    a short drag or vertical scrolling doesn't open it; TalkBack offers "Delete".
 2. Editor: decimal keypad appears, the field isn't hidden by the keyboard, switching measure keeps the amount, Save/Undo work.
    Open View nutrition and return with a quantity draft: the saved amount and values remain distinct from the draft, scrolling
-   and large text work, and nothing saves until Save changes is pressed.
+   and large text work, and nothing saves until Save changes is pressed. Open the measure list (on a food with many measures):
+   the editor's title must not move; the list scrolls with the editor; picking a measure and typing still work with the keyboard up.
 3. Scanner: sharpness at 15–20 cm, with and without zoom; torch on/off; a small barcode; dim light; denied permission;
    typing a barcode.
    **Web in Android Chrome** (confirmed on a Pixel: sharp, reads a barcode; repeat on other phones): open the site in Chrome, Today → scan;
@@ -156,4 +159,6 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    within a couple of seconds; try the zoom button; deny camera access (Chrome site settings) and check the message and that
    typing works; open the camera in another app first and check the "in use" message; leave the screen and check the camera
    light goes off. Use `chrome://inspect` → the page's console in a dev build to see the chosen camera's size and focus modes.
-4. Large text (Android font size at maximum) on the editor, rows and scanner.
+4. Ask review: tap a row's checkbox to leave a food out (name struck through, totals and "Log N selected" update); TalkBack
+   reads it as a checkbox "Include <food>".
+5. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.

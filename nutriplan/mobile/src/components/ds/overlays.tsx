@@ -5,19 +5,25 @@ import { X } from '@/components/ds/icons';
 import { useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
 import type { Theme } from '@/theme/tokens';
 import { AppText, IconButton, PrimaryButton, SecondaryButton } from './primitives';
+import { steadyHeightFor } from './steadyHeight';
 
 /* ───────────────────────── Bottom sheet ───────────────────────── */
 
 /**
  * Modal bottom sheet for short selections and confirmations.
  * Closing (back button, backdrop, X) never discards state: callers keep their draft and can reopen.
+ *
+ * `steadyKey`: the sheet keeps the height it first laid out at for this key, so content that grows (an opened measure list)
+ * scrolls inside the sheet's scroll view instead of pushing the sheet's top and header up. Change the key when the content is
+ * genuinely different (another entry, or its data finished loading) to measure again. The height still gives way to the keyboard.
  */
-export function BottomSheet({ visible, onClose, title, children, footer }: {
+export function BottomSheet({ visible, onClose, title, children, footer, steadyKey }: {
   visible: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
   footer?: ReactNode;
+  steadyKey?: string;
 }) {
   const t = useTheme();
   const s = useStyles(sheetStyles);
@@ -26,6 +32,9 @@ export function BottomSheet({ visible, onClose, title, children, footer }: {
   const [mounted, setMounted] = useState(visible);
   const anim = useState(() => new Animated.Value(0))[0];
   if (visible && !mounted) setMounted(true); // mount before animating in
+  const [steady, setSteady] = useState<{ key: string; height: number } | null>(null);
+  if (!mounted && steady) setSteady(null); // measured afresh each time the sheet opens
+  const steadyHeight = steadyKey != null ? steadyHeightFor(steady, steadyKey) : undefined;
 
   useEffect(() => {
     const done = () => { if (!visible) setMounted(false); };
@@ -44,7 +53,9 @@ export function BottomSheet({ visible, onClose, title, children, footer }: {
         </Animated.View>
         {/* Edge-to-edge Android doesn't resize the window for the keyboard, so pad on both platforms. */}
         <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={{ maxHeight: '90%' }}>
-          <Animated.View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, t.space.lg), transform: [{ translateY }] }]} accessibilityViewIsModal>
+          <Animated.View testID="bottom-sheet"
+            onLayout={steadyKey != null && steadyHeight === undefined ? (e) => setSteady({ key: steadyKey, height: e.nativeEvent.layout.height }) : undefined}
+            style={[s.sheet, steadyHeight !== undefined && { height: steadyHeight }, { paddingBottom: Math.max(insets.bottom, t.space.lg), transform: [{ translateY }] }]} accessibilityViewIsModal>
             <View style={s.handle} />
             {title ? (
               <View style={s.header}>

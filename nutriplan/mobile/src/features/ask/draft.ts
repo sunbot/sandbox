@@ -21,7 +21,7 @@ export type DraftItem = {
   /** When chosen in one of the food's measures: the amount and measure, sent as-is so the entry reads "12 almonds". */
   amount?: { count: number; unit: string } | null;
   status: DraftStatus;
-  removed: boolean;
+  included: boolean;
 };
 
 export type Preview = { calories: number; protein: number; carbs: number; fat: number };
@@ -60,7 +60,7 @@ export function draftFrom(groups: FoodMatchGroup[]): DraftItem[] {
     key: `${i}:${group.text}`,
     group,
     matchIndex: group.matches.length ? 0 : -1,
-    removed: false,
+    included: true,
     ...fromMatch(group, group.matches.length ? 0 : -1),
   }));
 }
@@ -85,7 +85,8 @@ export function setAmount(item: DraftItem, count: number, option: AmountOption):
   return { ...item, grams, amountLabel: label, status: 'Edited', amount: option.unit ? { count, unit: option.unit } : null };
 }
 
-export const setRemoved = (item: DraftItem, removed: boolean): DraftItem => ({ ...item, removed });
+export const setIncluded = (item: DraftItem, included: boolean): DraftItem =>
+  item.included === included ? item : { ...item, included };
 
 /** The amount was cleared or isn't a number: the food needs an amount again before it can be logged. */
 export const clearAmount = (item: DraftItem): DraftItem => ({ ...item, grams: null, amountLabel: null, amount: null, status: 'NeedsAmount' });
@@ -125,7 +126,7 @@ export function otherPreparationIndex(item: DraftItem): number {
   return other ? item.group.matches.findIndex((m) => m.food.id === other) : -1;
 }
 
-export const active = (items: DraftItem[]) => items.filter((i) => !i.removed);
+export const active = (items: DraftItem[]) => items.filter((i) => i.included);
 
 export function totals(items: DraftItem[]): Preview {
   return active(items).reduce<Preview>((sum, i) => {
@@ -170,4 +171,35 @@ export function withPickedFood(item: DraftItem, food: Food): DraftItem {
   const keepGrams = item.status === 'Edited' && /\bg$/.test(item.amountLabel ?? '');
   return { ...item, group: { ...item.group, matches }, matchIndex: matches.length - 1,
     grams: keepGrams ? item.grams : null, amountLabel: keepGrams ? item.amountLabel : null, status: keepGrams ? 'Edited' : 'NeedsAmount' };
+}
+
+/** Add a separate, unresolved draft row for a searched food; its amount must be confirmed before saving. */
+export function addFood(items: DraftItem[], food: Food): DraftItem[] {
+  const baseKey = `added:${food.id}`;
+  let key = baseKey;
+  let suffix = 2;
+  while (items.some((item) => item.key === key)) key = `${baseKey}:${suffix++}`;
+
+  const group: FoodMatchGroup = {
+    text: food.name,
+    amount: null,
+    unit: null,
+    foodQuery: food.name,
+    matches: [{
+      food,
+      score: 0,
+      confidence: 1,
+      nutrition: null,
+      quantity: { grams: null, method: 'Unresolved', explanation: 'Chosen by you. Choose how much.', status: 'NeedsAmount' },
+    }],
+  };
+  return [...items, {
+    key,
+    group,
+    matchIndex: 0,
+    grams: null,
+    amountLabel: null,
+    status: 'NeedsAmount',
+    included: true,
+  }];
 }

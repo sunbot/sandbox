@@ -6,13 +6,13 @@ import type { AssistantResponse, Food, Measure } from '@/api/types';
 import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
 import { formatQuantity, matchMeasure, parseQuantity, roundAmount } from '@/features/quantity/quantity';
 import { AppCard, AppText, Badge, BottomSheet, FilterChip, PrimaryButton, SearchField, SecondaryButton, TextButton, useSnackbar } from '@/components/ds';
-import { CalendarClock, Check, ChevronRight, CircleAlert, Trash2, Undo2 } from '@/components/ds/icons';
+import { CalendarClock, Check, ChevronRight, CircleAlert, CircleMinus, Plus, Square, SquareCheck } from '@/components/ds/icons';
 import { friendlyFoodName } from '@/lib/foodName';
 import { dayLabel, mealForNow, meals, today, type Meal } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import {
-  amountOptions, blockers, clearAmount, draftFrom, otherPreparationIndex, preview, replaceItem, selectMatch, selectedMatch, setAmount, setRemoved, toRequest, totals, withPickedFood,
+  addFood, blockers, clearAmount, draftFrom, otherPreparationIndex, preview, replaceItem, selectMatch, selectedMatch, setAmount, setIncluded, toRequest, totals, withPickedFood,
   type DraftItem,
 } from './draft';
 
@@ -24,8 +24,8 @@ const r0 = (n: number) => Math.round(n);
 
 /**
  * One review for everything the assistant found: each food with its USDA match, amount and calories, combined
- * totals, a meal choice, and a single Log all (or Plan all). Nothing is saved until you tap it, and everything is
- * saved together or not at all. Planned food goes to the plan endpoints and is never counted as eaten.
+ * totals, a meal choice, and a single Log selected (or Plan selected). Nothing is saved until you tap it, and
+ * everything is saved together or not at all. Planned food goes to the plan endpoints and is never counted as eaten.
  */
 export function ReviewCard({ response }: { response: AssistantResponse }) {
   const t = useTheme();
@@ -45,7 +45,7 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
 
   const sum = useMemo(() => totals(items), [items]);
   const blocked = blockers(items);
-  const included = items.filter((i) => !i.removed);
+  const included = items.filter((i) => i.included);
   const busy = logFoods.isPending || plan.addFoods.isPending;
   const date = response.date;
   const when = date === today() ? 'today' : dayLabel(date).split(',')[0];
@@ -54,7 +54,7 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
   const update = (next: DraftItem) => setItems((xs) => replaceItem(xs, next));
 
   const commit = async () => {
-    if (submitting.current) return;
+    if (submitting.current || !included.length || blocked.length) return;
     submitting.current = true;
     setError(null);
     try {
@@ -104,7 +104,7 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: t.space.sm, flexWrap: 'wrap' }}>
-          <AppText variant="cardTitle">{included.length} {included.length === 1 ? 'food' : 'foods'}</AppText>
+          <AppText variant="cardTitle">{included.length} selected</AppText>
           <AppText variant="sectionTitle" numeric accessibilityLabel={`${r0(sum.calories)} calories in total`}>{r0(sum.calories)} kcal</AppText>
         </View>
         <MacroSummary protein={sum.protein} carbs={sum.carbs} fat={sum.fat} />
@@ -112,9 +112,17 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
 
       <View>
         {items.map((item) => (
-          <ReviewRow key={item.key} item={item} onPress={() => { haptic.select(); setEditing(item.key); }} onRestore={() => update(setRemoved(item, false))}
+          <ReviewRow key={item.key} item={item} onPress={() => { haptic.select(); setEditing(item.key); }} onToggleIncluded={() => update(setIncluded(item, !item.included))}
             onSwitchPreparation={() => { const i = otherPreparationIndex(item); if (i >= 0) { haptic.select(); update(selectMatch(item, i)); } }} />
         ))}
+      </View>
+
+      <View style={{ paddingHorizontal: t.space.lg, paddingTop: t.space.sm }}>
+        <AddFoodSearch onPick={(food) => {
+          const next = addFood(items, food);
+          setItems(next);
+          setEditing(next[next.length - 1].key);
+        }} />
       </View>
 
       <View style={{ padding: t.space.lg, gap: t.space.md }}>
@@ -129,13 +137,13 @@ export function ReviewCard({ response }: { response: AssistantResponse }) {
           <View style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' }} accessibilityLiveRegion="polite">
             <CircleAlert size={18} strokeWidth={2} color={t.colors.warning} />
             <AppText variant="secondary" tone="secondary" style={{ flex: 1 }}>
-              {blocked.length === 1 ? `Choose ${!selectedMatch(blocked[0]) ? 'a food' : 'an amount'} for “${blocked[0].group.foodQuery}”, or remove it.` : `${blocked.length} foods need a food or an amount.`}
+              {blocked.length === 1 ? `Choose ${!selectedMatch(blocked[0]) ? 'a food' : 'an amount'} for “${blocked[0].group.foodQuery}”, or exclude it.` : `${blocked.length} selected foods need a food or an amount.`}
             </AppText>
           </View>
         ) : null}
         {error ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">{error}</AppText> : null}
         <PrimaryButton
-          label={`${planning ? 'Plan all' : 'Log all'}${included.length ? ` · ${r0(sum.calories)} kcal` : ''}`}
+          label={`${planning ? 'Plan' : 'Log'} ${included.length} selected`}
           icon={planning ? CalendarClock : Check}
           disabled={included.length === 0 || blocked.length > 0}
           loading={busy}
@@ -169,21 +177,11 @@ function MacroSummary({ protein, carbs, fat }: { protein: number; carbs: number;
   );
 }
 
-function ReviewRow({ item, onPress, onRestore, onSwitchPreparation }: { item: DraftItem; onPress: () => void; onRestore: () => void; onSwitchPreparation: () => void }) {
+function ReviewRow({ item, onPress, onToggleIncluded, onSwitchPreparation }: { item: DraftItem; onPress: () => void; onToggleIncluded: () => void; onSwitchPreparation: () => void }) {
   const t = useTheme();
   const m = selectedMatch(item);
   const p = preview(item);
   const name = m ? friendlyFoodName(m.food.name) : item.group.foodQuery;
-
-  if (item.removed) {
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingLeft: t.space.lg, paddingRight: t.space.sm, borderTopWidth: 1, borderTopColor: t.colors.border }}>
-        <AppText variant="secondary" tone="muted" style={{ flex: 1, textDecorationLine: 'line-through' }} numberOfLines={1}>{name}</AppText>
-        <TextButton label="Restore" icon={Undo2} tone="secondary" onPress={onRestore} />
-      </View>
-    );
-  }
-
   const status = !m ? { label: 'No match', tone: 'warning' as const }
     : item.grams == null ? { label: 'Needs amount', tone: 'warning' as const }
     : m.confidence < 0.5 ? { label: 'Check match', tone: 'warning' as const }
@@ -195,28 +193,38 @@ function ReviewRow({ item, onPress, onRestore, onSwitchPreparation }: { item: Dr
   const switchLabel = prep?.otherState === 'Cooked' ? 'Use cooked instead' : prep?.otherState === 'Raw' ? 'Use raw instead' : 'Switch version';
 
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border }}>
-    <Pressable onPress={onPress} accessibilityRole="button"
-      accessibilityLabel={`${name}, ${item.amountLabel ?? 'no amount'}, ${p ? `${r0(p.calories)} calories` : 'calories unknown'}${status ? `, ${status.label}` : ''}`}
-      accessibilityHint="Change the match or the amount"
-      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 64, paddingVertical: t.space.sm, paddingLeft: t.space.lg, paddingRight: t.space.sm }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <AppText variant="body" numberOfLines={2}>{name}</AppText>
-        <AppText variant="secondary" tone="secondary" numberOfLines={1}>
-          {item.amountLabel ?? 'Choose amount'}{item.grams != null && !/\bg$/.test(item.amountLabel ?? '') ? ` · ${r0(item.grams)} g` : ''}
-        </AppText>
-        {m && friendlyFoodName(m.food.name) !== m.food.name ? <AppText variant="caption" tone="muted" numberOfLines={1}>{m.food.name}</AppText> : null}
-        {status ? <View style={{ flexDirection: 'row', marginTop: 2 }}><Badge label={status.label} tone={status.tone} /></View> : null}
+    <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border, flexDirection: 'row', alignItems: 'center', paddingLeft: t.space.xs }}>
+      {/* Icon-only checkbox (48 dp target): the state also shows as a struck-through, muted name, never by color alone. */}
+      <Pressable onPress={onToggleIncluded} accessibilityRole="checkbox" accessibilityState={{ checked: item.included }}
+        accessibilityLabel={`Include ${name}`}
+        accessibilityHint={item.included ? 'Leaves this food out of the meal' : 'Adds this food back to the meal'}
+        hitSlop={4}
+        style={({ pressed }) => [{ width: t.sizes.touch, minHeight: t.sizes.touch, alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.button }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+        {item.included ? <SquareCheck size={22} strokeWidth={2} color={t.colors.primary} /> : <Square size={22} strokeWidth={2} color={t.colors.textMuted} />}
+      </Pressable>
+      <View style={{ flex: 1 }}>
+        <Pressable onPress={onPress} accessibilityRole="button"
+          accessibilityLabel={`${name}, ${item.amountLabel ?? 'no amount'}, ${p ? `${r0(p.calories)} calories` : 'calories unknown'}, ${item.included ? 'included' : 'excluded'}${status ? `, ${status.label}` : ''}`}
+          accessibilityHint="Change the match or the amount"
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 64, paddingVertical: t.space.sm, paddingLeft: t.space.xs, paddingRight: t.space.lg }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText variant="body" tone={item.included ? 'default' : 'muted'} style={!item.included ? { textDecorationLine: 'line-through' } : undefined} numberOfLines={2}>{name}</AppText>
+            <AppText variant="secondary" tone="secondary" numberOfLines={1}>
+              {item.amountLabel ?? 'Choose amount'}{item.grams != null && !/\bg$/.test(item.amountLabel ?? '') ? ` · ${r0(item.grams)} g` : ''}
+            </AppText>
+            {m && friendlyFoodName(m.food.name) !== m.food.name ? <AppText variant="caption" tone="muted" numberOfLines={1}>{m.food.name}</AppText> : null}
+            {status ? <View style={{ flexDirection: 'row', marginTop: 2 }}><Badge label={status.label} tone={status.tone} /></View> : null}
+          </View>
+          <AppText variant="bodyStrong" numeric>{p ? r0(p.calories) : '—'}</AppText>
+          <ChevronRight size={18} strokeWidth={1.8} color={t.colors.textMuted} />
+        </Pressable>
+        {prep?.note ? (
+          <View style={{ paddingLeft: t.space.xs, paddingRight: t.space.lg, paddingBottom: t.space.sm, gap: 2 }}>
+            <AppText variant="caption" tone="secondary">{prep.note}</AppText>
+            {otherIndex >= 0 ? <View style={{ flexDirection: 'row' }}><TextButton label={switchLabel} onPress={onSwitchPreparation} /></View> : null}
+          </View>
+        ) : null}
       </View>
-      <AppText variant="bodyStrong" numeric>{p ? r0(p.calories) : '—'}</AppText>
-      <ChevronRight size={18} strokeWidth={1.8} color={t.colors.textMuted} />
-    </Pressable>
-    {prep?.note ? (
-      <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm, gap: 2 }}>
-        <AppText variant="caption" tone="secondary">{prep.note}</AppText>
-        {otherIndex >= 0 ? <View style={{ flexDirection: 'row' }}><TextButton label={switchLabel} onPress={onSwitchPreparation} /></View> : null}
-      </View>
-    ) : null}
     </View>
   );
 }
@@ -236,7 +244,7 @@ function FoodEditSheet({ item, onChange, onClose }: { item: DraftItem | null; on
     <BottomSheet visible={!!item} onClose={onClose} title={m ? friendlyFoodName(m.food.name) : `“${it.group.foodQuery}”`}
       footer={<>
         <PrimaryButton label="Done" onPress={onClose} fullWidth />
-        <SecondaryButton label="Remove from this meal" icon={Trash2} tone="danger" fullWidth onPress={() => { onChange(setRemoved(it, true)); onClose(); }} />
+        <SecondaryButton label={it.included ? 'Exclude from this meal' : 'Include in this meal'} icon={it.included ? CircleMinus : SquareCheck} tone={it.included ? 'danger' : 'default'} fullWidth onPress={() => { onChange(setIncluded(it, !it.included)); onClose(); }} />
       </>}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: t.space.lg, paddingBottom: t.space.sm }} keyboardShouldPersistTaps="handled">
         <AppText variant="secondary" tone="muted">You said “{it.group.text}”</AppText>
@@ -267,6 +275,7 @@ function FoodEditSheet({ item, onChange, onClose }: { item: DraftItem | null; on
               </Pressable>
             );
           })}
+          <AppText variant="label" tone="secondary" style={{ marginTop: t.space.sm }}>Replace this match</AppText>
           <OtherFoodSearch initial={it.group.foodQuery} onPick={(food) => { haptic.select(); onChange(withPickedFood(it, food)); }} />
         </View>
       </ScrollView>
@@ -285,7 +294,7 @@ function OtherFoodSearch({ initial, onPick }: { initial: string; onPick: (f: Foo
       <SearchField value={text} onChangeText={setText} onClear={() => setText('')} placeholder="Search foods" autoFocus accessibilityLabel="Search for another food" />
       {results.isFetching ? <AppText variant="caption" tone="muted">Searching…</AppText> : null}
       {(results.data ?? []).slice(0, 6).map((f) => (
-        <Pressable key={f.id} onPress={() => onPick(f)} accessibilityRole="button" accessibilityLabel={`Use ${f.name}`}
+        <Pressable key={f.id} onPress={() => { onPick(f); setOpen(false); }} accessibilityRole="button" accessibilityLabel={`Replace with ${f.name}`}
           style={({ pressed }) => [{ minHeight: 48, justifyContent: 'center', paddingHorizontal: t.space.md, paddingVertical: t.space.xs, borderRadius: t.radii.button }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
           <AppText variant="body" numberOfLines={2}>{f.name}{f.brand ? ` · ${f.brand}` : ''}</AppText>
           <AppText variant="caption" tone="muted" numeric>{Math.round(f.per100g.calories)} kcal / 100 g</AppText>
@@ -295,13 +304,32 @@ function OtherFoodSearch({ initial, onPick }: { initial: string; onPick: (f: Foo
   );
 }
 
-/**
- * Amount in one of the measures the server says this food supports (the same picker used for logging and editing).
- * Falls back to the food's raw portions plus g/oz for a food sent without measures.
- */
+function AddFoodSearch({ onPick }: { onPick: (f: Food) => void }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const results = useFoodSearch(open ? text.trim() : '');
+  if (!open) return <TextButton label="Add a food" icon={Plus} tone="secondary" onPress={() => setOpen(true)} />;
+  return (
+    <View style={{ gap: t.space.xs, paddingBottom: t.space.sm }}>
+      <AppText variant="label" tone="secondary">Add another food</AppText>
+      <SearchField value={text} onChangeText={setText} onClear={() => setText('')} placeholder="Search foods to add" autoFocus accessibilityLabel="Search foods to add" />
+      {results.isFetching ? <AppText variant="caption" tone="muted">Searching…</AppText> : null}
+      {(results.data ?? []).slice(0, 6).map((f) => (
+        <Pressable key={f.id} onPress={() => { onPick(f); setText(''); setOpen(false); }} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}
+          style={({ pressed }) => [{ minHeight: 48, justifyContent: 'center', paddingHorizontal: t.space.md, paddingVertical: t.space.xs, borderRadius: t.radii.button }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+          <AppText variant="body" numberOfLines={2}>{f.name}{f.brand ? ` · ${f.brand}` : ''}</AppText>
+          <AppText variant="caption" tone="muted" numeric>{Math.round(f.per100g.calories)} kcal / 100 g</AppText>
+        </Pressable>
+      ))}
+      <TextButton label="Cancel adding food" tone="secondary" onPress={() => { setOpen(false); setText(''); }} />
+    </View>
+  );
+}
+
+/** Amount in one of the measures the server says this food supports, using the same picker as logging and editing. */
 function AmountEditor({ item, food, onChange }: { item: DraftItem; food: Food; onChange: (i: DraftItem) => void }) {
-  const measures: Measure[] = food.measures?.length ? food.measures
-    : amountOptions(food.portions).map((o) => ({ unit: o.label, label: o.label, plural: o.label, base: o.grams, kind: o.label === 'g' || o.label === 'oz' ? 'Mass' : 'Count', source: null, countable: false }));
+  const measures: Measure[] = food.measures ?? [];
   const base = food.baseUnit ?? 'g';
   // Start on the measure you said if this food has it, else its first one; the amount keeps the same weight.
   const said = (item.amountLabel ?? '').replace(/^[\d.,/ ]+\s*/, '');
@@ -313,7 +341,7 @@ function AmountEditor({ item, food, onChange }: { item: DraftItem; food: Food; o
     setValue(v);
     const q = parseQuantity(v.text);
     const m = matchMeasure(measures, v.unit);
-    if (q !== null && q > 0 && m) onChange(setAmount(item, roundAmount(q), { label: Math.abs(q - 1) < 1e-9 ? m.label : m.plural, grams: m.base, unit: food.measures?.length ? m.unit : undefined }));
+    if (q !== null && q > 0 && m) onChange(setAmount(item, roundAmount(q), { label: Math.abs(q - 1) < 1e-9 ? m.label : m.plural, grams: m.base, unit: m.unit }));
     else onChange(clearAmount(item)); // an empty or invalid amount can't be logged with the old one
   };
   const q = parseQuantity(value.text);
