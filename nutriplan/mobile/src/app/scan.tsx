@@ -87,6 +87,16 @@ export default function ScanScreen() {
     </View>
   );
 
+  // A lookup that failed for a temporary reason: Retry, or type the label in. Shown with or without a camera.
+  const failureBlock = failure ? (
+    <>
+      <AppText variant="body" accessibilityLiveRegion="polite">{failure.message}</AppText>
+      {failure.kind === 'retry' ? <PrimaryButton label="Try again" icon={RefreshCw} loading={looking} onPress={() => { gate.reset(); if (gate.accept(failure.code)) void look(failure.code); }} fullWidth /> : null}
+      {failure.kind === 'settings' ? <PrimaryButton label="Open Settings" onPress={() => router.push('/settings')} fullWidth /> : null}
+      <SecondaryButton label="Enter the label by hand" onPress={() => manual(failure.code)} fullWidth />
+    </>
+  ) : null;
+
   // No camera (denied for good, unavailable, or failed to start): typing the barcode always works.
   const noCamera = (title: string, body: string, action?: ReactNode) => (
     <View style={{ flex: 1, justifyContent: 'center', padding: t.screenPadding, gap: t.space.md, backgroundColor: t.colors.background }}>
@@ -95,8 +105,8 @@ export default function ScanScreen() {
         <AppText variant="cardTitle" align="center">{title}</AppText>
         <AppText variant="body" tone="secondary" align="center">{body}</AppText>
       </View>
-      {action}
-      {typeIn}
+      {failureBlock ?? <>{action}{typeIn}</>}
+      {failure ? <TextButton label="Type another barcode" tone="secondary" onPress={() => setFailure(null)} /> : null}
       <TextButton label="Cancel" tone="secondary" onPress={() => router.back()} />
     </View>
   );
@@ -124,10 +134,7 @@ export default function ScanScreen() {
       <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: t.screenPadding, paddingBottom: t.space.xxl, gap: t.space.md, backgroundColor: t.colors.surfaceRaised, borderTopLeftRadius: t.radii.sheet, borderTopRightRadius: t.radii.sheet }}>
         {failure ? (
           <>
-            <AppText variant="body" accessibilityLiveRegion="polite">{failure.message}</AppText>
-            {failure.kind === 'retry' ? <PrimaryButton label="Try again" icon={RefreshCw} loading={looking} onPress={() => { gate.reset(); if (gate.accept(failure.code)) void look(failure.code); }} fullWidth /> : null}
-            {failure.kind === 'settings' ? <PrimaryButton label="Open Settings" onPress={() => router.push('/settings')} fullWidth /> : null}
-            <SecondaryButton label="Enter the label by hand" onPress={() => manual(failure.code)} fullWidth />
+            {failureBlock}
             <SecondaryButton label="Scan another" onPress={() => { setFailure(null); setStatus('Point the camera at a barcode'); }} fullWidth />
           </>
         ) : typing ? (

@@ -59,6 +59,8 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
       rightThreshold={DELETE_WIDTH / 2}
       overshootRight={false}
       dragOffsetFromRight={16}
+      // The row covers the Delete action until it's swiped: same surface as the meal card it sits in.
+      childrenContainerStyle={{ backgroundColor: t.colors.surface }}
       onSwipeableWillOpen={() => methods.current && group?.opened(methods.current)}
       onSwipeableClose={() => group?.forget(methods.current)}
       renderRightActions={() => (

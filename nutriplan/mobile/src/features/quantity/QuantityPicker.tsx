@@ -80,7 +80,7 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
                   borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.colors.border, backgroundColor: pressed ? t.colors.surfaceMuted : selected ? t.colors.primaryLight : t.colors.surface })}>
                 <View style={{ flex: 1, gap: 1 }}>
                   <AppText variant="body">{m.label}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${formatQuantity(m.base)} ${baseUnit}`}</AppText> : null}</AppText>
-                  {m.source ? <AppText variant="caption" tone="muted" numberOfLines={2}>USDA: {m.source}</AppText> : null}
+                  {m.source ? <AppText variant="caption" tone="muted" numberOfLines={2}>From USDA: {m.source}</AppText> : null}
                 </View>
                 {selected ? <Check size={18} color={t.colors.primary} /> : null}
               </Pressable>
