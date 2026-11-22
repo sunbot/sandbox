@@ -207,7 +207,7 @@ export function SearchField({ value, onClear, trailing, style, ...rest }: TextIn
           value={value}
           placeholderTextColor={t.colors.textMuted}
           returnKeyType="search"
-          style={[t.type.body, { flex: 1, color: t.colors.text, paddingHorizontal: t.space.sm, minHeight: t.sizes.touch }, style]}
+          style={[t.type.body, { flex: 1, minWidth: 0, color: t.colors.text, paddingHorizontal: t.space.sm, minHeight: t.sizes.touch }, style]} // minWidth 0: a web text input won't shrink below its intrinsic width otherwise, pushing the clear button out on narrow phones
           {...rest}
         />
         {value && onClear ? <IconButton icon={X} label="Clear search" onPress={onClear} /> : null}

@@ -161,12 +161,26 @@ Ordered roughly by how much I'd worry:
 
 ## 10. Current state
 
-- `master` is green; no open PRs. Deployed on Render from `master`.
+- `master` is green. Open PRs: #55 and #59 from Copilot (see 10a). Deployed on Render from `master`.
 - The Android APK on the `android-latest` release was last built from the branch that became PR #48; the web app (served from Render) includes everything through PR #51. Later changes (macro "over" text, regression tests) are in the web app but not in the owner's installed APK unless a newer APK is built.
 - The owner confirmed on real devices: Android edit/delete, Chrome scanner, and the production portions step.
-- Remaining owner-side action: remove the temporary `Usda__EnrichPortions` setting in Render (it is harmless but should not stay on) and spot-check "Almonds, whole, raw" in the app.
+- Remaining owner-side action: confirm the temporary `Usda__EnrichPortions` setting is removed in Render, and spot-check "Almonds, whole, raw" in the app.
 
 Candidate next work (not started): protected signing key and CI-gated APK releases; showing which foods cause a missing-nutrient total; branded/restaurant search; making Ask confirm guessed sizes; broader device testing.
+
+## 10a. Update (evening of 2026-11-22): work by other agents
+
+After this report's first version, the owner had GitHub Copilot (and ChatGPT-drafted issues) work in parallel. What landed and how it was checked:
+
+| PR | Author | State | Notes |
+|---|---|---|---|
+| #56 | Copilot | merged | "View nutrition" in the logged-item editor: shows the saved snapshot (not the food's current values); missing = "Not reported", a real zero stays 0. Unit + browser tests; CI passed after one fixture fix. Reviewed: consistent with the nutrition invariants; list scrolls on tall and short screens (web). |
+| #57 | Copilot | merged | Contains only an empty "Initial plan" commit, yet it closed issue #54 as completed. The real feature is #58/#59. |
+| #55 | Copilot | open | Fixed-height editor so opening the measure list doesn't move the header; list scrolls inside. **No CI ever ran** (workflow runs `action_required`); run locally instead: 139 unit, typecheck, lint, 19 browser tests pass. Trade-off: the editor is always 90% tall (large empty space when the list is closed); nested scrolling on Android unverified. Owner decision pending. |
+| #59 | Copilot | draft, in progress | Ask review: include/exclude toggle per food, add a food from search, "Log N selected". Draft logic and tests reviewed (immutable updates, stable keys, excluded rows don't block). Server idempotency hashes key + body, so a changed selection is a new request. Passes locally (141 unit, 19 browser). At 360 px the added toggle makes long names wrap to three lines. |
+| (Claude) | this session | PR | Fixed a shared `SearchField` layout bug found during review: on web the input had no `minWidth: 0`, so at 320-360 px its clear button spilled out of the field. New browser test covers 320/360/393 px. |
+
+New process notes: Copilot PRs need their workflows approved before CI runs (now in `CLAUDE.md`); several agents editing the same files caused a merge conflict on #55; an issue was closed by a PR that delivered no code.
 
 ## 11. Questions for the reviewer
 
