@@ -37,6 +37,18 @@ public class AmountEditTests
         Assert.Equal(579 * 0.144, updated.Item.Nutrition.Calories, 0);
     }
 
+    [Fact]
+    public async Task Large_amounts_scale_every_nutrient_with_no_cap()
+    {
+        var logged = await Log(Almonds(), amount: 50, unit: "almond"); // 60 g: 30 g fat
+        Assert.Equal(30, logged.Item.Nutrition.Fat, 1);
+        var more = await Diary().UpdateAsync(logged.Id, null, null, null, null, default, amount: 200, unit: "almond"); // 240 g
+        Assert.Equal(240, more.Item.Grams!.Value, 2);
+        Assert.Equal(120, more.Item.Nutrition.Fat, 1);
+        Assert.Equal(579 * 2.4, more.Item.Nutrition.Calories, 0);
+        Assert.Equal(21 * 2.4, more.Item.Nutrition.Protein, 1);
+    }
+
     [Theory]
     [InlineData(1, "oz", 28.35)]
     [InlineData(2, "tbsp", 17.875)]   // from USDA's measured cup of almonds (143 g / 16)
