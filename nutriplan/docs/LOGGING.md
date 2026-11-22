@@ -22,8 +22,13 @@ Measures are sent with every food (`measures` on `GET /api/foods/{id}`, search a
 - `ItemAmounts.ChangeAsync` resolves the new amount to a weight and scales **the entry's own logged nutrition** by the change
   in weight (same unit: the ratio of amounts). Historical numbers are never re-read from a food that changed since, and the
   amount, unit, weight and nutrition always agree. Recipes change in servings; quick entries have no amount.
-- Refused with the reason (400): zero/negative/non-numbers, more than 5 kg or 50 servings, a measure the food doesn't have,
-  converting a drink to grams, or converting an old entry whose original weight is unknown (it can still change in its own unit).
+- An entry can always change its amount in its own unit (even an older one such as "oz (23 whole kernels)" or "2 eggs"
+  stored as "serving"); plural spellings count as the same unit. Undo sends the previous amount, unit and weight, so an
+  older unit is restored exactly.
+- Refused with the reason (400): zero/negative/non-numbers, amounts that would round to nothing (under 0.001, or 0.01 g/ml),
+  more than 5 kg, 5 litres or 50 servings (new logs too), a measure the food doesn't have, converting a drink to grams, a unit
+  sent without an amount, or converting an old entry whose original weight is unknown.
+- Typing "1,000" is refused (it could mean 1000 or 1.000); a decimal comma like "1,5" is fine.
 - The app's `features/quantity` model (parse, convert, preview) mirrors this exactly for the live preview; the server is
   authoritative. One `QuantityPicker` is used by the diary editor, new logs/plans/recipe ingredients, planned items and Ask.
 - Typing: decimals with `.` or `,`, fractions `1/2`, `1 1/2`, `½`, `1½`. Switching measure keeps the physical amount.
