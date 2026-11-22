@@ -88,6 +88,9 @@ itself), the source's trust and your own history all count for more.
 - Typing: decimals with `.` or `,`, fractions `1/2`, `1 1/2`, `½`, `1½`. Switching measure keeps the physical amount.
 - Save is disabled for invalid amounts and while saving; a failed save keeps the draft; Undo restores the previous amount
   and measure (and meal).
+- **View nutrition** in the editor shows the saved entry's snapshot, including catalog nutrients and units. Missing values say
+  "Not reported"; a reported zero stays zero. It does not include unsaved quantity changes or read the food's current nutrition.
+  Recipe values may be incomplete when ingredients or nutrients were missing.
 
 ## Deleting
 
@@ -144,6 +147,8 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    tap it: the food disappears with Undo (Undo brings it back; after ~5 s it's gone on the server and stays gone after a refresh);
    a short drag or vertical scrolling doesn't open it; TalkBack offers "Delete".
 2. Editor: decimal keypad appears, the field isn't hidden by the keyboard, switching measure keeps the amount, Save/Undo work.
+   Open View nutrition and return with a quantity draft: the saved amount and values remain distinct from the draft, scrolling
+   and large text work, and nothing saves until Save changes is pressed.
 3. Scanner: sharpness at 15–20 cm, with and without zoom; torch on/off; a small barcode; dim light; denied permission;
    typing a barcode.
    **Web in Android Chrome** (confirmed on a Pixel: sharp, reads a barcode; repeat on other phones): open the site in Chrome, Today → scan;
