@@ -535,7 +535,8 @@ Errors are RFC 7807 problem details (404 not found, 400 validation, 401 missing/
 | Setting | Purpose |
 |---|---|
 | `DATABASE_URL` / `DATABASE_URL_UNPOOLED` / `ConnectionStrings:NutriPlan` | Database; the direct (unpooled) URL is preferred because migrations run at startup |
-| `Api:Key` (`Api__Key`) | Shared API key; when set, `/api/*` requires `X-Api-Key` |
+| `Auth:FirebaseProjectId` (`Auth__FirebaseProjectId`) | Firebase project whose ID tokens the API accepts (required in production) |
+| `Auth:OwnerSubject` (`Auth__OwnerSubject`) | Firebase user id allowed to claim the pre-accounts data once ([docs/AUTH.md](docs/AUTH.md)) |
 | `App:TimeZone` | IANA zone for the server's "today" |
 | `Claude:ApiKey`, `Claude:InterpreterModel`, `Claude:RecipeModel`, `Claude:UseServerSideFallback` | Optional AI |
 | `Usda:SeedFolder` | Folder imported automatically when the foods table is empty (set in the Docker image) |

@@ -92,7 +92,7 @@ Server-side refusal fallback is enabled for models that support it (`Claude:UseS
 Easiest: run the API + Postgres on a home PC and reach it from your phone over Wi-Fi, or anywhere via
 [Tailscale](https://tailscale.com) (free). For always-on hosting: a small VM (~$5–6/mo) running
 `docker compose` + the API, or a managed Postgres free tier (Neon/Supabase) + any .NET host. When exposed to the
-internet, set `Api:Key` (env `Api__Key`) and enter the same key in the app's Settings.
+internet it requires Google sign-in (Firebase) and is invite-only: see [docs/AUTH.md](docs/AUTH.md).
 
 ## Going further
 

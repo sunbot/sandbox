@@ -37,7 +37,9 @@ The code must be in a GitHub repo Render can see. This project lives in the `nut
    | Key | Value |
    |---|---|
    | `DATABASE_URL` | the Neon connection string |
-   | `Api__Key` | a long random password you make up. **The app and your data are protected by this.** |
+   | `Auth__FirebaseProjectId` | your Firebase project id. **Required: the API won't start without it.** Sign-in setup: [AUTH.md](AUTH.md) |
+   | `EXPO_PUBLIC_FIREBASE_API_KEY`, `…_AUTH_DOMAIN`, `…_PROJECT_ID`, `…_APP_ID` | your Firebase web-app config (public values, used to build the web app) |
+   | `Auth__OwnerSubject` | your Firebase user id, after your first sign-in (claims the existing data once) |
    | `App__TimeZone` | your time zone, e.g. `America/Chicago` (so "today" flips at your midnight) |
    | `Claude__ApiKey` | *(optional)* your Anthropic API key for smarter chat and recipe ideas |
    | `Usda__ApiKey` | *(optional)* free api.data.gov key for USDA FoodData Central: branded product search and USDA barcode lookups. Without it, branded search says it isn't set up and barcodes use Open Food Facts only |
@@ -45,8 +47,8 @@ The code must be in a GitHub repo Render can see. This project lives in the `nut
 
 5. **Create Web Service.** The first build takes several minutes (it builds the app and downloads USDA data).
    On first start it loads ~13,600 foods into the database in about 30 seconds.
-6. Open the URL. The app asks for the key: **More → Settings**, paste your `Api__Key`, then **Save & test**.
-   It should say "13,602 foods". Leave the Server URL as is (it's already the site you're on).
+6. Open the URL and **Continue with Google**. The first time you'll see "Not invited yet" with your account ID: set it as
+   `Auth__OwnerSubject` (see [AUTH.md](AUTH.md)), let Render restart, then tap Try again. Leave the Server URL as is.
 
 **Other hosts:** the same Dockerfile and environment variables work on Railway, Fly.io, Azure Container Apps, or a
 $5 VM with `docker run`. The container listens on `$PORT` (default 8080).
