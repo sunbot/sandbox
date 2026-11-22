@@ -1,6 +1,8 @@
 # One image = API + web app + USDA food data. Build from the nutriplan/ folder:
 #   docker build -t nutriplan .
-#   docker run -p 8080:8080 -e DATABASE_URL=postgres://... -e Api__Key=choose-a-secret nutriplan
+#   docker run -p 8080:8080 -e DATABASE_URL=postgres://... -e Auth__FirebaseProjectId=your-project nutriplan
+# Sign-in (docs/AUTH.md): the web app needs the Firebase web config at build time; Render passes service environment
+# variables to the Docker build as build args.
 # On first start with an empty database it imports ~13.6k USDA foods in the background (~30 s).
 
 # ── 1. Web build of the Expo app ─────────────────────────────────────────────
@@ -9,6 +11,15 @@ WORKDIR /src/mobile
 COPY mobile/package.json mobile/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY mobile/ ./
+# Public Firebase web-app identifiers (not secrets). Without them the web app shows "Sign-in isn't set up".
+ARG EXPO_PUBLIC_FIREBASE_API_KEY=""
+ARG EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=""
+ARG EXPO_PUBLIC_FIREBASE_PROJECT_ID=""
+ARG EXPO_PUBLIC_FIREBASE_APP_ID=""
+ENV EXPO_PUBLIC_FIREBASE_API_KEY=$EXPO_PUBLIC_FIREBASE_API_KEY \
+    EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN \
+    EXPO_PUBLIC_FIREBASE_PROJECT_ID=$EXPO_PUBLIC_FIREBASE_PROJECT_ID \
+    EXPO_PUBLIC_FIREBASE_APP_ID=$EXPO_PUBLIC_FIREBASE_APP_ID
 RUN npx expo export --platform web
 
 # ── 2. API ───────────────────────────────────────────────────────────────────

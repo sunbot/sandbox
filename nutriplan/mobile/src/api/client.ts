@@ -1,3 +1,5 @@
+import { fetchWithAuth } from '@/auth/authFetch';
+import { accessDeniedReasons, authBridge } from '@/auth/bridge';
 import { loadSettings } from '@/lib/settings';
 
 export class ApiError extends Error {
@@ -7,11 +9,15 @@ export class ApiError extends Error {
   }
 }
 
-/** Minimal fetch wrapper: base URL + optional API key from settings, JSON in/out, readable errors. */
+/**
+ * Minimal fetch wrapper: base URL, the signed-in user's ID token as a bearer token, JSON in/out, readable errors.
+ * A 401 is retried once with a freshly refreshed token; if that is rejected too, the session ends and the app shows
+ * sign-in. Tokens go only in the Authorization header: never in URLs or logs.
+ */
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
-  const { apiUrl, apiKey } = await loadSettings();
+  const { apiUrl } = await loadSettings();
+  const auth = authBridge();
   const headers: Record<string, string> = { Accept: 'application/json', ...(init.headers as Record<string, string>) };
-  if (apiKey) headers['X-Api-Key'] = apiKey;
   let body = init.body;
   if (init.json !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -20,9 +26,9 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
 
   let res: Response;
   try {
-    res = await fetch(`${apiUrl}/api${path}`, { ...init, headers, body });
+    res = await fetchWithAuth(fetch, auth, `${apiUrl}/api${path}`, { ...init, headers, body });
   } catch {
-    throw new ApiError(`Can't reach the server at ${apiUrl}. Check Settings.`, 0);
+    throw new ApiError(`Can't reach the server at ${apiUrl}. Check your connection.`, 0);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -36,8 +42,13 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
     if (!res.ok) throw new ApiError(`Request failed (${res.status})`, res.status);
     throw new ApiError('The server sent a response the app could not read.', res.status);
   }
-  if (res.status === 401) throw new ApiError('API key missing or wrong — enter it in More → Settings.', 401);
-  if (!res.ok) throw new ApiError(data?.detail ?? data?.title ?? `Request failed (${res.status})`, res.status, typeof data?.reason === 'string' ? data.reason : undefined);
+  const reason = typeof data?.reason === 'string' ? data.reason : undefined;
+  if (res.status === 401) {
+    auth?.sessionEnded(reason);
+    throw new ApiError(data?.title ?? 'Sign in to continue.', 401, reason);
+  }
+  if (res.status === 403 && reason && accessDeniedReasons.has(reason)) auth?.accessDenied(reason);
+  if (!res.ok) throw new ApiError(data?.detail ?? data?.title ?? `Request failed (${res.status})`, res.status, reason);
   return data as T;
 }
 

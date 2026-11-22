@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FlatList, Pressable, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,7 +6,7 @@ import { useRecipeMutations, useRecipes } from '@/api/hooks';
 import { AppCard, AppText, Badge, EmptyState, PrimaryButton, SearchField, SecondaryButton, Skeleton } from '@/components/ds';
 import { ChefHat, ChevronRight, Download, Plus, Star } from '@/components/ds/icons';
 import { RecipeThumb } from '@/features/recipe/RecipeThumb';
-import { loadSettings } from '@/lib/settings';
+import { useServerAuth } from '@/lib/authImage';
 import { useTheme } from '@/theme/ThemeProvider';
 
 const r0 = (n: number) => Math.round(n);
@@ -19,8 +19,7 @@ export default function RecipesScreen() {
   const [url, setUrl] = useState('');
   const recipes = useRecipes(search);
   const m = useRecipeMutations();
-  const [server, setServer] = useState({ apiUrl: '', apiKey: '' });
-  useEffect(() => { loadSettings().then(setServer); }, []);
+  const server = useServerAuth();
 
   // Shown on the screen (not in an alert, which doesn't appear in the web version).
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; title: string; lines: string[] } | null>(null);

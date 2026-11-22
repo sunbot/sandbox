@@ -57,3 +57,8 @@ export { default as Info } from 'lucide-react-native/icons/info';
 export { default as Layers } from 'lucide-react-native/icons/layers';
 export { default as CircleHelp } from 'lucide-react-native/icons/circle-help';
 export { default as PenLine } from 'lucide-react-native/icons/pen-line';
+export { default as LogIn } from 'lucide-react-native/icons/log-in';
+export { default as LogOut } from 'lucide-react-native/icons/log-out';
+export { default as UserPlus } from 'lucide-react-native/icons/user-plus';
+export { default as Users } from 'lucide-react-native/icons/users';
+export { default as ShieldAlert } from 'lucide-react-native/icons/shield-alert';

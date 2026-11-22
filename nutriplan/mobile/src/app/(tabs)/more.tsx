@@ -45,7 +45,7 @@ export default function MoreScreen() {
           </View>
         )}
       >
-        <ListRow icon={Settings} title="Settings" hint="Server connection" onPress={() => router.push('/settings')} />
+        <ListRow icon={Settings} title="Settings" hint="Account and server" onPress={() => router.push('/settings')} />
       </ListGroup>
 
       <AppText variant="caption" tone="muted" align="center">Intake Grid</AppText>
