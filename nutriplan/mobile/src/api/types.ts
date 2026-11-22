@@ -11,6 +11,8 @@ export type Nutrition = {
 };
 
 export type Portion = { description: string; grams: number };
+/** A measure the food can be logged in (from the server): send `unit` back with an amount; `base` is grams (ml for a drink) in one. */
+export type Measure = { unit: string; label: string; plural: string; base: number; kind: 'Count' | 'Volume' | 'Mass'; source?: string | null; countable: boolean };
 
 export type Food = {
   id: string;
@@ -24,6 +26,7 @@ export type Food = {
   per100g: Nutrition;
   portions: Portion[];
   baseUnit?: 'g' | 'ml';
+  measures?: Measure[];
 };
 
 /** A packaged product from USDA FoodData Central (not saved until opened). perServing only when the label gives a size. */

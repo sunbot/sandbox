@@ -97,6 +97,24 @@ test('amount options list USDA portions first, then grams and ounces, without du
   assert.deepEqual(opts.map((o) => o.label), ['slice', 'g', 'oz']);
 });
 
+test('switching food keeps the weight you set, not the previous food’s measure', () => {
+  const items = draftFrom([eggs]);
+  const chosen = setAmount(items[0], 3, { label: 'large', grams: 50, unit: 'large' });
+  const other = selectMatch(chosen, 1);
+  assert.equal(other.grams, 150);
+  assert.equal(other.amount, null);
+  assert.equal(other.amountLabel, '150 g');
+  assert.deepEqual(toRequest([other]), [{ foodId: 'egg-boiled', grams: 150 }]);
+});
+
+test('a cleared or invalid amount blocks logging instead of keeping the old one', async () => {
+  const { clearAmount } = await import('./draft.ts');
+  const items = draftFrom([eggs]);
+  const cleared = clearAmount(items[0]);
+  assert.equal(blockers([cleared]).length, 1);
+  assert.throws(() => toRequest([cleared]), /need a match or an amount/);
+});
+
 test('setAmount ignores zero or negative counts', () => {
   const [item] = draftFrom([eggs]);
   assert.equal(setAmount(item, 0, { label: 'g', grams: 1 }), item);
@@ -153,3 +171,11 @@ test('the save request carries only food ids and grams', () => {
 });
 
 function selectedFoodId(i: ReturnType<typeof draftFrom>[number]) { return i.group.matches[i.matchIndex].food.id; }
+
+test('an amount chosen in one of the food’s measures is logged in that measure', () => {
+  const items = draftFrom([granola]);
+  const chosen = setAmount(items[0], 12, { label: 'almonds', grams: 1.2, unit: 'almond' });
+  assert.equal(chosen.grams, 14.4);
+  assert.equal(chosen.amountLabel, '12 almonds');
+  assert.deepEqual(toRequest([chosen]), [{ foodId: 'granola', amount: 12, unit: 'almond' }]);
+});

@@ -53,7 +53,7 @@ export const useBrandedSearch = (text: string) =>
 /** Saves a branded product (once) so it can be logged; returns the stored food. */
 export const addBrandedFood = (sourceId: string) => post<T.Food>(`/foods/branded/${encodeURIComponent(sourceId)}`);
 
-export const useFood = (id: string) => useQuery({ queryKey: keys.food(id), queryFn: () => get<T.Food>(`/foods/${id}`) });
+export const useFood = (id: string, enabled = true) => useQuery({ queryKey: keys.food(id), queryFn: () => get<T.Food>(`/foods/${id}`), enabled: enabled && !!id });
 
 export const lookupBarcode = (code: string) => get<T.Food>(`/foods/barcode/${encodeURIComponent(code)}`);
 
@@ -105,7 +105,7 @@ export function useLogQuick() {
 export function useUpdateEntry() {
   const invalidate = useInvalidateNutrition();
   return useMutation({
-    mutationFn: ({ id, ...r }: { id: string; scale?: number; date?: string; meal?: Meal; note?: string }) => patch<T.DiaryEntry>(`/diary/${id}`, r),
+    mutationFn: ({ id, ...r }: { id: string; scale?: number; amount?: number; unit?: string; grams?: number; date?: string; meal?: Meal; note?: string }) => patch<T.DiaryEntry>(`/diary/${id}`, r),
     onSuccess: invalidate,
   });
 }
@@ -157,6 +157,10 @@ export function usePlanMutations() {
     applyRebalance: useMutation({ mutationFn: (r: { date: string; scale: number }) => post<T.PlanEntry[]>('/plan/rebalance', r), ...opts }),
     reopen: useMutation({ mutationFn: (id: string) => post<T.PlanEntry>(`/plan/${id}/reopen`), ...opts }),
     copy: useMutation({ mutationFn: (r: { from: string; to: string; meal?: Meal }) => post<T.PlanEntry[]>('/plan/copy', r), ...opts }),
+    setAmount: useMutation({
+      mutationFn: ({ id, amount, unit, grams }: { id: string; amount: number; unit: string; grams?: number }) => post<T.PlanEntry>(`/plan/${id}/amount`, { amount, unit, grams }),
+      ...opts,
+    }),
     swapFood: useMutation({
       mutationFn: ({ id, foodId, grams }: { id: string; foodId: string; grams: number }) => post<T.PlanEntry>(`/plan/${id}/swap-food`, { foodId, grams }),
       ...opts,

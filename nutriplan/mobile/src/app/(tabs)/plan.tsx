@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView as PlainScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
+import { SwipeableDiaryRow, SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
+import { amountText } from '@/features/quantity/quantity';
 import { router } from 'expo-router';
 import { useDeleteEntry, usePlanMutations, useRebalance, useUpdateEntry, useWeek } from '@/api/hooks';
 import type { DiaryEntry, PlanDay, PlanEntry } from '@/api/types';
@@ -9,12 +12,12 @@ import {
 import {
   CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CloudOff, Copy, Grid3x3, Minus, Plus, ShoppingBasket, Sparkles,
 } from '@/components/ds/icons';
-import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
+import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { displayName } from '@/features/today/sections';
 import { CopyDaySheet, PlanEntrySheet, type PlanAction } from '@/features/week/PlanEntrySheet';
 import { WeekChart } from '@/features/week/WeekChart';
 import { chartDays, weekSummary } from '@/features/week/weekChart';
-import { addDays, amount as fmtQty, fromIsoDate, mealForNow, shortDay, today } from '@/lib/format';
+import { addDays, fromIsoDate, mealForNow, shortDay, today } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -41,7 +44,7 @@ export default function WeekScreen() {
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({});
   const [copyFrom, setCopyFrom] = useState<PlanDay | null>(null);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set()); // deletes waiting for their Undo window
-  const busy = m.eaten.isPending || m.skip.isPending || m.move.isPending || m.swapRecipe.isPending || m.reopen.isPending;
+  const busy = m.eaten.isPending || m.skip.isPending || m.move.isPending || m.swapRecipe.isPending || m.reopen.isPending || m.setAmount.isPending;
 
   const hide = (id: string) => setHidden((s) => new Set(s).add(id));
   const unhide = (id: string) => setHidden((s) => { const n = new Set(s); n.delete(id); return n; });
@@ -67,6 +70,9 @@ export default function WeekScreen() {
       } else if (a.kind === 'swapRecipe') {
         await m.swapRecipe.mutateAsync({ id: e.id, recipeId: a.recipeId, servings: e.item.quantity || 1 });
         snackbar({ message: `Swapped for ${a.name}` });
+      } else if (a.kind === 'amount') {
+        await m.setAmount.mutateAsync({ id: e.id, amount: a.amount, unit: a.unit });
+        snackbar({ message: `Updated ${name}`, actionLabel: 'Undo', onAction: () => m.setAmount.mutate({ id: e.id, amount: e.item.quantity, unit: e.item.unit, grams: e.item.grams ?? undefined }) });
       } else if (a.kind === 'remove') {
         hide(e.id);
         snackbar({ message: `Removed ${name}`, actionLabel: 'Undo', onAction: () => unhide(e.id),
@@ -78,20 +84,19 @@ export default function WeekScreen() {
     }
   };
 
-  const saveLogged = async (e: DiaryEntry, d: EntryDraft) => {
-    const scale = e.item.quantity > 0 ? d.quantity / e.item.quantity : 1;
-    const scaled = Math.abs(scale - 1) > 1e-9;
-    const moved = d.meal !== e.meal;
+  const saveLogged = async (e: DiaryEntry, c: EntryChange) => {
+    if (update.isPending) return;
     try {
-      await update.mutateAsync({ id: e.id, scale: scaled ? scale : undefined, meal: moved ? d.meal : undefined });
+      await update.mutateAsync({ id: e.id, amount: c.amount, unit: c.unit, meal: c.meal });
       setDrafts(({ [e.id]: _, ...rest }) => rest);
       setEditing(null);
       snackbar({ message: `Updated ${displayName(e.item)}`, actionLabel: 'Undo',
-        onAction: () => update.mutate({ id: e.id, scale: scaled ? 1 / scale : undefined, meal: moved ? e.meal : undefined }) });
+        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, grams: c.amount !== undefined ? e.item.grams ?? undefined : undefined, meal: c.meal ? e.meal : undefined }) });
     } catch (err) { fail(err, "Couldn't save changes"); }
   };
 
   const deleteLogged = (e: DiaryEntry) => {
+    setDrafts(({ [e.id]: _, ...rest }) => rest);
     setEditing(null);
     hide(e.id);
     snackbar({ message: `Deleted ${displayName(e.item)}`, actionLabel: 'Undo', onAction: () => unhide(e.id),
@@ -102,18 +107,18 @@ export default function WeekScreen() {
 
   if (week.isLoading) {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+      <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
         <Skeleton width="60%" height={28} />
         {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} width="100%" height={84} radius={20} />)}
-      </ScrollView>
+      </PlainScrollView>
     );
   }
   if (week.error || !week.data) {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+      <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
         <EmptyState icon={CloudOff} title="Couldn't load your week" body={week.error instanceof Error ? week.error.message : undefined}
           action={<PrimaryButton label="Try again" onPress={() => week.refetch()} />} />
-      </ScrollView>
+      </PlainScrollView>
     );
   }
 
@@ -124,7 +129,8 @@ export default function WeekScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
-      <ScrollView contentContainerStyle={page}
+      <SwipeGroup>{(closeOpenRow) => (
+      <ScrollView contentContainerStyle={page} onScrollBeginDrag={closeOpenRow}
         refreshControl={<RefreshControl refreshing={week.isRefetching} onRefresh={() => { week.refetch(); rebalance.refetch(); }} colors={[t.colors.primary]} />}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.xs }}>
           <IconButton icon={ChevronLeft} label="Previous week" onPress={() => setAnchor(addDays(w.weekStart, -7))} />
@@ -187,7 +193,7 @@ export default function WeekScreen() {
         <View style={{ gap: t.space.md }}>
           {days.map((d) => (
             <DayCard key={d.date} day={d} open={open === d.date} onToggle={() => { haptic.select(); setOpen(open === d.date ? null : d.date); }}
-              onPlanned={setSelected} onLogged={setEditing} onCopy={() => setCopyFrom(d)} />
+              onPlanned={setSelected} onLogged={setEditing} onDeleteLogged={deleteLogged} onCopy={() => setCopyFrom(d)} />
           ))}
         </View>
 
@@ -197,6 +203,7 @@ export default function WeekScreen() {
           <ListRow icon={Grid3x3} title="Weekly nutrients" hint="Every nutrient, day by day" onPress={() => router.push({ pathname: '/insights', params: { date: w.weekStart } })} />
         </ListGroup>
       </ScrollView>
+      )}</SwipeGroup>
 
       <PlanEntrySheet entry={selected} days={w.days} busy={busy} onAction={act} onClose={() => setSelected(null)}
         loggedEntry={selected ? w.days.flatMap((d) => d.logged).find((l) => l.planEntryId === selected.id) ?? null : null}
@@ -232,8 +239,8 @@ function Bar({ eaten, planned, target, height = 6 }: { eaten: number; planned: n
   );
 }
 
-function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
-  day: PlanDay; open: boolean; onToggle: () => void; onPlanned: (e: PlanEntry) => void; onLogged: (e: DiaryEntry) => void; onCopy: () => void;
+function DayCard({ day, open, onToggle, onPlanned, onLogged, onDeleteLogged, onCopy }: {
+  day: PlanDay; open: boolean; onToggle: () => void; onPlanned: (e: PlanEntry) => void; onLogged: (e: DiaryEntry) => void; onDeleteLogged: (e: DiaryEntry) => void; onCopy: () => void;
 }) {
   const t = useTheme();
   const left = day.adjustedCalorieTarget - day.projected.calories;
@@ -265,15 +272,15 @@ function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
       {open ? (
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>
           {planned.map((e) => (
-            <FoodRow key={e.id} name={displayName(e.item)} detail={`${e.meal === 'Snack' ? 'Snacks' : e.meal} · ${fmtQty(e.item.quantity, e.item.unit)}`}
+            <FoodRow key={e.id} name={displayName(e.item)} detail={`${e.meal === 'Snack' ? 'Snacks' : e.meal} · ${amountText(e.item.quantity, e.item.unit)}`}
               calories={e.item.nutrition.calories} onPress={() => onPlanned(e)} accessibilityHint="Log, skip, move or remove"
               badge={e.status === 'Eaten' ? <Badge label="Logged" tone="success" icon={Check} />
                 : e.status === 'Skipped' ? <Badge label="Skipped" icon={Minus} />
                 : <Badge label="Planned" tone="primary" icon={CalendarClock} />} />
           ))}
           {logged.map((l) => (
-            <FoodRow key={l.id} name={displayName(l.item)} detail={`${l.meal === 'Snack' ? 'Snacks' : l.meal} · ${l.item.kind === 'QuickCalories' ? 'quick entry' : fmtQty(l.item.quantity, l.item.unit)}`}
-              calories={l.item.nutrition.calories} onPress={() => onLogged(l)} accessibilityHint="Edit amount, change meal, or delete"
+            <SwipeableDiaryRow key={l.id} name={displayName(l.item)} detail={`${l.meal === 'Snack' ? 'Snacks' : l.meal} · ${l.item.kind === 'QuickCalories' ? 'quick entry' : amountText(l.item.quantity, l.item.unit)}`}
+              calories={l.item.nutrition.calories} onPress={() => onLogged(l)} onDelete={() => onDeleteLogged(l)} accessibilityHint="Edit amount or meal. Swipe left to delete"
               badge={<Badge label="Logged" tone="success" icon={Check} />} />
           ))}
           {planned.length === 0 && logged.length === 0 ? <AppText variant="secondary" tone="muted" style={{ paddingVertical: t.space.sm }}>Nothing planned or logged yet.</AppText> : null}

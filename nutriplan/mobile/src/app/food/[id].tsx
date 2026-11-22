@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFood, useLogFood, usePlanMutations, useRecipeMutations } from '@/api/hooks';
-import { AmountPicker, type AmountSelection } from '@/components/AmountPicker';
+import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
+import { checkQuantity, matchMeasure, parseQuantity, previewPer100, roundAmount, startingSelection } from '@/features/quantity/quantity';
+import { MacroLine } from '@/components/charts';
 import { Button, Card, Chip, ErrorView, Loading, QualityBadge } from '@/components/ui';
 import { dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { colors, font, spacing } from '@/lib/theme';
@@ -14,7 +16,7 @@ export default function FoodAmount() {
   const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient'; grams?: string; recipeId?: string; position?: string }>();
   const food = useFood(params.id);
   const [meal, setMeal] = useState<Meal>(params.meal ?? mealForNow());
-  const [selection, setSelection] = useState<AmountSelection>({ grams: 0, label: '' });
+  const [value, setValue] = useState<QuantityValue | null>(null);
   const log = useLogFood();
   const { addFood } = usePlanMutations();
   const { updateIngredient } = useRecipeMutations();
@@ -25,17 +27,28 @@ export default function FoodAmount() {
   if (food.isLoading) return <Loading />;
   if (food.error) return <ErrorView error={food.error} />;
   const f = food.data!;
+  const base = f.baseUnit ?? 'g';
+  const measures = f.measures ?? [];
+  const v = value ?? startingSelection(measures, base, params.grams ? Number(params.grams) : undefined);
+  const measure = matchMeasure(measures, v.unit) ?? measures[0];
+  const qty = parseQuantity(v.text);
+  const check = checkQuantity(qty, measure, false, base);
+  const preview = previewPer100(f.per100g, check.ok ? check.base : 0);
+  const busy = log.isPending || addFood.isPending || updateIngredient.isPending;
 
   const save = async () => {
-    if (selection.grams <= 0) return snackbar({ message: 'Enter an amount' });
+    if (!check.ok) return snackbar({ message: check.message });
+    if (busy) return; // no double submit
+    Keyboard.dismiss();
     try {
-      const grams = Math.round(selection.grams * 10) / 10;
+      // The chosen measure is sent as-is ("12 almond"), so the entry reads the way it was logged; the server converts.
+      const amount = { amount: roundAmount(qty!), unit: measure!.unit };
       if (forIngredient) {
-        await updateIngredient.mutateAsync({ id: params.recipeId!, position: Number(params.position), foodId: f.id, grams });
+        await updateIngredient.mutateAsync({ id: params.recipeId!, position: Number(params.position), foodId: f.id, ...amount });
         router.dismissTo({ pathname: '/recipe/[id]', params: { id: params.recipeId! } });
         return;
       }
-      const body = { date, meal, foodId: f.id, grams };
+      const body = { date, meal, foodId: f.id, ...amount };
       if (planning) await addFood.mutateAsync(body);
       else await log.mutateAsync(body);
       router.dismissAll();
@@ -56,8 +69,10 @@ export default function FoodAmount() {
         </View>
       </View>
 
-      <Card>
-        <AmountPicker food={f} initialGrams={params.grams ? Number(params.grams) : undefined} onChange={setSelection} />
+      <Card style={{ gap: spacing.md }}>
+        <QuantityPicker measures={measures} value={{ text: v.text, unit: measure?.unit ?? v.unit }} baseUnit={base} onChange={setValue}
+          error={qty !== null && !check.ok ? check.message : null} onSubmit={save} />
+        <MacroLine n={{ ...preview, nutrients: {} }} />
       </Card>
 
       {!forIngredient && <View style={{ gap: spacing.sm }}>
@@ -67,7 +82,7 @@ export default function FoodAmount() {
         </View>
       </View>}
 
-      <Button title={forIngredient ? 'Use for this ingredient' : planning ? 'Add to plan' : `Add ${Math.round(selection.grams)} ${f.baseUnit ?? 'g'}`} onPress={save} loading={log.isPending || addFood.isPending || updateIngredient.isPending} disabled={selection.grams <= 0} />
+      <Button title={forIngredient ? 'Use for this ingredient' : planning ? 'Add to plan' : `Add · ${Math.round(preview.calories)} kcal`} onPress={save} loading={busy} disabled={!check.ok || busy} />
 
       <Card>
         <Text style={[font.heading, { marginBottom: spacing.sm }]}>Per 100 {f.baseUnit ?? 'g'}</Text>

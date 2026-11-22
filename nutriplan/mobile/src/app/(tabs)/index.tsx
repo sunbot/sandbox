@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView as PlainScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,9 +8,10 @@ import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/
 import { useDeleteEntry, useLogFood, useLogRecipe, usePlanMutations, useUpdateEntry } from '@/api/hooks';
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
 import { AppText, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
-import { EntrySheet, type EntryDraft } from '@/features/today/EntrySheet';
+import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
+import { SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -72,21 +74,20 @@ export default function TodayScreen() {
     }
   }, [plan.eaten, snackbar]);
 
-  const saveEntry = useCallback(async (e: DiaryEntry, d: EntryDraft) => {
-    const scale = e.item.quantity > 0 ? d.quantity / e.item.quantity : 1;
-    const scaled = Math.abs(scale - 1) > 1e-9;
-    const moved = d.meal !== e.meal;
+  const saveEntry = useCallback(async (e: DiaryEntry, c: EntryChange) => {
+    if (update.isPending) return; // no double submit
     try {
-      await update.mutateAsync({ id: e.id, scale: scaled ? scale : undefined, meal: moved ? d.meal : undefined });
+      await update.mutateAsync({ id: e.id, amount: c.amount, unit: c.unit, meal: c.meal });
       setDrafts(({ [e.id]: _, ...rest }) => rest);
       setEditing(null);
       snackbar({
         message: `Updated ${displayName(e.item)}`,
         actionLabel: 'Undo',
-        onAction: () => update.mutate({ id: e.id, scale: scaled ? 1 / scale : undefined, meal: moved ? e.meal : undefined }),
+        // Undo puts back exactly what was there: the same amount in the same measure, and the same meal.
+        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, grams: c.amount !== undefined ? e.item.grams ?? undefined : undefined, meal: c.meal ? e.meal : undefined }),
       });
     } catch (err) {
-      snackbar({ message: errorText(err, "Couldn't save changes") });
+      snackbar({ message: errorText(err, "Couldn't save changes") }); // the draft is kept, so nothing typed is lost
     }
   }, [update, snackbar]);
 
@@ -131,14 +132,14 @@ export default function TodayScreen() {
   const page = { paddingTop: insets.top + t.space.sm, paddingHorizontal: t.screenPadding, paddingBottom: t.space.huge * 2, gap: t.space.lg };
 
   if (data.day.isLoading || data.targets.isLoading) {
-    return <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{header}<TodaySkeleton /></ScrollView>;
+    return <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{header}<TodaySkeleton /></PlainScrollView>;
   }
 
   if (data.day.error || data.targets.error || !data.view || !data.targets.data) {
     const err = data.day.error ?? data.targets.error;
     const status = (err as { status?: number } | null)?.status;
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+      <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
         {header}
         <EmptyState icon={CloudOff}
           title={status === 401 ? 'Enter your API key' : status === 0 ? "Can't reach your server" : "Couldn't load today"}
@@ -147,7 +148,7 @@ export default function TodayScreen() {
             <PrimaryButton label="Try again" onPress={() => { data.refetchAll(); }} />
             {status === 401 || status === 0 ? <SecondaryButton label="Open settings" onPress={() => router.push('/settings')} /> : null}
           </View>} />
-      </ScrollView>
+      </PlainScrollView>
     );
   }
 
@@ -160,8 +161,10 @@ export default function TodayScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
       <TopGlow />
+      <SwipeGroup>{(closeOpenRow) => (
       <ScrollView
         contentContainerStyle={page}
+        onScrollBeginDrag={closeOpenRow} // scrolling closes a swiped-open row
         refreshControl={<RefreshControl refreshing={data.day.isRefetching} onRefresh={() => { data.refetchAll(); }} colors={[t.colors.primary]} progressViewOffset={insets.top} />}
       >
         {header}
@@ -183,7 +186,7 @@ export default function TodayScreen() {
             return (
               <MealSection key={m} meal={m} totals={md?.totals.calories ?? 0} entries={entries} planned={planned}
                 expanded={isExpanded} onToggle={() => setExpanded((x) => ({ ...x, [m]: !isExpanded }))}
-                onAdd={() => go('/food/search', m)} onEntry={setEditing} onLogPlanned={logPlanned} loggingId={loggingId} />
+                onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry} onLogPlanned={logPlanned} loggingId={loggingId} />
             );
           })}
         </View>
@@ -191,6 +194,7 @@ export default function TodayScreen() {
         <NutrientsCard progress={day.progress} mode={nutrientMode} anythingLogged={anythingLogged} onSeeAll={() => setShowNutrients(true)}
           onFillGaps={() => router.push({ pathname: '/gaps', params: { date } })} />
       </ScrollView>
+      )}</SwipeGroup>
 
       <EntrySheet
         entry={editing}

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, Stack, ThemeProvider as NavigationThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/lib/theme';
 import { SnackbarProvider } from '@/components/ds';
@@ -20,6 +21,8 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   return (
+    // Swipe gestures (diary rows) need the gesture handler at the root of the app.
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
@@ -59,5 +62,6 @@ export default function RootLayout() {
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

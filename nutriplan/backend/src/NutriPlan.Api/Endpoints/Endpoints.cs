@@ -24,7 +24,8 @@ public sealed record SwapFoodRequest(Guid FoodId, double? Grams, double? Amount,
 public sealed record RebalanceApplyRequest(DateOnly Date, double Scale);
 public sealed record RelogRequest(DateOnly Date, MealSlot? Meal);
 public sealed record CopyRequest(DateOnly From, DateOnly To, MealSlot? Meal, MealSlot? ToMeal);
-public sealed record UpdateDiaryRequest(double? Scale, DateOnly? Date, MealSlot? Meal, string? Note);
+public sealed record UpdateDiaryRequest(double? Scale, DateOnly? Date, MealSlot? Meal, string? Note, double? Amount = null, string? Unit = null, double? Grams = null);
+public sealed record AmountRequest(double Amount, string? Unit, double? Grams = null);
 public sealed record FavoriteRequest(bool Favorite);
 public sealed record ServingsRequest(double Servings);
 public sealed record UrlImportRequest(string Url);
@@ -78,7 +79,7 @@ public static class DiaryEndpoints
         g.MapPost("/quick", (LogQuickRequest r, DiaryService s, CancellationToken ct) => s.LogQuickAsync(r, ct));
         g.MapPost("/copy", (CopyRequest r, DiaryService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, r.ToMeal, ct));
         g.MapPost("/{id:guid}/relog", (Guid id, RelogRequest r, DiaryService s, CancellationToken ct) => s.RelogAsync(id, r.Date, r.Meal, ct));
-        g.MapPatch("/{id:guid}", (Guid id, UpdateDiaryRequest r, DiaryService s, CancellationToken ct) => s.UpdateAsync(id, r.Scale, r.Date, r.Meal, r.Note, ct));
+        g.MapPatch("/{id:guid}", (Guid id, UpdateDiaryRequest r, DiaryService s, CancellationToken ct) => s.UpdateAsync(id, r.Scale, r.Date, r.Meal, r.Note, ct, r.Amount, r.Unit, r.Grams));
         g.MapDelete("/{id:guid}", async (Guid id, DiaryService s, CancellationToken ct) => { await s.DeleteAsync(id, ct); return Results.NoContent(); });
     }
 }
@@ -97,6 +98,7 @@ public static class PlanEndpoints
         g.MapPost("/{id:guid}/move", (Guid id, MoveRequest r, PlanService s, CancellationToken ct) => s.MoveAsync(id, r.Date, r.Meal, ct));
         g.MapPost("/{id:guid}/swap-recipe", (Guid id, SwapRecipeRequest r, PlanService s, CancellationToken ct) => s.SwapForRecipeAsync(id, r.RecipeId, r.Servings, ct));
         g.MapPost("/{id:guid}/swap-food", (Guid id, SwapFoodRequest r, PlanService s, CancellationToken ct) => s.SwapForFoodAsync(id, r.FoodId, r.Grams, r.Amount, r.Unit, ct));
+        g.MapPost("/{id:guid}/amount", (Guid id, AmountRequest r, PlanService s, CancellationToken ct) => s.SetAmountAsync(id, r.Amount, r.Unit, ct, r.Grams));
         g.MapPost("/{id:guid}/rescale", (Guid id, ScaleRequest r, PlanService s, CancellationToken ct) => s.RescaleAsync(id, r.Scale, ct));
         g.MapPost("/{id:guid}/eaten", (Guid id, EatenRequest? r, PlanService s, CancellationToken ct) => s.MarkEatenAsync(id, r?.Scale ?? 1, r?.Today, ct));
         g.MapPost("/{id:guid}/skip", (Guid id, PlanService s, CancellationToken ct) => s.MarkSkippedAsync(id, ct));

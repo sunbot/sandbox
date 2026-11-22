@@ -341,6 +341,34 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     }
 
     [PostgresFact]
+    public async Task Amount_edits_and_food_measures_are_scoped_to_the_signed_in_user()
+    {
+        var a = await NewMember();
+        var b = await NewMember();
+        var food = await Json(await a.PostAsJsonAsync("/api/foods", new
+        {
+            name = "Qwzx private bar", brand = (string?)null, barcode = (string?)null, servingGrams = 40.0, servingDescription = "1 bar",
+            nutrientsPerServing = new Dictionary<string, double> { ["1008"] = 180, ["1003"] = 10 },
+        }));
+        var foodId = (string)food["id"]!;
+        var entry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Snack", foodId, grams = 40.0 }));
+        var plan = await Json(await a.PostAsJsonAsync("/api/plan/food", new { date = Day.AddDays(1), meal = "Snack", foodId, grams = 40.0 }));
+
+        // The owner sees the food's measures and can change an amount in them.
+        var mine = await Json(await a.GetAsync($"/api/foods/{foodId}"));
+        Assert.Contains(mine["measures"]!.AsArray(), m => (string?)m!["unit"] == "g");
+        var changed = await Json(await a.PatchAsJsonAsync($"/api/diary/{entry["id"]}", new { amount = 1.5, unit = "oz" }));
+        Assert.Equal("oz", (string?)changed["item"]!["unit"]);
+
+        // Another user can neither read the food nor change the entry or the planned item.
+        Assert.Equal(HttpStatusCode.NotFound, (await b.GetAsync($"/api/foods/{foodId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PatchAsJsonAsync($"/api/diary/{entry["id"]}", new { amount = 99.0, unit = "g" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync($"/api/plan/{plan["id"]}/amount", new { amount = 99.0, unit = "g" })).StatusCode);
+        var still = (await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"))).ToJsonString();
+        Assert.Contains("\"unit\":\"oz\"", still);
+    }
+
+    [PostgresFact]
     public async Task A_new_member_starts_with_default_targets_not_the_owners()
     {
         (await Owner().PutAsJsonAsync("/api/targets", new { calories = 1666.0 })).EnsureSuccessStatusCode();

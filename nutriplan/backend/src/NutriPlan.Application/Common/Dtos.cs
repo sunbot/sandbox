@@ -27,6 +27,9 @@ public sealed record NutritionDto(
 
 public sealed record PortionDto(string Description, double Grams);
 
+/// <summary>A measure a food can be logged in: send <c>Unit</c> back with an amount. <c>Base</c> is grams (ml for a drink) in one.</summary>
+public sealed record MeasureDto(string Unit, string Label, string Plural, double Base, string Kind, string? Source, bool Countable);
+
 public sealed record FoodSummaryDto(
     Guid Id,
     string Name,
@@ -37,14 +40,16 @@ public sealed record FoodSummaryDto(
     string? Barcode,
     NutritionDto Per100g,
     IReadOnlyList<PortionDto> Portions,
-    string BaseUnit = "g")
+    string BaseUnit = "g",
+    IReadOnlyList<MeasureDto>? Measures = null)
 {
     /// <remarks>When <c>BaseUnit</c> is "ml", <c>Per100g</c> is per 100 ml and portion "grams" are millilitres.</remarks>
     public static FoodSummaryDto From(Food f) => new(
         f.Id, f.Name, f.Brand, f.Source.ToString(), f.Quality.ToString(), f.QualityNote, f.Barcode,
         NutritionDto.From(f.NutrientsPer100g),
         f.Portions.Select(p => new PortionDto(p.Description, Math.Round(p.GramsPerUnit, 2))).ToList(),
-        f.BaseUnit);
+        f.BaseUnit,
+        FoodMeasures.For(f).Select(m => new MeasureDto(m.Unit, m.Label, m.Plural, m.BasePerUnit, m.Kind.ToString(), m.Source, m.Countable)).ToList());
 }
 
 public sealed record ItemDto(
