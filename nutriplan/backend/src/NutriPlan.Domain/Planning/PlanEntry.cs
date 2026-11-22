@@ -38,6 +38,8 @@ public sealed class PlanEntry : Users.IOwned
 
     public void Rescale(double factor) => Item = Item.WithScale(factor);
 
+    public void ChangeAmount(ItemSnapshot item) => Item = item;
+
     public void MarkEaten() => Status = PlanStatus.Eaten;
 
     public void MarkSkipped() => Status = PlanStatus.Skipped;

@@ -41,6 +41,19 @@ public sealed record ItemSnapshot(
         return new(ItemKind.QuickCalories, null, null, name, 1, "entry", null, new NutrientProfile(amounts));
     }
 
+    /// <summary>
+    /// Same item, a new amount in a (possibly different) unit. The logged nutrition is scaled by the ratio of the new to the
+    /// old base amount (grams, ml or servings): the numbers logged at the time stay the basis, and the displayed amount,
+    /// its unit and its weight always agree.
+    /// </summary>
+    public ItemSnapshot WithAmount(double factor, double quantity, string unit, double? newGrams) => this with
+    {
+        Quantity = Math.Round(quantity, 3),
+        QuantityUnit = unit,
+        Grams = Grams is null && newGrams is null ? null : newGrams is { } g ? Math.Round(g, 2) : Math.Round(Grams!.Value * factor, 2),
+        Nutrients = Nutrients.Scale(factor).Rounded(),
+    };
+
     /// <summary>Same item, different amount: nutrients scale linearly.</summary>
     public ItemSnapshot WithScale(double factor) => this with
     {
