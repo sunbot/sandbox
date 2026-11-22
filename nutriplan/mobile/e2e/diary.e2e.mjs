@@ -15,7 +15,7 @@ const almonds = { id: 'f1', name: 'Nuts, almonds', source: 'UsdaSrLegacy', quali
   measures: [{ unit: 'almond', label: 'almond', plural: 'almonds', base: 1.2, kind: 'Count', source: 'almond', countable: true }, { unit: 'cup', label: 'cup', plural: 'cups', base: 143, kind: 'Volume', source: 'cup, whole', countable: false },
     { unit: 'g', label: 'g', plural: 'g', base: 1, kind: 'Mass', source: null, countable: false }, { unit: 'oz', label: 'oz', plural: 'oz', base: 28.349523, kind: 'Mass', source: null, countable: false }] };
 
-async function openToday(totals) {
+async function openToday(totals, food = almonds) {
   const ctx = await phone(b);
   const p = await ctx.newPage();
   const errors = [];
@@ -24,7 +24,7 @@ async function openToday(totals) {
     'GET /api/diary/quick-log': () => [],
     'GET /api/diary/': () => day([almondsEntry, yogurtEntry], totals),
     'GET /api/targets': () => TARGETS,
-    'GET /api/foods/f1': () => almonds,
+    'GET /api/foods/f1': () => food,
     'PATCH /api/diary/e1': (c) => { const body = JSON.parse(c.body); return { ...almondsEntry, item: { ...almondsEntry.item, quantity: body.amount, unit: body.unit } }; },
     'DELETE /api/diary/': () => [204],
   });
@@ -49,6 +49,43 @@ test('tapping a logged food opens the editor, and saving sends the new amount in
   const patch = calls.find((c) => c.method === 'PATCH');
   assert.ok(patch, 'Save sends the change');
   assert.deepEqual(JSON.parse(patch.body), { amount: 12, unit: 'almond' });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('measurement list scrolls without moving the editor header', async () => {
+  const manyMeasures = [...almonds.measures, ...Array.from({ length: 20 }, (_, i) => ({
+    unit: `portion${i}`, label: `portion ${i}`, plural: `portions ${i}`, base: 2, kind: 'Count', source: null, countable: true,
+  }))];
+  const { ctx, p, row, errors } = await openToday(undefined, { ...almonds, measures: manyMeasures });
+  await row.tap();
+  const header = p.getByRole('heading', { name: 'Almonds' });
+  const amount = p.getByRole('textbox', { name: 'Amount' });
+  await amount.waitFor();
+  await p.waitForTimeout(500);
+  const top = (await header.boundingBox()).y;
+  const assertHeader = async () => assert.ok(Math.abs((await header.boundingBox()).y - top) < 1, 'editor header stays in place');
+
+  await p.getByRole('button', { name: /Measure: g/ }).click();
+  await assertHeader();
+  const group = p.getByRole('radiogroup');
+  const dimensions = await group.evaluate((el) => {
+    const scroll = [...el.querySelectorAll('div')].find((child) =>
+      child.scrollHeight > child.clientHeight && ['auto', 'scroll'].includes(getComputedStyle(child).overflowY));
+    return scroll && { height: scroll.clientHeight, content: scroll.scrollHeight };
+  });
+  assert.ok(dimensions && dimensions.height <= 240 && dimensions.content > dimensions.height, 'long list is bounded and scrollable');
+  await p.getByRole('radio', { name: /^portion 19/ }).click();
+  await assertHeader();
+  assert.equal(await amount.inputValue(), '14');
+  await p.getByRole('button', { name: /Measure: portions 19/ }).click();
+  await assertHeader();
+  await p.getByRole('radio', { name: 'g', exact: true }).click();
+  await assertHeader();
+  assert.equal(await amount.inputValue(), '28', 'switching back retains the exact amount');
+  await p.getByRole('button', { name: /Measure: g/ }).click();
+  await p.getByRole('button', { name: /Measure: g/ }).click();
+  await assertHeader();
   assert.deepEqual(errors, []);
   await ctx.close();
 });

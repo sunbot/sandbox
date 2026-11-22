@@ -77,6 +77,7 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
       visible={!!entry}
       onClose={onClose}
       title={shortName}
+      fillHeight
       footer={<>
         <PrimaryButton label={changed ? 'Save changes' : 'Done'} onPress={save} loading={saving} disabled={!canSave} fullWidth />
         <SecondaryButton label="Delete" icon={Trash2} tone="danger" onPress={() => onDelete(e)} disabled={saving} fullWidth />

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Platform, Pressable, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import type { Measure } from '@/api/types';
 import { AppText } from '@/components/ds';
 import { Check, ChevronDown, ChevronUp } from '@/components/ds/icons';
@@ -74,22 +74,24 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
 
       {open ? (
         <View style={{ borderRadius: t.radii.button, borderWidth: 1, borderColor: t.colors.border, overflow: 'hidden' }} accessibilityRole="radiogroup">
-          {measures.map((m, i) => {
-            const selected = m.unit === measure?.unit;
-            return (
-              <Pressable key={m.unit} onPress={() => pick(m)} accessibilityRole="radio" accessibilityState={{ selected }}
-                accessibilityLabel={`${m.label}${m.base > 0 && m.unit !== baseUnit ? `, ${formatQuantity(m.base)} ${baseUnit}` : ''}`}
-                style={({ pressed }) => ({ minHeight: t.sizes.touch, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingHorizontal: t.space.md, paddingVertical: t.space.xs,
-                  borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.colors.border, backgroundColor: pressed ? t.colors.surfaceMuted : selected ? t.colors.primaryLight : t.colors.surface })}>
-                <View style={{ flex: 1, gap: 1 }}>
-                  <AppText variant="body">{capitalize(m.label)}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${formatQuantity(m.base)} ${baseUnit}`}</AppText> : null}</AppText>
-                  {m.source ? <AppText variant="caption" tone="muted" numberOfLines={3}>{sourceText(m)}</AppText> : null}
-                </View>
-                {selected ? <Check size={18} color={t.colors.primary} /> : null}
-              </Pressable>
-            );
-          })}
-          {note ? <AppText variant="caption" tone="muted" style={{ padding: t.space.md, borderTopWidth: 1, borderTopColor: t.colors.border }}>{note}</AppText> : null}
+          <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+            {measures.map((m, i) => {
+              const selected = m.unit === measure?.unit;
+              return (
+                <Pressable key={m.unit} onPress={() => pick(m)} accessibilityRole="radio" accessibilityState={{ selected }}
+                  accessibilityLabel={`${m.label}${m.base > 0 && m.unit !== baseUnit ? `, ${formatQuantity(m.base)} ${baseUnit}` : ''}`}
+                  style={({ pressed }) => ({ minHeight: t.sizes.touch, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingHorizontal: t.space.md, paddingVertical: t.space.xs,
+                    borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.colors.border, backgroundColor: pressed ? t.colors.surfaceMuted : selected ? t.colors.primaryLight : t.colors.surface })}>
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <AppText variant="body">{capitalize(m.label)}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${formatQuantity(m.base)} ${baseUnit}`}</AppText> : null}</AppText>
+                    {m.source ? <AppText variant="caption" tone="muted" numberOfLines={3}>{sourceText(m)}</AppText> : null}
+                  </View>
+                  {selected ? <Check size={18} color={t.colors.primary} /> : null}
+                </Pressable>
+              );
+            })}
+            {note ? <AppText variant="caption" tone="muted" style={{ padding: t.space.md, borderTopWidth: 1, borderTopColor: t.colors.border }}>{note}</AppText> : null}
+          </ScrollView>
         </View>
       ) : null}
     </View>

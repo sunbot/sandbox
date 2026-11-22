@@ -12,12 +12,13 @@ import { AppText, IconButton, PrimaryButton, SecondaryButton } from './primitive
  * Modal bottom sheet for short selections and confirmations.
  * Closing (back button, backdrop, X) never discards state: callers keep their draft and can reopen.
  */
-export function BottomSheet({ visible, onClose, title, children, footer }: {
+export function BottomSheet({ visible, onClose, title, children, footer, fillHeight }: {
   visible: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
   footer?: ReactNode;
+  fillHeight?: boolean;
 }) {
   const t = useTheme();
   const s = useStyles(sheetStyles);
@@ -43,8 +44,8 @@ export function BottomSheet({ visible, onClose, title, children, footer }: {
           <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
         </Animated.View>
         {/* Edge-to-edge Android doesn't resize the window for the keyboard, so pad on both platforms. */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={{ maxHeight: '90%' }}>
-          <Animated.View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, t.space.lg), transform: [{ translateY }] }]} accessibilityViewIsModal>
+        <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={{ maxHeight: '90%', height: fillHeight ? '90%' : undefined }}>
+          <Animated.View style={[s.sheet, fillHeight && { flex: 1 }, { paddingBottom: Math.max(insets.bottom, t.space.lg), transform: [{ translateY }] }]} accessibilityViewIsModal>
             <View style={s.handle} />
             {title ? (
               <View style={s.header}>
@@ -53,7 +54,7 @@ export function BottomSheet({ visible, onClose, title, children, footer }: {
               </View>
             ) : null}
             {/* Content shrinks to fit (scroll views inside scroll) so nothing spills past the sheet. */}
-            <View style={{ paddingHorizontal: t.screenPadding, flexShrink: 1 }}>{children}</View>
+            <View style={{ paddingHorizontal: t.screenPadding, flexShrink: 1, flexGrow: fillHeight ? 1 : 0 }}>{children}</View>
             {footer ? <View style={{ paddingHorizontal: t.screenPadding, paddingTop: t.space.lg, gap: t.space.sm }}>{footer}</View> : null}
           </Animated.View>
         </KeyboardAvoidingView>

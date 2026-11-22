@@ -86,6 +86,7 @@ itself), the source's trust and your own history all count for more.
 - The app's `features/quantity` model (parse, convert, preview) mirrors this exactly for the live preview; the server is
   authoritative. One `QuantityPicker` is used by the diary editor, new logs/plans/recipe ingredients, planned items and Ask.
 - Typing: decimals with `.` or `,`, fractions `1/2`, `1 1/2`, `½`, `1½`. Switching measure keeps the physical amount.
+  The logged-food editor has a stable height and long measure lists scroll inside the picker.
 - Save is disabled for invalid amounts and while saving; a failed save keeps the draft; Undo restores the previous amount
   and measure (and meal).
 
@@ -144,6 +145,8 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    tap it: the food disappears with Undo (Undo brings it back; after ~5 s it's gone on the server and stays gone after a refresh);
    a short drag or vertical scrolling doesn't open it; TalkBack offers "Delete".
 2. Editor: decimal keypad appears, the field isn't hidden by the keyboard, switching measure keeps the amount, Save/Undo work.
+   Open and close a long measure list, scroll to its last option, and select it: the editor header stays put. Repeat with
+   the keyboard open and at maximum font size; verify the list, amount and Save remain reachable.
 3. Scanner: sharpness at 15–20 cm, with and without zoom; torch on/off; a small barcode; dim light; denied permission;
    typing a barcode.
    **Web in Android Chrome** (confirmed on a Pixel: sharp, reads a barcode; repeat on other phones): open the site in Chrome, Today → scan;
