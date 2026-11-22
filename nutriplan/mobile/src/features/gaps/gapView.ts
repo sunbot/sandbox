@@ -112,3 +112,11 @@ export function rotationState(r: Pick<GapReport, 'suggestions' | 'moreIdeas' | '
   if ((r.moreIdeas ?? 0) > 0) return 'more';
   return skipped.length > 0 || (r.skippedIdeas ?? 0) > 0 ? 'end' : 'none';
 }
+
+/** Ideas skipped per filter: rotating in one filter (Best match) must not use up another's (Saved recipes). */
+export type SkippedByMode = Partial<Record<GapMode, string[]>>;
+
+export const skippedFor = (all: SkippedByMode, mode: GapMode): string[] => all[mode] ?? [];
+
+/** The same map with one filter's skipped list replaced; the other filters' lists are untouched. */
+export const withSkipped = (all: SkippedByMode, mode: GapMode, ids: string[]): SkippedByMode => ({ ...all, [mode]: ids });

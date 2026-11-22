@@ -77,3 +77,16 @@ test('show different ideas: shown ids are remembered once, capped, and the end o
   assert.equal(rotationState(report(0, 0, 3), [a.id]), 'none');    // the empty state explains instead
   assert.equal(emptyCopy({ situation: 'Open', emptyReason: 'Exhausted', emptyMessage: 'No more matching ideas right now.', mode: 'BestMatch' }).title, 'No more matching ideas right now.');
 });
+
+test('show different ideas: each filter keeps its own skipped list (rotating Best match must not empty Saved recipes)', async () => {
+  const { skippedFor, withSkipped, skipShown } = await import('./gapView.ts');
+  let all = {};
+  all = withSkipped(all, 'BestMatch', skipShown(skippedFor(all, 'BestMatch'), [{ id: 'aaaaaaaaaaaaaaaa' }, { id: 'bbbbbbbbbbbbbbbb' }]));
+  assert.deepEqual(skippedFor(all, 'BestMatch'), ['aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb']);
+  assert.deepEqual(skippedFor(all, 'SavedRecipes'), []); // a filter you haven't rotated in starts fresh
+  all = withSkipped(all, 'SavedRecipes', ['cccccccccccccccc']);
+  assert.deepEqual(skippedFor(all, 'BestMatch'), ['aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb']); // untouched
+  all = withSkipped(all, 'BestMatch', []); // Start over in Best match
+  assert.deepEqual(skippedFor(all, 'BestMatch'), []);
+  assert.deepEqual(skippedFor(all, 'SavedRecipes'), ['cccccccccccccccc']);
+});
