@@ -35,7 +35,7 @@ export function OtherResults({ r }: { r: AssistantResponse }) {
         </Pressable>
       ))}
       {r.gaps ? (
-        <SecondaryButton label={`See ${r.gaps.suggestions.length} ways to fill ${r.date === today() ? "today's" : 'the'} gaps`} icon={Sparkles}
+        <SecondaryButton label={r.gaps.suggestions.length > 0 ? `See ${r.gaps.suggestions.length} ${r.gaps.suggestions.length === 1 ? 'idea' : 'ideas'} for ${r.date === today() ? "today's" : 'the'} gaps` : 'Open Fill the gaps'} icon={Sparkles}
           onPress={() => router.push({ pathname: '/gaps', params: { date: r.date } })} fullWidth />
       ) : null}
     </View>

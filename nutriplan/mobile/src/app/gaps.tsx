@@ -1,121 +1,242 @@
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useGaps, usePlanMutations } from '@/api/hooks';
-import type { GapItem, Nutrition } from '@/api/types';
-import { AppCard, AppText, EmptyState, FilterChip, PrimaryButton, Skeleton, useSnackbar } from '@/components/ds';
-import { CalendarClock, Check, CloudOff, Sparkles } from '@/components/ds/icons';
+import { useGaps, useLogFoods, useLogRecipe, usePlanMutations } from '@/api/hooks';
+import type { GapItem, GapMode, GapSuggestion, GapSwap, GapTip, GapTipItem } from '@/api/types';
+import { AppCard, AppText, Badge, EmptyState, FilterChip, PrimaryButton, SecondaryButton, Skeleton, TextButton, useSnackbar } from '@/components/ds';
+import { ArrowLeftRight, CalendarClock, CalendarPlus, Check, CircleCheck, CloudOff, Info, Sparkles } from '@/components/ds/icons';
+import { calorieHeadline, effectLine, emptyCopy, fmtAmount, itemsTitle, MODE_LABEL, macroText, modeChips, originBadges, planPayload, shortOn } from '@/features/gaps/gapView';
 import { friendlyFoodName } from '@/lib/foodName';
-import { amount, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
+import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
 
-const MACROS = [1008, 1003, 1004, 1005];
 const mealLabel = (m: Meal) => (m === 'Snack' ? 'Snacks' : m);
-const r0 = (n: number) => Math.round(n);
+const nice = (it: { kind: string; name: string }) => (it.kind === 'Food' ? friendlyFoodName(it.name) : it.name);
 
 /**
- * "What can I add to round out the day?" — combinations chosen to land on calories, macros and nutrients.
- * Adding puts them on the plan (never in the diary) for the meal you pick.
+ * "What can I add to round out the day?" Realistic meals and snacks when there's room; on a day that's at or over
+ * target nothing is added: lighter swaps for what's planned and ideas for another day instead.
+ * Adding puts items on the plan (or logs them) for the meal you pick.
  */
 export default function GapsScreen() {
   const t = useTheme();
   const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const { date = today() } = useLocalSearchParams<{ date?: string }>();
-  const [recipesOnly, setRecipesOnly] = useState(false);
+  const [mode, setMode] = useState<GapMode>('BestMatch');
   const [meal, setMeal] = useState<Meal>(mealForNow());
-  const [added, setAdded] = useState<Set<number>>(new Set());
-  const [adding, setAdding] = useState<number | null>(null);
-  const gaps = useGaps(date, recipesOnly);
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+  const gaps = useGaps(date, mode, meal);
   const plan = usePlanMutations();
+  const logFoods = useLogFoods();
+  const logRecipe = useLogRecipe();
   const page = { padding: t.screenPadding, gap: t.space.lg, paddingBottom: t.space.huge };
+  const shell = { flex: 1, backgroundColor: t.colors.background } as const;
 
-  if (gaps.isLoading) return <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{[0, 1, 2].map((i) => <Skeleton key={i} width="100%" height={140} radius={20} />)}</ScrollView>;
+  if (gaps.isLoading) return <ScrollView style={shell} contentContainerStyle={page}>{[0, 1, 2].map((i) => <Skeleton key={i} width="100%" height={160} radius={20} />)}</ScrollView>;
   if (gaps.error || !gaps.data) {
-    return <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+    return <ScrollView style={shell} contentContainerStyle={page}>
       <EmptyState icon={CloudOff} title="Couldn't load suggestions" body={gaps.error instanceof Error ? gaps.error.message : undefined} action={<PrimaryButton label="Try again" onPress={() => gaps.refetch()} />} />
     </ScrollView>;
   }
   const g = gaps.data;
-  const shortOn = g.gaps.filter((x) => x.kind === 'Goal' && !MACROS.includes(x.nutrientId)).map((x) => x.name);
+  const kcalHeadline = calorieHeadline(g.remaining.calories, g.situation);
+  const short = shortOn(g.gaps);
+  const chips = modeChips(g.availableModes, mode);
+  const showMeal = g.suggestions.length > 0 || g.nextDay.length > 0;
+  const tomorrow = addDays(date, 1);
 
-  const addAll = async (i: number, items: GapItem[]) => {
-    setAdding(i);
+  const run = async (id: string, work: () => Promise<void>, ok: string) => {
+    setBusy(id);
     try {
-      // Foods go in one all-or-nothing request; recipes are planned one by one.
-      const foods = items.filter((x) => x.foodId && !x.recipeId).map((x) => ({ foodId: x.foodId!, grams: x.amount }));
-      if (foods.length) await plan.addFoods.mutateAsync({ date, meal, items: foods });
-      for (const x of items.filter((y) => y.recipeId)) await plan.addRecipe.mutateAsync({ date, meal, recipeId: x.recipeId!, servings: x.amount });
-      setAdded((s) => new Set(s).add(i));
-      snackbar({ message: `Planned for ${dayLabel(date).split(',')[0].toLowerCase()} · ${mealLabel(meal).toLowerCase()}. Log it when you eat it.` });
+      await work();
+      setDone((s) => new Set(s).add(id));
+      snackbar({ message: ok });
     } catch (e) {
-      snackbar({ message: e instanceof Error ? e.message : "Couldn't add to the plan" });
-    } finally { setAdding(null); }
+      snackbar({ message: e instanceof Error ? e.message : 'That didn’t work. Try again.' });
+    } finally { setBusy(null); }
   };
 
+  // Foods go in one all-or-nothing request; recipes are added one by one.
+  const planItems = async (items: GapItem[], on: string) => {
+    const p = planPayload(items);
+    if (p.foods.length) await plan.addFoods.mutateAsync({ date: on, meal, items: p.foods });
+    for (const r of p.recipes) await plan.addRecipe.mutateAsync({ date: on, meal, recipeId: r.recipeId, servings: r.servings });
+  };
+  const logItems = async (items: GapItem[]) => {
+    const p = planPayload(items);
+    if (p.foods.length) await logFoods.mutateAsync({ date, meal, items: p.foods });
+    for (const r of p.recipes) await logRecipe.mutateAsync({ date, meal, recipeId: r.recipeId, servings: r.servings });
+  };
+  const planned = (on: string) => `Planned for ${dayLabel(on).split(',')[0].toLowerCase()} · ${mealLabel(meal).toLowerCase()}. Log it when you eat it.`;
+
+  const swap = (s: GapSwap) => run(`swap:${s.planEntryId}`, async () => {
+    if (s.to.recipeId) await plan.swapRecipe.mutateAsync({ id: s.planEntryId, recipeId: s.to.recipeId, servings: s.to.amount });
+    else if (s.to.foodId) await plan.swapFood.mutateAsync({ id: s.planEntryId, foodId: s.to.foodId, grams: s.to.amount });
+  }, `Swapped ${s.fromName} for ${nice(s.to)}.`);
+
+  const empty = emptyCopy(g);
+  const emptyIcon = g.emptyReason === 'Over' || g.emptyReason === 'AtTarget' || g.emptyReason === 'NeedsMet' ? CircleCheck : Sparkles;
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+    <ScrollView style={shell} contentContainerStyle={page}>
       <AppCard sheen style={{ gap: t.space.sm }}>
-        <AppText variant="label" tone="muted">STILL TO GO · {dayLabel(date).toUpperCase()}</AppText>
-        <Remaining n={g.remaining} />
-        <AppText variant="caption" tone="muted">After what’s eaten and planned.{shortOn.length ? ` Short on ${shortOn.slice(0, 4).join(', ')}${shortOn.length > 4 ? ` and ${shortOn.length - 4} more` : ''}.` : ''}</AppText>
+        <AppText variant="label" tone="muted">{(date === today() ? 'TODAY' : dayLabel(date)).toUpperCase()}</AppText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}>
+          {kcalHeadline.over ? <Info size={22} color={t.colors.warningText} strokeWidth={2} /> : null}
+          <AppText variant="display" numeric style={kcalHeadline.over ? { color: t.colors.warningText } : undefined}>{kcalHeadline.text}</AppText>
+        </View>
+        <AppText variant="body" tone="secondary" accessibilityLiveRegion="polite">{g.message}</AppText>
+        <Macros n={g.remaining} />
+        {short.length && g.situation !== 'Over' ? <AppText variant="caption" tone="muted">Short on {short.slice(0, 4).join(', ')}{short.length > 4 ? ` and ${short.length - 4} more` : ''}.</AppText> : null}
+        {g.dataNotes.map((n) => <AppText key={n} variant="caption" tone="muted">{n}</AppText>)}
       </AppCard>
 
-      <View style={{ gap: t.space.xs }}>
-        <View style={{ flexDirection: 'row', gap: t.space.sm, flexWrap: 'wrap' }}>
-          <FilterChip label="Foods & recipes" selected={!recipesOnly} onPress={() => setRecipesOnly(false)} />
-          <FilterChip label="Recipes only" selected={recipesOnly} onPress={() => setRecipesOnly(true)} />
+      {chips.length > 1 || mode !== 'BestMatch' ? (
+        <View style={{ gap: t.space.xs }}>
+          <AppText variant="label" tone="secondary">Show</AppText>
+          <View style={{ flexDirection: 'row', gap: t.space.sm, flexWrap: 'wrap' }}>
+            {chips.map((m) => <FilterChip key={m} label={MODE_LABEL[m]} selected={m === mode} onPress={() => setMode(m)} />)}
+          </View>
         </View>
-        <AppText variant="label" tone="secondary">Add to</AppText>
-        <View style={{ flexDirection: 'row', gap: t.space.sm, flexWrap: 'wrap' }}>
-          {meals.map((m) => <FilterChip key={m} label={mealLabel(m)} selected={m === meal} onPress={() => setMeal(m)} />)}
-        </View>
-      </View>
+      ) : null}
 
-      {g.suggestions.length === 0 ? <EmptyState icon={Sparkles} title="Nothing to fill" body="You're on target, or there's nothing suitable yet. Log or import a few favourites." /> : null}
+      {showMeal ? (
+        <View style={{ gap: t.space.xs }}>
+          <AppText variant="label" tone="secondary">Add to</AppText>
+          <View style={{ flexDirection: 'row', gap: t.space.sm, flexWrap: 'wrap' }}>
+            {meals.map((m) => <FilterChip key={m} label={mealLabel(m)} selected={m === meal} onPress={() => setMeal(m)} />)}
+          </View>
+        </View>
+      ) : null}
+
       {g.suggestions.map((s, i) => (
-        <AppCard key={i} padded={false}>
-          <View style={{ padding: t.space.lg, paddingBottom: t.space.sm, gap: 2 }}>
-            <AppText variant="cardTitle">Option {i + 1} · +{r0(s.adds.calories)} kcal</AppText>
-            <AppText variant="secondary" tone="secondary">{s.summary}</AppText>
-          </View>
-          {s.items.map((it, j) => (
-            <View key={j} style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 52, paddingHorizontal: t.space.lg, paddingVertical: t.space.xs, borderTopWidth: 1, borderTopColor: t.colors.border }}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <AppText variant="body" numberOfLines={2}>{it.kind === 'Food' ? friendlyFoodName(it.name) : it.name}</AppText>
-                <AppText variant="caption" tone="muted">{amount(it.amount, it.unit)}</AppText>
-              </View>
-              <AppText variant="bodyStrong" numeric>{r0(it.nutrition.calories)}</AppText>
-            </View>
-          ))}
-          <View style={{ padding: t.space.lg, paddingTop: t.space.sm }}>
-            <PrimaryButton label={added.has(i) ? 'Planned' : `Plan for ${mealLabel(meal).toLowerCase()}`} icon={added.has(i) ? Check : CalendarClock}
-              disabled={added.has(i)} loading={adding === i} onPress={() => addAll(i, s.items)} fullWidth />
-          </View>
-        </AppCard>
+        <SuggestionCard key={`${mode}-${i}-${itemsTitle(s.items)}`} s={s} meal={meal} added={done.has(`add:${i}`)} adding={busy === `add:${i}`} logged={done.has(`log:${i}`)} logging={busy === `log:${i}`}
+          onPlan={() => run(`add:${i}`, () => planItems(s.items, date), planned(date))}
+          onLog={() => run(`log:${i}`, () => logItems(s.items), `Logged for ${mealLabel(meal).toLowerCase()}.`)} />
       ))}
+
+      {g.suggestions.length === 0 ? (
+        <EmptyState icon={emptyIcon} title={empty.title} body={empty.body} />
+      ) : null}
+
+      {g.swaps.length > 0 ? (
+        <View style={{ gap: t.space.sm }}>
+          <AppText variant="sectionTitle" accessibilityRole="header">Lighter swaps for what’s planned</AppText>
+          {g.swaps.map((s) => (
+            <AppCard key={s.planEntryId} style={{ gap: t.space.sm }}>
+              <AppText variant="secondary" tone="secondary">Instead of {s.fromName} · {Math.round(s.fromCalories)} kcal</AppText>
+              <AppText variant="cardTitle">{nice(s.to)}</AppText>
+              <AppText variant="caption" tone="muted">{s.to.portion} · {Math.round(s.to.nutrition.calories)} kcal</AppText>
+              <Reasons reasons={s.reasons} />
+              <SecondaryButton label={done.has(`swap:${s.planEntryId}`) ? 'Swapped' : 'Swap'} icon={done.has(`swap:${s.planEntryId}`) ? Check : ArrowLeftRight}
+                disabled={done.has(`swap:${s.planEntryId}`)} loading={busy === `swap:${s.planEntryId}`} onPress={() => swap(s)} fullWidth />
+            </AppCard>
+          ))}
+        </View>
+      ) : null}
+
+      {g.nextDay.length > 0 ? (
+        <View style={{ gap: t.space.sm }}>
+          <AppText variant="sectionTitle" accessibilityRole="header">Ideas for tomorrow</AppText>
+          <AppText variant="secondary" tone="secondary">Foods you already eat that are real sources of what ran short today.</AppText>
+          {g.nextDay.map((tip: GapTip) => (
+            <AppCard key={tip.nutrientId} style={{ gap: t.space.sm }}>
+              <AppText variant="cardTitle">{tip.name}</AppText>
+              {tip.items.map((it: GapTipItem, k) => {
+                const id = `tip:${tip.nutrientId}:${k}`;
+                return (
+                  <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, minHeight: 52 }}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <AppText variant="body" numberOfLines={2}>{nice(it)}</AppText>
+                      <AppText variant="caption" tone="muted">{it.portion} · about {fmtAmount(it.nutrientAmount)} {tip.unit} ({it.dailySharePercent}% of daily)</AppText>
+                    </View>
+                    <TextButton label={done.has(id) ? 'Planned' : 'Plan tomorrow'} icon={done.has(id) ? Check : CalendarPlus}
+                      onPress={() => { if (!done.has(id) && busy === null) void run(id, () => planItems([{ kind: it.kind, foodId: it.foodId, recipeId: it.recipeId, name: it.name, amount: it.amount, unit: it.unit, portion: it.portion, nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0 } as never }], tomorrow), planned(tomorrow)); }} />
+                  </View>
+                );
+              })}
+            </AppCard>
+          ))}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
 
-function Remaining({ n }: { n: Nutrition }) {
+function Macros({ n }: { n: { calories: number; protein: number; carbs: number; fat: number } }) {
   const t = useTheme();
   const parts = [
-    { label: 'kcal', value: n.calories, color: t.colors.primary },
-    { label: 'protein', value: n.protein, color: t.colors.protein, unit: 'g' },
-    { label: 'carbs', value: n.carbs, color: t.colors.carbs, unit: 'g' },
-    { label: 'fat', value: n.fat, color: t.colors.fat, unit: 'g' },
+    { label: 'protein', m: macroText(n.protein), color: t.colors.protein },
+    { label: 'carbs', m: macroText(n.carbs), color: t.colors.carbs },
+    { label: 'fat', m: macroText(n.fat), color: t.colors.fat },
   ];
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: t.space.lg, rowGap: t.space.xs }}>
       {parts.map((p) => (
-        <View key={p.label} style={{ gap: 2 }}>
-          <AppText variant="sectionTitle" numeric>{r0(Math.max(0, p.value))}{p.unit ? <AppText variant="secondary" tone="muted"> {p.unit}</AppText> : null}</AppText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
-            <AppText variant="caption" tone="secondary">{p.label}</AppText>
-          </View>
+        <View key={p.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
+          <AppText variant="secondary" tone="secondary" numeric>{p.label} {p.m.text}</AppText>
         </View>
       ))}
     </View>
+  );
+}
+
+function Reasons({ reasons }: { reasons: { code: string; text: string }[] }) {
+  const t = useTheme();
+  const shown = reasons.filter((r) => !['favorite', 'recipe', 'pantry', 'frequent'].includes(r.code));
+  if (shown.length === 0) return null;
+  return (
+    <View style={{ gap: 4 }}>
+      {shown.map((r) => (
+        <View key={r.text} style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' }}>
+          <Check size={16} color={t.colors.primary} strokeWidth={2.4} style={{ marginTop: 2 }} />
+          <AppText variant="secondary" tone="secondary" style={{ flex: 1 }}>{r.text}</AppText>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog }: {
+  s: GapSuggestion; meal: Meal; added: boolean; adding: boolean; logged: boolean; logging: boolean; onPlan: () => void; onLog: () => void;
+}) {
+  const t = useTheme();
+  const badges = originBadges(s.reasons);
+  return (
+    <AppCard padded={false}>
+      <View style={{ padding: t.space.lg, paddingBottom: t.space.sm, gap: t.space.xs }}>
+        <View style={{ flexDirection: 'row', gap: t.space.xs, flexWrap: 'wrap' }}>
+          <Badge label={s.category} tone="primary" />
+          {badges.map((b) => <Badge key={b} label={b} />)}
+        </View>
+        <AppText variant="cardTitle" numberOfLines={3}>{s.items.map(nice).join(' + ')}</AppText>
+        <AppText variant="secondary" tone="secondary" numeric>{Math.round(s.adds.calories)} kcal · {fmtAmount(s.adds.protein)} g protein</AppText>
+      </View>
+      {s.items.map((it, j) => (
+        <View key={j} style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 52, paddingHorizontal: t.space.lg, paddingVertical: t.space.xs, borderTopWidth: 1, borderTopColor: t.colors.border }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText variant="body" numberOfLines={2}>{nice(it)}</AppText>
+            <AppText variant="caption" tone="muted">{it.portion}</AppText>
+          </View>
+          <AppText variant="bodyStrong" numeric>{Math.round(it.nutrition.calories)}</AppText>
+        </View>
+      ))}
+      <View style={{ padding: t.space.lg, paddingTop: t.space.md, gap: t.space.md, borderTopWidth: 1, borderTopColor: t.colors.border }}>
+        <Reasons reasons={s.reasons} />
+        {s.effects.length > 0 ? (
+          <View style={{ gap: 2 }}>
+            <AppText variant="label" tone="muted">AFTER THIS</AppText>
+            {s.effects.map((e) => <AppText key={e.nutrientId} variant="caption" tone="secondary">{effectLine(e)}</AppText>)}
+          </View>
+        ) : null}
+        <PrimaryButton label={added ? 'Planned' : `Plan for ${mealLabel(meal).toLowerCase()}`} icon={added ? Check : CalendarClock}
+          disabled={added} loading={adding} onPress={onPlan} fullWidth />
+        <View style={{ alignItems: 'center' }}>
+          <TextButton label={logged ? 'Logged' : 'Log now'} icon={logged ? Check : undefined} onPress={() => { if (!logged && !logging) onLog(); }} />
+        </View>
+      </View>
+    </AppCard>
   );
 }
