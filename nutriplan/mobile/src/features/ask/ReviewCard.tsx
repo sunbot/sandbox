@@ -193,12 +193,20 @@ function ReviewRow({ item, onPress, onToggleIncluded, onSwitchPreparation }: { i
   const switchLabel = prep?.otherState === 'Cooked' ? 'Use cooked instead' : prep?.otherState === 'Raw' ? 'Use raw instead' : 'Switch version';
 
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border, flexDirection: 'row', alignItems: 'center', gap: t.space.xs, paddingRight: t.space.xs }}>
+    <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border, flexDirection: 'row', alignItems: 'center', paddingLeft: t.space.xs }}>
+      {/* Icon-only checkbox (48 dp target): the state also shows as a struck-through, muted name, never by color alone. */}
+      <Pressable onPress={onToggleIncluded} accessibilityRole="checkbox" accessibilityState={{ checked: item.included }}
+        accessibilityLabel={`Include ${name}`}
+        accessibilityHint={item.included ? 'Leaves this food out of the meal' : 'Adds this food back to the meal'}
+        hitSlop={4}
+        style={({ pressed }) => [{ width: t.sizes.touch, minHeight: t.sizes.touch, alignItems: 'center', justifyContent: 'center', borderRadius: t.radii.button }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+        {item.included ? <SquareCheck size={22} strokeWidth={2} color={t.colors.primary} /> : <Square size={22} strokeWidth={2} color={t.colors.textMuted} />}
+      </Pressable>
       <View style={{ flex: 1 }}>
         <Pressable onPress={onPress} accessibilityRole="button"
           accessibilityLabel={`${name}, ${item.amountLabel ?? 'no amount'}, ${p ? `${r0(p.calories)} calories` : 'calories unknown'}, ${item.included ? 'included' : 'excluded'}${status ? `, ${status.label}` : ''}`}
           accessibilityHint="Change the match or the amount"
-          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 64, paddingVertical: t.space.sm, paddingLeft: t.space.lg }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 64, paddingVertical: t.space.sm, paddingLeft: t.space.xs, paddingRight: t.space.lg }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
           <View style={{ flex: 1, gap: 2 }}>
             <AppText variant="body" tone={item.included ? 'default' : 'muted'} style={!item.included ? { textDecorationLine: 'line-through' } : undefined} numberOfLines={2}>{name}</AppText>
             <AppText variant="secondary" tone="secondary" numberOfLines={1}>
@@ -211,19 +219,12 @@ function ReviewRow({ item, onPress, onToggleIncluded, onSwitchPreparation }: { i
           <ChevronRight size={18} strokeWidth={1.8} color={t.colors.textMuted} />
         </Pressable>
         {prep?.note ? (
-          <View style={{ paddingLeft: t.space.lg, paddingBottom: t.space.sm, gap: 2 }}>
+          <View style={{ paddingLeft: t.space.xs, paddingRight: t.space.lg, paddingBottom: t.space.sm, gap: 2 }}>
             <AppText variant="caption" tone="secondary">{prep.note}</AppText>
             {otherIndex >= 0 ? <View style={{ flexDirection: 'row' }}><TextButton label={switchLabel} onPress={onSwitchPreparation} /></View> : null}
           </View>
         ) : null}
       </View>
-      <Pressable onPress={onToggleIncluded} accessibilityRole="switch" accessibilityState={{ checked: item.included }}
-        accessibilityLabel={`${item.included ? 'Included' : 'Excluded'}: ${name}`}
-        accessibilityHint="Toggle whether this food is included in the meal"
-        style={({ pressed }) => [{ minHeight: t.sizes.touch, minWidth: 82, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: t.space.xs, borderRadius: t.radii.button }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
-        {item.included ? <SquareCheck size={18} strokeWidth={2} color={t.colors.primary} /> : <Square size={18} strokeWidth={2} color={t.colors.textMuted} />}
-        <AppText variant="caption" tone={item.included ? 'primary' : 'muted'}>{item.included ? 'Included' : 'Excluded'}</AppText>
-      </Pressable>
     </View>
   );
 }

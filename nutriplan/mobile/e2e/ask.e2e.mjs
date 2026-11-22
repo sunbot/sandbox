@@ -52,7 +52,7 @@ test('exclude an unmatched row, add a searched food with a measure, and log only
   await p.getByRole('button', { name: 'Send' }).click();
   await p.getByText('3 selected', { exact: true }).waitFor({ timeout: 15000 });
 
-  await p.getByRole('switch', { name: 'Included: mystery item' }).click();
+  await p.getByRole('checkbox', { name: 'Include mystery item' }).click();
   await p.getByRole('button', { name: 'Log 2 selected' }).waitFor();
 
   await p.getByRole('button', { name: 'Add a food' }).click();

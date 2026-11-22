@@ -85,12 +85,15 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
       visible={!!entry}
       onClose={onClose}
       title={shortName}
+      // Opening the measure list scrolls inside the editor instead of pushing the header up (#52). Not re-measured when the
+      // food's measures arrive: the closed picker is the same size either way, and the list may already be open by then.
+      steadyKey={`${e.id}:${showNutrition ? 'nutrition' : 'editor'}`}
       footer={showNutrition ? <SecondaryButton label="Back to editor" onPress={() => setShowNutrition(false)} fullWidth /> : <>
         <PrimaryButton label={changed ? 'Save changes' : 'Done'} onPress={save} loading={saving} disabled={!canSave} fullWidth />
         <SecondaryButton label="Delete" icon={Trash2} tone="danger" onPress={() => onDelete(e)} disabled={saving} fullWidth />
       </>}
     >
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: t.space.lg, paddingBottom: t.space.xs }}>
+      <ScrollView testID="entry-editor-scroll" style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: t.space.lg, paddingBottom: t.space.xs }}>
         {showNutrition ? <>
           <AppText variant="sectionTitle" accessibilityRole="header">Saved nutrition snapshot</AppText>
           <AppText variant="secondary" tone="secondary">

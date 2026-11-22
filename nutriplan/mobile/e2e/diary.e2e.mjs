@@ -15,7 +15,7 @@ const almonds = { id: 'f1', name: 'Nuts, almonds', source: 'UsdaSrLegacy', quali
   measures: [{ unit: 'almond', label: 'almond', plural: 'almonds', base: 1.2, kind: 'Count', source: 'almond', countable: true }, { unit: 'cup', label: 'cup', plural: 'cups', base: 143, kind: 'Volume', source: 'cup, whole', countable: false },
     { unit: 'g', label: 'g', plural: 'g', base: 1, kind: 'Mass', source: null, countable: false }, { unit: 'oz', label: 'oz', plural: 'oz', base: 28.349523, kind: 'Mass', source: null, countable: false }] };
 
-async function openToday(totals) {
+async function openToday(totals, food = almonds) {
   const ctx = await phone(b);
   const p = await ctx.newPage();
   const errors = [];
@@ -24,7 +24,7 @@ async function openToday(totals) {
     'GET /api/diary/quick-log': () => [],
     'GET /api/diary/': () => day([almondsEntry, yogurtEntry], totals),
     'GET /api/targets': () => TARGETS,
-    'GET /api/foods/f1': () => almonds,
+    'GET /api/foods/f1': () => food,
     'GET /api/nutrients': () => [200, [
       { id: 1008, name: 'Energy', unit: 'kcal', group: 'Energy', displayOrder: 0 },
       { id: 1003, name: 'Protein', unit: 'g', group: 'Macronutrient', displayOrder: 10 },
@@ -77,6 +77,40 @@ test('tapping a logged food opens the editor, and saving sends the new amount in
   const patch = calls.find((c) => c.method === 'PATCH');
   assert.ok(patch, 'Save sends the change');
   assert.deepEqual(JSON.parse(patch.body), { amount: 12, unit: 'almond' });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('opening the measure list never moves the editor: a long list scrolls inside it (#52)', async () => {
+  const manyMeasures = [...almonds.measures, ...Array.from({ length: 20 }, (_, i) => ({
+    unit: `portion${i}`, label: `portion ${i}`, plural: `portions ${i}`, base: 2, kind: 'Count', source: null, countable: true,
+  }))];
+  const { ctx, p, row, errors } = await openToday(undefined, { ...almonds, measures: manyMeasures });
+  await row.tap();
+  const header = p.getByRole('heading', { name: 'Almonds' });
+  const sheet = p.getByTestId('bottom-sheet');
+  const amount = p.getByRole('textbox', { name: 'Amount' });
+  await amount.waitFor();
+  await p.waitForTimeout(500); // the opening slide
+  const start = await sheet.boundingBox();
+  const top = (await header.boundingBox()).y;
+  const steady = async (what) => {
+    const now = await sheet.boundingBox();
+    assert.ok(Math.abs((await header.boundingBox()).y - top) < 1, `editor header stays in place (${what})`);
+    assert.ok(Math.abs(now.height - start.height) < 1, `sheet keeps its height (${what})`);
+  };
+
+  await p.getByRole('button', { name: /Measure: g/ }).click();
+  await steady('list opened');
+  const scroll = await p.getByTestId('entry-editor-scroll').evaluate((el) => ({ height: el.clientHeight, content: el.scrollHeight }));
+  assert.ok(scroll.content > scroll.height, 'the long list scrolls inside the editor');
+  await p.getByRole('radio', { name: /^portion 19/ }).click();
+  await steady('measure picked');
+  assert.equal(await amount.inputValue(), '14', '28 g is 14 portions of 2 g');
+  await p.getByRole('button', { name: /Measure: portions 19/ }).click();
+  await p.getByRole('radio', { name: 'g', exact: true }).click();
+  await steady('switched back');
+  assert.equal(await amount.inputValue(), '28', 'switching back keeps the exact amount');
   assert.deepEqual(errors, []);
   await ctx.close();
 });

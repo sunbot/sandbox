@@ -56,7 +56,8 @@ export function PlanEntrySheet({ entry, days, busy, onAction, onClose, loggedEnt
   const kcal = Math.round(e.item.nutrition.calories * (canLog ? scale : 1));
 
   return (
-    <BottomSheet visible={!!entry} onClose={close} title={displayName(e.item)}>
+    <BottomSheet visible={!!entry} onClose={close} title={displayName(e.item)}
+      steadyKey={`${e.id}:${panel}`}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: t.space.lg, paddingBottom: t.space.md }}>
         <AppText variant="secondary" tone="secondary" numeric>
           {mealLabel(e.meal)} · {e.date === today() ? 'today' : shortDay(e.date)} · {fmtQty(e.item.quantity, e.item.unit)} · {Math.round(e.item.nutrition.calories)} kcal
