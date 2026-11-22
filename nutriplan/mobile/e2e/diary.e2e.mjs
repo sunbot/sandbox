@@ -9,7 +9,7 @@ let server, b;
 before(async () => { server = await serve(); b = await browser(); });
 after(async () => { await b?.close(); await server?.close(); });
 
-const almondsEntry = { id: 'e1', date: today(), meal: 'Breakfast', item: { kind: 'Food', foodId: 'f1', name: 'Nuts, almonds', quantity: 28, unit: 'g', grams: 28, nutrition: N(162, 5.9, 6.1, 14, 3.5) } };
+const almondsEntry = { id: 'e1', date: today(), meal: 'Breakfast', item: { kind: 'Food', foodId: 'f1', name: 'Nuts, almonds', quantity: 28, unit: 'g', grams: 28, nutrition: { ...N(162, 5.9, 6.1, 14, 3.5), nutrients: { 1008: 162, 1003: 5.9, 1103: 0, 1162: 1.234 } } } };
 const yogurtEntry = { id: 'e2', date: today(), meal: 'Breakfast', item: { kind: 'Food', foodId: 'f2', name: 'Yogurt, Greek, plain, nonfat', quantity: 1, unit: 'container', grams: 170, nutrition: N(100, 17, 6, 0.7) } };
 const almonds = { id: 'f1', name: 'Nuts, almonds', source: 'UsdaSrLegacy', quality: 'Standard', per100g: N(579, 21, 22, 50, 12.5), portions: [], baseUnit: 'g',
   measures: [{ unit: 'almond', label: 'almond', plural: 'almonds', base: 1.2, kind: 'Count', source: 'almond', countable: true }, { unit: 'cup', label: 'cup', plural: 'cups', base: 143, kind: 'Volume', source: 'cup, whole', countable: false },
@@ -25,6 +25,13 @@ async function openToday(totals, food = almonds) {
     'GET /api/diary/': () => day([almondsEntry, yogurtEntry], totals),
     'GET /api/targets': () => TARGETS,
     'GET /api/foods/f1': () => food,
+    'GET /api/nutrients': () => [200, [
+      { id: 1008, name: 'Energy', unit: 'kcal', group: 'Energy', displayOrder: 0 },
+      { id: 1003, name: 'Protein', unit: 'g', group: 'Macronutrient', displayOrder: 10 },
+      { id: 1103, name: 'Selenium', unit: 'µg', group: 'Mineral', displayOrder: 68 },
+      { id: 1162, name: 'Vitamin C', unit: 'mg', group: 'Vitamin', displayOrder: 71 },
+      { id: 1114, name: 'Vitamin D', unit: 'µg', group: 'Vitamin', displayOrder: 72 },
+    ]],
     'PATCH /api/diary/e1': (c) => { const body = JSON.parse(c.body); return { ...almondsEntry, item: { ...almondsEntry.item, quantity: body.amount, unit: body.unit } }; },
     'DELETE /api/diary/': () => [204],
   });
@@ -34,6 +41,27 @@ async function openToday(totals, food = almonds) {
   return { ctx, p, calls, row, errors };
 }
 const deletes = (calls) => calls.filter((c) => c.method === 'DELETE').length;
+
+test('nutrition view shows the saved snapshot, preserves a quantity draft and never saves it', async () => {
+  const { ctx, p, calls, row, errors } = await openToday();
+  await row.tap();
+  const amount = p.getByRole('textbox', { name: 'Amount' });
+  await amount.fill('56');
+  await p.getByRole('button', { name: 'View nutrition' }).click();
+  await p.getByText('Saved nutrition snapshot').waitFor();
+  await p.getByText('1.234 mg').waitFor();
+  assert.equal(await visible(p.getByText('Saved for 28 g. Unsaved quantity changes are not included.')), true);
+  assert.equal(await visible(p.getByText('162 kcal')), true);
+  assert.equal(await visible(p.getByText('1.234 mg')), true);
+  assert.equal(await visible(p.getByText('0 µg')), true);
+  assert.equal(await visible(p.getByText('Not reported')), true);
+  assert.equal(calls.filter((c) => c.method === 'PATCH').length, 0);
+  await p.getByRole('button', { name: 'Back to editor' }).click();
+  assert.equal(await amount.inputValue(), '56');
+  assert.equal(calls.filter((c) => c.method === 'PATCH').length, 0);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
 
 test('tapping a logged food opens the editor, and saving sends the new amount in the chosen measure', async () => {
   const { ctx, p, calls, row, errors } = await openToday();

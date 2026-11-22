@@ -55,6 +55,9 @@ export const addBrandedFood = (sourceId: string) => post<T.Food>(`/foods/branded
 
 export const useFood = (id: string, enabled = true) => useQuery({ queryKey: keys.food(id), queryFn: () => get<T.Food>(`/foods/${id}`), enabled: enabled && !!id });
 
+export const useNutrientCatalog = (enabled = true) =>
+  useQuery({ queryKey: ['nutrientCatalog'], queryFn: () => get<T.NutrientDefinition[]>('/nutrients'), enabled, staleTime: Infinity });
+
 export const lookupBarcode = (code: string) => get<T.Food>(`/foods/barcode/${encodeURIComponent(code)}`);
 
 export const useCreateFood = () =>
