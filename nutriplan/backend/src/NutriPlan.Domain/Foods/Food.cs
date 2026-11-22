@@ -24,7 +24,9 @@ public enum NutrientBasis { Mass = 0, Volume = 1 }
 /// <summary>How much the app trusts a food's numbers. Drives search ranking and UI badges.</summary>
 public enum DataQuality { Verified = 0, Standard = 1, Unverified = 2, Flagged = 3 }
 
-public sealed record FoodPortion(string Description, double GramWeight, double Amount = 1)
+/// <param name="Origin">Where a portion came from when it isn't the food's own source data (e.g. the USDA SR Legacy record
+/// with the same NDB number, see <see cref="EquivalentPortions"/>); null for the food's own portions.</param>
+public sealed record FoodPortion(string Description, double GramWeight, double Amount = 1, string? Origin = null)
 {
     /// <summary>Grams for a single unit of this portion ("1 cup" → gram weight / amount).</summary>
     public double GramsPerUnit => Amount > 0 ? GramWeight / Amount : GramWeight;

@@ -167,10 +167,25 @@ const NO_PLURAL = new Set(['g', 'kg', 'mg', 'oz', 'lb', 'ml', 'l', 'tbsp', 'tsp'
 /** A unit word for an amount: "12 almonds", "1 almond", "2 cups", "28 g", "2 large" (same plural rules as the server). */
 export function unitFor(qty: number, unit: string): string {
   const u = unit.trim();
-  if (Math.abs(qty - 1) < 1e-9 || NO_PLURAL.has(u.toLowerCase()) || /[\s(),\d]/.test(u) || u.endsWith('s')) return u;
+  if (Math.abs(qty - 1) < 1e-9) return u;
+  // A measure named by a number-led phrase ("100-calorie package") takes the plural on its last word.
+  const phrase = /^(\d[\d./-]*[- ][a-z][a-z-]*(?: [a-z][a-z-]*)*) ([a-z][a-z-]*)$/i.exec(u);
+  if (phrase) return `${phrase[1]} ${unitFor(qty, phrase[2])}`;
+  if (NO_PLURAL.has(u.toLowerCase()) || /[\s(),\d]/.test(u) || u.endsWith('s')) return u;
   if (/[^aeiou]y$/i.test(u)) return u.slice(0, -1) + 'ies';
   if (/(ch|sh|x)$/i.test(u)) return u + 'es';
   return u + 's';
+}
+
+const ABBREVIATIONS = new Set(['g', 'kg', 'mg', 'oz', 'lb', 'ml', 'l', 'tbsp', 'tsp', 'fl oz']);
+
+/** "almond" → "Almond" for a list of measures (abbreviations such as g, oz and tbsp stay as they are); amount lines keep the unit as written ("12 almonds"). */
+export const capitalize = (s: string) => (!s || ABBREVIATIONS.has(s.toLowerCase()) ? s : s[0].toUpperCase() + s.slice(1));
+
+/** Where a measure's weight comes from: the food's own USDA portion, or the linked USDA record it was borrowed from. */
+export function sourceText(m: Measure): string | null {
+  if (!m.source) return null;
+  return m.origin ? `From ${m.origin}: ${m.source}` : `From USDA: ${m.source}`;
 }
 
 export const amountText = (qty: number, unit: string) => `${formatQuantity(qty)} ${unitFor(qty, unit)}`;

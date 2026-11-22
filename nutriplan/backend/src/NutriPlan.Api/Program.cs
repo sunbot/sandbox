@@ -70,6 +70,21 @@ if (args.Length > 0 && args[0] == "import-usda")
     return;
 }
 
+// ── CLI: `dotnet run -- enrich-usda-portions <foundation folder> <sr legacy folder> [--apply]` gives already-imported
+// Foundation foods with no portions the measured portions of their linked SR Legacy food. Without --apply it only reports. ──
+if (args.Length > 0 && args[0] == "enrich-usda-portions")
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<NutriPlanDbContext>().Database.MigrateAsync();
+    var apply = args.Contains("--apply");
+    var result = await scope.ServiceProvider.GetRequiredService<UsdaPortionEnricher>().RunAsync(args.Skip(1).Where(a => a != "--apply"), apply);
+    foreach (var c in result.Changes)
+        Console.WriteLine($"{c.FoodName}  ←  {c.DonorName} (SR {c.DonorFdcId}, NDB {c.Ndb}): {string.Join("; ", c.Portions.Select(p => $"{p.Description} = {p.GramsPerUnit:0.##} g"))}");
+    foreach (var r in result.Rejected) Console.WriteLine($"left without measures: {r}");
+    Console.WriteLine($"{result.Changes.Count} of {result.Candidates} linked Foundation foods without portions {(apply ? "updated" : "would be updated (dry run: add --apply to save)")}.");
+    return;
+}
+
 // Apply database migrations on startup, before any request is served: data never sits in a new schema behind old endpoints.
 using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<NutriPlanDbContext>().Database.MigrateAsync();

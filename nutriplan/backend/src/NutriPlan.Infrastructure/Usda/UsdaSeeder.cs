@@ -38,5 +38,14 @@ public sealed class UsdaSeeder(IServiceProvider services, IConfiguration config,
                 logger.LogError(ex, "USDA import failed for {Folder}", folder);
             }
         }
+        // A fresh database: give Foundation foods without portions their linked SR Legacy food's measures.
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<UsdaPortionEnricher>().RunAsync(folders, apply: true, stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "USDA portion enrichment failed");
+        }
     }
 }

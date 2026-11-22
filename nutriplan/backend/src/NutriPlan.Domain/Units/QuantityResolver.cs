@@ -80,6 +80,11 @@ public static partial class QuantityResolver
         // Named portion ("slice", "large", "clove", "can") — match the portion description.
         if (!string.IsNullOrWhiteSpace(unitText))
         {
+            // A measure named by its whole description ("100-calorie package", as FoodMeasures offers it): exactly that
+            // portion, unless several portions share the name with different weights.
+            if (ExactPortion(portions, unitText) is { } exact)
+                return new(amount * exact.GramsPerUnit, ResolutionMethod.NamedPortion,
+                    $"{amount:0.##} × {exact.Description} ({exact.GramsPerUnit:0.#} g each)", exact);
             var wanted = Singular(unitText.Trim().ToLowerInvariant());
             // Several can match ("slice, snack-size", "medium or regular slice"): prefer the regular one.
             var match = portions
@@ -120,6 +125,17 @@ public static partial class QuantityResolver
                     : $"No \"{unitText}\" size listed; using {amount:0.##} × {fallback.Description} ({fallback.GramsPerUnit:0.#} g each)", fallback);
 
         return new(null, ResolutionMethod.Unresolved, "Amount has no unit and this food has no standard portion. Enter grams.");
+    }
+
+    private static FoodPortion? ExactPortion(IReadOnlyList<FoodPortion> portions, string unitText)
+    {
+        var u = unitText.Trim();
+        var hits = portions.Where(p => p.GramsPerUnit > 0 && LeadingVolumeUnit(p.Description) is null
+            && (string.Equals(p.Description.Trim(), u, StringComparison.OrdinalIgnoreCase)
+                || FoodMeasures.PhraseLabel(p.Description) is { } label
+                   && (string.Equals(label, u, StringComparison.OrdinalIgnoreCase) || string.Equals(FoodMeasures.PluralOfPhrase(label), u, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+        return hits.Count > 0 && hits.All(h => Math.Abs(h.GramsPerUnit - hits[0].GramsPerUnit) < 1e-9) ? hits[0] : null;
     }
 
     private static readonly string[] RegularWords = ["regular", "medium", "standard", "average"];

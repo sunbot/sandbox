@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<ITargetsRepository, TargetsRepository>();
         services.AddScoped<IUserDirectory, UserDirectory>();
         services.AddScoped<UsdaImporter>();
+        services.AddScoped<UsdaPortionEnricher>();
         services.AddHostedService<UsdaSeeder>();
 
         services.Configure<AppOptions>(config.GetSection(AppOptions.Section));

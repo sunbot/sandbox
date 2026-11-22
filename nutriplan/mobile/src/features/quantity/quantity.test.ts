@@ -130,3 +130,41 @@ test('browsing measures and coming back gives back exactly what was typed', asyn
   // An amount that isn't a number is kept as typed.
   assert.deepEqual(switchMeasure('abc', g, oz, null), { text: 'abc', exact: null });
 });
+
+test('USDA phrase measures: one label everywhere, natural plurals, and where a borrowed weight comes from', async () => {
+  const { amountText, capitalize, sourceText, unitFor, switchMeasure } = await import('./quantity.ts');
+  // As the server sends "Almonds, NFS": the 100-calorie package is its own measure, never "calorie".
+  const pack: Measure = { unit: '100-calorie package', label: '100-calorie package', plural: '100-calorie packages', base: 18, kind: 'Count', source: '100 calorie package', countable: true };
+  const nut = m('nut', 1.2);
+  const package50 = m('package', 50);
+  const nfs = [pack, nut, package50, g, oz];
+  assert.equal(matchMeasure(nfs, '100-calorie package'), pack);
+  assert.equal(matchMeasure(nfs, '100-calorie packages'), pack);
+  assert.equal(matchMeasure(nfs, 'package'), package50); // the plain package is a different weight
+  assert.equal(measureText(pack, 2), '2 100-calorie packages');
+  assert.equal(amountText(2, '100-calorie package'), '2 100-calorie packages'); // a diary row shows the stored unit
+  assert.equal(amountText(1, '100-calorie package'), '1 100-calorie package');
+  assert.equal(amountText(3, '1-3 ring thin pretzel'), '3 1-3 ring thin pretzels');
+  assert.equal(unitFor(2, 'berry'), 'berries');
+  assert.equal(unitFor(2, 'medium (7" long)'), 'medium (7" long)');
+  assert.equal(capitalize('100-calorie package'), '100-calorie package');
+  assert.equal(capitalize('almond'), 'Almond');
+  assert.equal(capitalize('cup'), 'Cup');
+  for (const u of ['g', 'oz', 'tbsp', 'tsp', 'ml', 'fl oz']) assert.equal(capitalize(u), u);
+  // An old entry logged as "calorie" isn't one of the food's measures: it's offered as-is, keeping its own weight.
+  const old = measuresForItem(item({ quantity: 1, unit: 'calorie', grams: 18 }), nfs);
+  assert.equal(old[0].unit, 'calorie');
+  assert.equal(old[0].base, 18);
+  // Package ↔ count ↔ grams round-trips without drift.
+  let s = switchMeasure('1', pack, nut, null);
+  assert.equal(s.text, '15');
+  s = switchMeasure(s.text, nut, g, s.exact);
+  assert.equal(s.text, '18');
+  s = switchMeasure(s.text, g, pack, s.exact);
+  assert.equal(s.text, '1');
+  // Provenance: the food's own USDA wording, or the linked record it was borrowed from.
+  assert.equal(sourceText(pack), 'From USDA: 100 calorie package');
+  const borrowed: Measure = { ...almond, source: 'almond', origin: 'USDA SR Legacy “Nuts, almonds” (FDC 170567, same NDB 12061)' };
+  assert.equal(sourceText(borrowed), 'From USDA SR Legacy “Nuts, almonds” (FDC 170567, same NDB 12061): almond');
+  assert.equal(sourceText(g), null);
+});

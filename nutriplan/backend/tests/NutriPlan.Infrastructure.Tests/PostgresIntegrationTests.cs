@@ -191,6 +191,116 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         public DateTimeOffset Now => new(today.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
     }
 
+    [PostgresFact]
+    public async Task Foundation_foods_without_portions_borrow_their_linked_SR_portions_once_and_only_when_safe()
+    {
+        var (foundation, sr) = WriteLinkedUsdaFixture();
+        await using (var db = NewContext())
+        {
+            await new UsdaImporter(db, NullLogger<UsdaImporter>.Instance).ImportAsync(foundation);
+            await new UsdaImporter(db, NullLogger<UsdaImporter>.Instance).ImportAsync(sr);
+        }
+        Guid almondsId;
+        double kcalBefore;
+        await using (var db = NewContext())
+        {
+            var almonds = await db.Foods.SingleAsync(f => f.SourceId == "2346393");
+            Assert.Empty(almonds.Portions); // USDA lists no portions for it, and re-importing won't add any
+            (almondsId, kcalBefore) = (almonds.Id, almonds.NutrientsPer100g.Calories);
+
+            var dry = await new UsdaPortionEnricher(db, NullLogger<UsdaPortionEnricher>.Instance).RunAsync([foundation, sr], apply: false);
+            Assert.Equal(["Nuts, almonds, whole, raw"], dry.Changes.Select(c => c.FoodName));
+            Assert.Contains(dry.Rejected, r => r.Contains("Apples, honeycrisp"));
+        }
+        await using (var db = NewContext())
+            Assert.Empty((await db.Foods.SingleAsync(f => f.Id == almondsId)).Portions); // a dry run saves nothing
+
+        await using (var db = NewContext())
+        {
+            var applied = await new UsdaPortionEnricher(db, NullLogger<UsdaPortionEnricher>.Instance).RunAsync([foundation, sr], apply: true);
+            Assert.Single(applied.Changes);
+        }
+        await using (var db = NewContext())
+        {
+            var almonds = await db.Foods.SingleAsync(f => f.Id == almondsId);
+            Assert.Equal(["cup, whole", "almond"], almonds.Portions.Select(p => p.Description));
+            Assert.All(almonds.Portions, p => Assert.Equal("USDA SR Legacy “Nuts, almonds” (FDC 170567, same NDB 12061)", p.Origin));
+            Assert.Equal(kcalBefore, almonds.NutrientsPer100g.Calories);
+            Assert.Equal("Nuts, almonds, whole, raw", almonds.Name);
+            Assert.Empty((await db.Foods.SingleAsync(f => f.SourceId == "2344720")).Portions); // another variety: left without measures
+            Assert.Equal(["large"], (await db.Foods.SingleAsync(f => f.SourceId == "2346400")).Portions.Select(p => p.Description)); // its own portion kept
+
+            var again = await new UsdaPortionEnricher(db, NullLogger<UsdaPortionEnricher>.Instance).RunAsync([foundation, sr], apply: true);
+            Assert.Empty(again.Changes); // idempotent
+            var measures = Application.Common.FoodSummaryDto.From(almonds).Measures!;
+            Assert.Equal(1.2, measures.Single(m => m.Unit == "almond").Base, 3);
+            Assert.NotNull(measures.Single(m => m.Unit == "almond").Origin);
+        }
+    }
+
+    /// <summary>A Foundation download and an SR Legacy download whose foods share USDA NDB numbers.</summary>
+    private static (string Foundation, string Sr) WriteLinkedUsdaFixture()
+    {
+        string Dir(string name)
+        {
+            var d = Path.Combine(Path.GetTempPath(), $"usda_fixture_{name}_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(d);
+            File.WriteAllText(Path.Combine(d, "measure_unit.csv"), "\"id\",\"name\"\n\"1000\",\"cup\"\n\"9999\",\"undetermined\"\n");
+            return d;
+        }
+        var f = Dir("fnd");
+        File.WriteAllText(Path.Combine(f, "food.csv"), """
+            "fdc_id","data_type","description","food_category_id","publication_date"
+            "2346393","foundation_food","Nuts, almonds, whole, raw","12","2022-10-28"
+            "2344720","foundation_food","Apples, honeycrisp, with skin, raw","9","2022-10-28"
+            "2346400","foundation_food","Eggs, Grade A, Large, egg whole","1","2022-10-28"
+            """);
+        File.WriteAllText(Path.Combine(f, "foundation_food.csv"), """
+            "fdc_id","NDB_number","footnote"
+            "2346393","12061",""
+            "2344720","9501",""
+            "2346400","1123",""
+            """);
+        File.WriteAllText(Path.Combine(f, "food_nutrient.csv"), """
+            "id","fdc_id","nutrient_id","amount"
+            "1","2346393","1008","584"
+            "2","2344720","1008","60"
+            "3","2346400","1008","148"
+            """);
+        File.WriteAllText(Path.Combine(f, "food_portion.csv"), """
+            "id","fdc_id","seq_num","amount","measure_unit_id","portion_description","modifier","gram_weight"
+            "1","2346400","1","1","9999","","large","50"
+            """);
+        var s = Dir("sr");
+        File.WriteAllText(Path.Combine(s, "food.csv"), """
+            "fdc_id","data_type","description","food_category_id","publication_date"
+            "170567","sr_legacy_food","Nuts, almonds","12","2019-04-01"
+            "168203","sr_legacy_food","Apples, raw, golden delicious, with skin","9","2019-04-01"
+            "171287","sr_legacy_food","Egg, whole, raw, fresh","1","2019-04-01"
+            """);
+        File.WriteAllText(Path.Combine(s, "sr_legacy_food.csv"), """
+            "fdc_id","NDB_number"
+            "170567","12061"
+            "168203","9501"
+            "171287","1123"
+            """);
+        File.WriteAllText(Path.Combine(s, "food_nutrient.csv"), """
+            "id","fdc_id","nutrient_id","amount"
+            "1","170567","1008","579"
+            "2","168203","1008","57"
+            "3","171287","1008","143"
+            """);
+        File.WriteAllText(Path.Combine(s, "food_portion.csv"), """
+            "id","fdc_id","seq_num","amount","measure_unit_id","portion_description","modifier","gram_weight"
+            "1","170567","1","1","1000","","whole","143"
+            "2","170567","2","1","1000","","sliced","92"
+            "3","170567","3","1","9999","","almond","1.2"
+            "4","168203","1","1","9999","","medium","182"
+            "5","171287","1","1","9999","","large","50"
+            """);
+        return (f, s);
+    }
+
     /// <summary>A tiny SR-Legacy-shaped download: 3 foods, a few nutrients and portions.</summary>
     private static string WriteUsdaFixture()
     {
