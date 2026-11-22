@@ -118,6 +118,7 @@ Current providers:
   `IdempotencyStore` is in-memory (single instance, keys per user); the unique index on `diary_entries.plan_entry_id` is the durable guard.
 - Sign-in: Android Google sign-in needs the APK signing key's SHA-1 registered in Firebase (currently the template debug key).
 - USDA measures: 66 Foundation foods linked to SR Legacy are left without household measures because equivalence can't be shown by name (e.g. "Cabbage, green, raw" vs "Cabbage, raw"); production needs a one-time `enrich-usda-portions --apply` (approval required) for the 49 that qualify.
+- Web barcode scanning in Android Chrome now opens the camera at 1080p with continuous focus where the camera supports it (`features/scan/ScanCamera.web.tsx`); the blur fix hasn't been confirmed on a physical phone yet (`docs/LOGGING.md` has the steps).
 - Swipe-to-delete works with touch (Android, phone browsers) but not a desktop mouse drag; Delete is also in the editor. Camera focus/zoom behaviour varies by phone and hasn't been verified on a physical device (`docs/LOGGING.md` lists the checks).
 
 ## Definition of done

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Linking, Platform, StyleSheet, TextInput, View } from 'react-native';
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { Linking, Platform, TextInput, View } from 'react-native';
+import { useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { lookupBarcode } from '@/api/hooks';
@@ -8,10 +8,10 @@ import { AppText, IconButton, PrimaryButton, SecondaryButton, TextButton } from 
 import { CameraOff, Flashlight, FlashlightOff, Keyboard as KeyboardIcon, RefreshCw, ZoomIn, ZoomOut } from '@/components/ds/icons';
 import { checkManualBarcode, createScanGate } from '@/features/scan/barcode';
 import { scanFailure, type ScanFailure } from '@/features/scan/outcome';
+import { ScanCamera } from '@/features/scan/ScanCamera';
+import type { ScanSupport } from '@/features/scan/ScanCamera.types';
 import { useTheme } from '@/theme/ThemeProvider';
 
-/** Zoom is a share of the phone's own maximum, so the same value is a different magnification on each phone. */
-const ZOOMED = 0.2;
 const HINT = 'Hold the phone about 15–20 cm (6–8 in) from the barcode. If it looks blurry, move back or zoom in.';
 
 /**
@@ -22,6 +22,8 @@ const HINT = 'Hold the phone about 15–20 cm (6–8 in) from the barcode. If it
  * Focus: Android keeps continuous autofocus by default (expo-camera's Android "autofocus" option only focuses once at a
  * corner of the preview, so it isn't used). Most blur comes from holding the phone closer than its camera can focus, so
  * the guide is shorter and a zoom toggle lets you stand back; a torch helps in dim light.
+ * The camera itself is `ScanCamera`: expo-camera on Android/iOS, and on web a browser-media implementation (picture size,
+ * focus and lens chosen from what the camera reports) where BarcodeDetector exists (see features/scan/ScanCamera.web.tsx).
  */
 export default function ScanScreen() {
   const t = useTheme();
@@ -32,6 +34,8 @@ export default function ScanScreen() {
   const [looking, setLooking] = useState(false);
   const [torch, setTorch] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  // Native: zoom and torch as before. Web: only what the chosen camera says it supports (the camera reports it once open).
+  const [support, setSupport] = useState<ScanSupport>(() => ({ zoom: !(Platform.OS === 'web'), torch: !(Platform.OS === 'web') }));
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState('');
@@ -60,7 +64,7 @@ export default function ScanScreen() {
     }
   };
 
-  const onScanned = ({ data }: BarcodeScanningResult) => {
+  const onScanned = (data: string) => {
     if (failure || typing || !gate.accept(data)) return; // one lookup at a time; a failed code isn't retried by itself
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     void look(data);
@@ -121,14 +125,12 @@ export default function ScanScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <CameraView style={StyleSheet.absoluteFill} facing="back" enableTorch={torch && !isWeb} zoom={zoomed ? ZOOMED : 0}
-        barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }} onBarcodeScanned={onScanned}
-        onMountError={(e) => setCameraError(e?.message || 'Try again, or type the barcode instead.')} />
+      <ScanCamera torch={torch} zoomed={zoomed} onScanned={onScanned} onSupport={setSupport} onError={(message) => setCameraError(message)} />
       {/* A wide, short guide: barcodes are wide, and a smaller target keeps the phone far enough away to focus. */}
       <View pointerEvents="none" style={{ position: 'absolute', top: '28%', left: '14%', right: '14%', height: 110, borderWidth: 3, borderColor: '#fff', borderRadius: 14 }} />
       <View style={{ position: 'absolute', top: '28%', right: t.space.md, marginTop: 120, gap: t.space.sm }}>
-        <IconButton icon={zoomed ? ZoomOut : ZoomIn} label={zoomed ? 'Zoom out' : 'Zoom in'} variant="tonal" onPress={() => setZoomed((z) => !z)} />
-        {!isWeb ? <IconButton icon={torch ? FlashlightOff : Flashlight} label={torch ? 'Turn torch off' : 'Turn torch on'} variant="tonal" onPress={() => setTorch((x) => !x)} /> : null}
+        {support.zoom ? <IconButton icon={zoomed ? ZoomOut : ZoomIn} label={zoomed ? 'Zoom out' : 'Zoom in'} variant="tonal" onPress={() => setZoomed((z) => !z)} /> : null}
+        {support.torch ? <IconButton icon={torch ? FlashlightOff : Flashlight} label={torch ? 'Turn torch off' : 'Turn torch on'} variant="tonal" onPress={() => setTorch((x) => !x)} /> : null}
       </View>
       <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: t.screenPadding, paddingBottom: t.space.xxl, gap: t.space.md, backgroundColor: t.colors.surfaceRaised, borderTopLeftRadius: t.radii.sheet, borderTopRightRadius: t.radii.sheet }}>
         {failure ? (
