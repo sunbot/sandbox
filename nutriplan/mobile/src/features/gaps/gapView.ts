@@ -87,6 +87,27 @@ export function emptyCopy(r: Pick<GapReport, 'situation' | 'emptyReason' | 'empt
     case 'NoPantry': return { title: 'No pantry foods to suggest', body };
     case 'NoRecipes': return { title: 'No saved recipes to suggest', body };
     case 'NoRoomForMeal': return { title: 'No room for a meal', body };
+    case 'Exhausted': return { title: 'No more matching ideas right now.', body: 'You’ve seen every idea that fits. Start over to see them again, or try another filter.' };
     default: return { title: 'Nothing fits well right now', body };
   }
+}
+
+/** The most ideas remembered as shown in one session (the server reads at most 300). */
+export const MAX_SKIPPED = 300;
+
+/**
+ * "Show different ideas": everything shown so far plus what's on screen now, each once, oldest dropped past the cap.
+ * Ids are the server's (same foods in any order = same id), so a reordered combination never comes back as new.
+ */
+export function skipShown(skipped: readonly string[], shown: readonly { id: string }[]): string[] {
+  const next = [...skipped];
+  for (const s of shown) if (s.id && !next.includes(s.id)) next.push(s.id);
+  return next.slice(-MAX_SKIPPED);
+}
+
+/** What to offer under the ideas: more to see, the end of the list (with a way to start over), or nothing. */
+export function rotationState(r: Pick<GapReport, 'suggestions' | 'moreIdeas' | 'skippedIdeas'>, skipped: readonly string[]): 'more' | 'end' | 'none' {
+  if (r.suggestions.length === 0) return 'none';
+  if ((r.moreIdeas ?? 0) > 0) return 'more';
+  return skipped.length > 0 || (r.skippedIdeas ?? 0) > 0 ? 'end' : 'none';
 }

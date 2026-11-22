@@ -13,7 +13,7 @@ export const keys = {
   food: (id: string) => ['food', id] as const,
   recipes: (search: string) => ['recipes', search] as const,
   recipe: (id: string) => ['recipe', id] as const,
-  gaps: (date: string, mode: T.GapMode, meal?: Meal) => ['gaps', date, mode, meal ?? 'any'] as const,
+  gaps: (date: string, mode: T.GapMode, meal?: Meal, exclude: readonly string[] = []) => ['gaps', date, mode, meal ?? 'any', exclude.join(',')] as const,
   grocery: (from: string, to: string) => ['grocery', from, to] as const,
   pantry: ['pantry'] as const,
   cookable: ['cookable'] as const,
@@ -173,8 +173,13 @@ export function usePlanMutations() {
 }
 
 /** Keeps the previous answer on screen while a different mode or meal loads, so the chips and scroll position don't reset. */
-export const useGaps = (date: string, mode: T.GapMode = 'BestMatch', meal?: Meal) =>
-  useQuery({ queryKey: keys.gaps(date, mode, meal), queryFn: () => get<T.GapReport>(`/plan/gaps?${q({ date, mode, meal })}`), placeholderData: keepPreviousData });
+/** `exclude`: ids of ideas already shown this session ("Show different ideas"); the server skips them. */
+export const useGaps = (date: string, mode: T.GapMode = 'BestMatch', meal?: Meal, exclude: readonly string[] = []) =>
+  useQuery({
+    queryKey: keys.gaps(date, mode, meal, exclude),
+    queryFn: () => get<T.GapReport>(`/plan/gaps?${q({ date, mode, meal, exclude: exclude.length ? exclude.join(',') : undefined })}`),
+    placeholderData: keepPreviousData,
+  });
 
 export const useGrocery = (from: string, to: string) =>
   useQuery({ queryKey: keys.grocery(from, to), queryFn: () => get<T.GroceryList>(`/plan/grocery?${q({ from, to })}`) });

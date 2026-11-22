@@ -20,7 +20,7 @@ Build a trustworthy, fast, intuitive nutrition and recipe-planning experience. P
 - `backend/src/NutriPlan.Infrastructure`: EF Core/PostgreSQL, USDA import, external providers, Claude client.
 - `backend/src/NutriPlan.Api`: thin minimal API endpoints, validation and composition.
 - `backend/tests`: xUnit domain, application and Postgres integration tests.
-- Fill the Gaps (`GapRecommender` in Domain, `GapFillService`, `docs/FILL_THE_GAPS.md`): deterministic, real portions only, hard constraints, nothing added when at/over target. Thresholds live in `GapFillPolicy`; don't reintroduce a global optimizer or invented serving sizes.
+- Fill the Gaps (`GapRecommender` in Domain, `GapFillService`, `docs/FILL_THE_GAPS.md`): deterministic, real portions only, hard constraints, nothing added when at/over target. Thresholds live in `GapFillPolicy`; don't reintroduce a global optimizer or invented serving sizes. "Show different ideas" pages through the same qualifying list by excluding shown idea ids (`SuggestPage`); don't add a second recommender or randomness.
 - Logging and editing (`docs/LOGGING.md`): foods are logged/edited in the measures `FoodMeasures` derives (never invented weights or densities); amount edits go through `ItemAmounts`, which scales the entry's own snapshot. The app's `features/quantity` model and `QuantityPicker` are the only amount UI; don't add another. Number-led USDA portions are named by their phrase ("100-calorie package"); Foundation foods with no portions may borrow their NDB-linked SR Legacy portions only through `EquivalentPortions` / `enrich-usda-portions` (with `origin` recorded), never by guessing.
 - `mobile`: Expo SDK 58, React Native/TypeScript, Expo Router, TanStack Query; keep reusable logic outside route components.
 

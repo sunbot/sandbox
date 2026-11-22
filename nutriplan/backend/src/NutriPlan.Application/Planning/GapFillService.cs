@@ -19,9 +19,10 @@ public sealed record GapReasonDto(string Code, string Text, int? NutrientId);
 /// <summary>What a suggestion does to one nutrient: for a goal, how much is still missing before and after; for a limit, how much room is left.</summary>
 public sealed record GapEffectDto(int NutrientId, string Name, string Unit, string Kind, double Before, double After);
 
+/// <param name="Id">Stable identity (its foods and recipes, in any order): send it back in <c>exclude</c> to see different ideas.</param>
 public sealed record GapSuggestionDto(
     IReadOnlyList<GapItemDto> Items, NutritionDto Adds, NutritionDto RemainingAfter, string Summary,
-    string Category, IReadOnlyList<GapReasonDto> Reasons, IReadOnlyList<GapEffectDto> Effects);
+    string Category, IReadOnlyList<GapReasonDto> Reasons, IReadOnlyList<GapEffectDto> Effects, string Id = "");
 
 public sealed record GapSwapDto(Guid PlanEntryId, string FromName, double FromCalories, GapItemDto To, double SavesCalories, IReadOnlyList<GapReasonDto> Reasons);
 
@@ -44,14 +45,20 @@ public sealed record GapReportDto(
     string? EmptyMessage,
     IReadOnlyList<GapSwapDto> Swaps,
     IReadOnlyList<GapTipDto> NextDay,
-    IReadOnlyList<string> DataNotes);
+    IReadOnlyList<string> DataNotes,
+    int MoreIdeas = 0,
+    int SkippedIdeas = 0);
 
 /// <summary>A nutrient still short (or a limit exceeded). <see cref="DataComplete"/> is false when today's logged foods don't list it, so it can't be judged.</summary>
 public sealed record NutrientProgressGap(int NutrientId, string Name, string Unit, double Remaining, double Target, string Kind, bool DataComplete = true);
 
 public sealed record GapFillRequest(
     DateOnly Date, bool IncludePlanned = true, bool IncludeMicronutrients = true, int MaxItems = 3, bool RecipesOnly = false,
-    GapMode? Mode = null, MealSlot? Meal = null);
+    GapMode? Mode = null, MealSlot? Meal = null, IReadOnlyCollection<string>? Exclude = null)
+{
+    /// <summary>At most this many ideas can be passed over in one session (each id is 16 characters).</summary>
+    public const int MaxExclude = 300;
+}
 
 /// <summary>
 /// "What can I add to round out today?" Works out what's left of the day (calories eaten and still planned, goals,
@@ -100,9 +107,14 @@ public sealed partial class GapFillService(
         var mode = request.Mode ?? (request.RecipesOnly ? GapMode.SavedRecipes : GapMode.BestMatch);
 
         var (candidates, coEaten) = await BuildCandidatesAsync(date, ct);
-        var ctx = new GapContext(request.Meal, coEaten);
+        // What's already logged or planned for the day isn't suggested again; ideas already passed over this session are skipped.
+        var onToday = eaten.Concat(planned.Select(e => e.Item))
+            .Select(i => i.FoodId is { } f ? $"f:{f}" : i.RecipeId is { } r ? $"r:{r}" : null).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var exclude = (request.Exclude ?? []).Where(IsIdeaId).Take(GapFillRequest.MaxExclude).ToHashSet(StringComparer.Ordinal);
+        var ctx = new GapContext(request.Meal, coEaten, onToday, exclude);
 
-        var suggestions = GapRecommender.Suggest(needs, candidates, mode, ctx, p);
+        var page = GapRecommender.SuggestPage(needs, candidates, mode, ctx, p);
+        var suggestions = page.Items;
         IReadOnlyList<GapModeAvailability> modes = [];
         if (situation is GapSituation.Open or GapSituation.Near) modes = GapRecommender.AvailableModes(needs, candidates, ctx, p);
 
@@ -131,12 +143,14 @@ public sealed partial class GapFillService(
                 .Select(t => $"Some foods logged today don't list {NutrientCatalog.Get(t.NutrientId).Name.ToLowerInvariant()}, so the room left under your limit may be less than shown."))
             .ToList();
 
-        var (emptyReason, emptyMessage) = suggestions.Count > 0 ? (null, null) : Explain(situation, mode, kcalLeft, needs, candidates, tips.Count > 0 || swaps.Count > 0, p);
+        var (emptyReason, emptyMessage) = suggestions.Count > 0 ? (null, null)
+            : page.Skipped > 0 ? ("Exhausted", "No more matching ideas right now.")
+            : Explain(situation, mode, kcalLeft, needs, candidates, tips.Count > 0 || swaps.Count > 0, p);
 
         return new GapReportDto(date, NutritionDto.From(remaining), gaps, suggestions.Select(s => ToDto(s, needs)).ToList(),
             situation.ToString(), SituationMessage(situation, kcalLeft), mode.ToString(),
             modes.Select(m => new GapModeDto(m.Mode.ToString(), m.Count)).ToList(), emptyReason, emptyMessage,
-            swaps.Select(ToDto).ToList(), tips.Select(ToDto).ToList(), dataNotes);
+            swaps.Select(ToDto).ToList(), tips.Select(ToDto).ToList(), dataNotes, page.More, page.Skipped);
     }
 
     // ── Needs ──────────────────────────────────────────────────────────────────────────────────────
@@ -417,6 +431,9 @@ public sealed partial class GapFillService(
         i.Candidate.Name, Math.Round(i.Amount, 2), i.Candidate.Unit, NutritionDto.From(i.Nutrients),
         i.Multiple == 1 ? i.Candidate.PortionLabel : $"{MultipleText(i.Multiple)} × {i.Candidate.PortionLabel}");
 
+    /// <summary>An idea id as <see cref="GapRecommender.IdOf(GapSuggestion)"/> makes it: 16 lowercase hex characters.</summary>
+    private static bool IsIdeaId(string id) => id.Length == 16 && id.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
+
     private static GapSuggestionDto ToDto(GapSuggestion s, IReadOnlyList<GapTarget> targets)
     {
         var kcalLeft = s.RemainingAfter.Get(NutrientIds.Energy);
@@ -428,7 +445,7 @@ public sealed partial class GapFillService(
             {
                 var def = NutrientCatalog.Get(e.NutrientId);
                 return new GapEffectDto(e.NutrientId, def.Name, def.Unit, e.Kind.ToString(), Math.Round(e.Before, 1), Math.Round(e.After, 1));
-            }).ToList());
+            }).ToList(), GapRecommender.IdOf(s));
     }
 
     private static GapSwapDto ToDto(GapSwap s) => new(s.From.EntryId, s.From.Name, Math.Round(s.From.Nutrients.Calories), ToDto(s.To), s.SavesKcal,
