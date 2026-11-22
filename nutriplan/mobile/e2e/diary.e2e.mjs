@@ -25,13 +25,13 @@ async function openToday(totals) {
     'GET /api/diary/': () => day([almondsEntry, yogurtEntry], totals),
     'GET /api/targets': () => TARGETS,
     'GET /api/foods/f1': () => almonds,
-    'GET /api/nutrients': () => [
+    'GET /api/nutrients': () => [200, [
       { id: 1008, name: 'Energy', unit: 'kcal', group: 'Energy', displayOrder: 0 },
       { id: 1003, name: 'Protein', unit: 'g', group: 'Macronutrient', displayOrder: 10 },
       { id: 1103, name: 'Selenium', unit: 'µg', group: 'Mineral', displayOrder: 68 },
       { id: 1162, name: 'Vitamin C', unit: 'mg', group: 'Vitamin', displayOrder: 71 },
       { id: 1114, name: 'Vitamin D', unit: 'µg', group: 'Vitamin', displayOrder: 72 },
-    ],
+    ]],
     'PATCH /api/diary/e1': (c) => { const body = JSON.parse(c.body); return { ...almondsEntry, item: { ...almondsEntry.item, quantity: body.amount, unit: body.unit } }; },
     'DELETE /api/diary/': () => [204],
   });
@@ -49,6 +49,7 @@ test('nutrition view shows the saved snapshot, preserves a quantity draft and ne
   await amount.fill('56');
   await p.getByRole('button', { name: 'View nutrition' }).click();
   await p.getByText('Saved nutrition snapshot').waitFor();
+  await p.getByText('1.234 mg').waitFor();
   assert.equal(await visible(p.getByText('Saved for 28 g. Unsaved quantity changes are not included.')), true);
   assert.equal(await visible(p.getByText('162 kcal')), true);
   assert.equal(await visible(p.getByText('1.234 mg')), true);
