@@ -119,7 +119,7 @@ Current providers:
 - Sign-in: Android Google sign-in needs the APK signing key's SHA-1 registered in Firebase (currently the template debug key).
 - USDA measures: 66 Foundation foods linked to SR Legacy are left without household measures because equivalence can't be shown by name (e.g. "Cabbage, green, raw" vs "Cabbage, raw"); production needs a one-time `enrich-usda-portions --apply` (approval required) for the 49 that qualify.
 - Web barcode scanning in Android Chrome now requests a 1080p picture (looser if refused) and continuous focus where the camera supports it (`features/scan/ScanCamera.web.tsx`); the blur fix hasn't been confirmed on a physical phone yet (`docs/LOGGING.md` has the steps).
-- Swipe-to-delete (a swipe past the threshold deletes, with Undo) works with touch (phone browsers verified here; Android needs a device check: a tap on the revealed button didn't arrive on one phone) but not a desktop mouse drag; Delete is also in the editor. Camera focus/zoom behaviour varies by phone and hasn't been verified on a physical device (`docs/LOGGING.md` lists the checks).
+- Swipe-to-delete (swipe reveals Delete, tap deletes, with Undo) uses React Native's PanResponder/Pressable because taps inside the gesture-handler swipe component never arrived on one Android phone; verified with touch in a phone-sized browser here, needs a device check on Android; a desktop mouse drag doesn't open it; Delete is also in the editor. Camera focus/zoom behaviour varies by phone and hasn't been verified on a physical device (`docs/LOGGING.md` lists the checks).
 
 ## Definition of done
 
