@@ -15,7 +15,8 @@ public enum GapRole { Meal, Main, Side, Snack, Ingredient }
 /// <summary>The kind of thing a suggestion is, shown on its card.</summary>
 public enum GapCategory { Meal, Snack, Side }
 
-public enum FoodGroup { Other, Dairy, Egg, Protein, Legume, NutsSeeds, Fruit, Vegetable, Grain }
+/// <summary>Cereal = breakfast and snack grains (oatmeal, cereal, bread, crackers); Grain = meal bases (rice, pasta, potato); Mixed = a prepared dish (soup, pizza, sandwich) sized by its calories.</summary>
+public enum FoodGroup { Other, Dairy, Egg, Protein, Legume, NutsSeeds, Fruit, Vegetable, Grain, Cereal, Mixed }
 
 [Flags]
 public enum GapOrigin { None = 0, SavedRecipe = 1, Favorite = 2, Pantry = 4, Frequent = 8, Starter = 16 }
@@ -70,7 +71,7 @@ public sealed record GapSuggestion(
     IReadOnlyList<GapEffect> Effects);
 
 /// <summary>An uneaten planned item, as the swap finder sees it.</summary>
-public sealed record GapPlanned(Guid EntryId, string Name, GapCategory Category, NutrientProfile Nutrients);
+public sealed record GapPlanned(Guid EntryId, string Name, GapCategory Category, NutrientProfile Nutrients, string? Key = null);
 
 public sealed record GapSwap(GapPlanned From, GapSuggestionItem To, double SavesKcal, IReadOnlyList<GapReason> Reasons);
 

@@ -288,6 +288,79 @@ public class GapFillServiceTests
         _ = limit;
     }
 
+    // ── Review regressions ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Foods_with_real_USDA_names_are_used_to_build_meals()
+    {
+        // Their names contain "water" and "without salt", which once made them look like ingredients and dropped them.
+        var tuna = AddFood("Tuna, light, canned in water, drained solids", 132, 29, 0, 247, "can", 165, "Finfish and Shellfish Products");
+        var broccoli = AddFood("Broccoli, cooked, boiled, drained, without salt", 35, 2.4, 3.3, 41, "cup", 156, "Vegetables and Vegetable Products");
+        Habit(tuna, 150); Habit(broccoli, 156);
+
+        var report = await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.Meal));
+
+        var meal = Assert.Single(report.Suggestions, s => s.Items.Any(i => i.Name.StartsWith("Tuna")) && s.Items.Any(i => i.Name.StartsWith("Broccoli")));
+        Assert.Equal("Meal", meal.Category);
+    }
+
+    [Fact]
+    public async Task Eats_this_often_needs_a_real_history_not_one_log()
+    {
+        var yogurt = AddFood("Yogurt, Greek, plain, nonfat", 59, 10, 0, 36, "container", 170);
+        Habit(yogurt, 170, times: 2);
+        var twice = await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.QuickSnack));
+        Assert.NotEmpty(twice.Suggestions);
+        Assert.All(twice.Suggestions, s => Assert.DoesNotContain(s.Reasons, r => r.Code is "frequent" or "frequent_some"));
+
+        Habit(yogurt, 170, times: 3);
+        var often = await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.QuickSnack));
+        Assert.Contains(often.Suggestions, s => s.Reasons.Any(r => r.Code == "frequent"));
+    }
+
+    [Fact]
+    public async Task Pantry_stock_is_limited_by_the_weighed_rows_even_when_another_row_has_no_weight()
+    {
+        var yogurt = AddFood("Yogurt, Greek, plain, nonfat", 59, 10, 0, 36, "container", 170);
+        Pantry(yogurt, 170);
+        Pantry(yogurt, null); // an unweighed jar adds an unknown extra, which must not remove the limit
+        var report = await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.Pantry));
+        Assert.NotEmpty(report.Suggestions);
+        Assert.All(report.Suggestions.SelectMany(s => s.Items), i => Assert.True(i.Amount <= 170 + 1e-9, $"{i.Amount} g"));
+    }
+
+    [Fact]
+    public async Task A_recipe_you_can_make_from_the_pantry_is_a_pantry_suggestion()
+    {
+        var chicken = AddFood("Chicken, roasted", 165, 31, 0, 74, "piece", 120, "Poultry Products");
+        var bowl = AddRecipe("Roast chicken plate", 520, 45, 5, 400, "Dinner");
+        bowl.SetIngredientLines(["500 g chicken"]);
+        var ing = bowl.Ingredients[0];
+        (ing.FoodId, ing.FoodName, ing.Grams, ing.Status) = (chicken.Id, chicken.Name, 500, IngredientMatchStatus.Confirmed);
+
+        Assert.Empty((await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.Pantry))).Suggestions); // nothing in the pantry yet
+
+        Pantry(chicken, 800);
+        var report = await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.Pantry));
+        var suggestion = Assert.Single(report.Suggestions);
+        Assert.Equal("Recipe", suggestion.Items.Single().Kind);
+        Assert.Contains(suggestion.Reasons, r => r.Code == "pantry");
+    }
+
+    [Fact]
+    public async Task A_limit_the_days_data_cannot_judge_is_flagged_instead_of_quoted()
+    {
+        var yogurt = AddFood("Yogurt, Greek, plain, nonfat", 59, 10, 0, 36, "container", 170);
+        Habit(yogurt, 170);
+        Eat(yogurt, 170); // 100 kcal with a sodium figure…
+        _store.Diary.Add(new DiaryEntry(Day, MealSlot.Lunch, ItemSnapshot.QuickCalories("Restaurant lunch", 900, 30, 90, 40))); // …and 900 kcal without
+
+        var report = await Service().SuggestAsync(new GapFillRequest(Day));
+
+        Assert.Contains(report.DataNotes, n => n.Contains("sodium") && n.Contains("limit"));
+        Assert.All(report.Suggestions, s => Assert.DoesNotContain(s.Reasons, r => r.Code == "limit"));
+    }
+
     // ── Configuration ──────────────────────────────────────────────────────────────────────────────
 
     [Fact]

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, patch, post, put, q, api } from './client';
 import { NUTRITION_KEYS } from './invalidation';
 import type * as T from './types';
@@ -168,8 +168,9 @@ export function usePlanMutations() {
   };
 }
 
+/** Keeps the previous answer on screen while a different mode or meal loads, so the chips and scroll position don't reset. */
 export const useGaps = (date: string, mode: T.GapMode = 'BestMatch', meal?: Meal) =>
-  useQuery({ queryKey: keys.gaps(date, mode, meal), queryFn: () => get<T.GapReport>(`/plan/gaps?${q({ date, mode, meal })}`) });
+  useQuery({ queryKey: keys.gaps(date, mode, meal), queryFn: () => get<T.GapReport>(`/plan/gaps?${q({ date, mode, meal })}`), placeholderData: keepPreviousData });
 
 export const useGrocery = (from: string, to: string) =>
   useQuery({ queryKey: keys.grocery(from, to), queryFn: () => get<T.GroceryList>(`/plan/grocery?${q({ from, to })}`) });

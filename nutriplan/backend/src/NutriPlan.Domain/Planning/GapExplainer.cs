@@ -39,8 +39,8 @@ public static class GapExplainer
                 reasons.Add(new("gap", $"Helps close your {NameOf(id)} gap: about {Fmt(amount)} of the {Fmt(need.Remaining)} {unit} missing", id));
         }
 
-        // Limits it uses a noticeable part of (only said when true).
-        foreach (var l in needs.Where(n => n.Kind == TargetKind.Limit && n.NutrientId != NutrientIds.Energy && n.Remaining > 0 && n.DailyTarget > 0))
+        // Limits it uses a noticeable part of (only said when true, and only when today's data can judge the limit).
+        foreach (var l in needs.Where(n => n.Kind == TargetKind.Limit && n.Evaluable && n.NutrientId != NutrientIds.Energy && n.Remaining > 0 && n.DailyTarget > 0))
         {
             var amount = added.Get(l.NutrientId);
             if (amount > 0 && amount / l.Remaining >= 0.25)
@@ -49,13 +49,23 @@ public static class GapExplainer
 
         var energy = needs.FirstOrDefault(n => n.NutrientId == NutrientIds.Energy);
         if (energy is { Remaining: > 0 })
-            reasons.Add(new("calories", $"Fits within your remaining {Fmt(energy.Remaining)} kcal (leaves about {Fmt(Math.Max(0, energy.Remaining - added.Calories))})"));
+        {
+            var over = added.Calories - energy.Remaining;
+            reasons.Add(new("calories", over > 0.5
+                ? $"About {Fmt(over)} kcal over your remaining {Fmt(energy.Remaining)} kcal"
+                : $"Fits within your remaining {Fmt(energy.Remaining)} kcal (leaves about {Fmt(energy.Remaining - added.Calories)})"));
+        }
 
-        var origin = items.Aggregate(GapOrigin.None, (o, i) => o | i.Candidate.Origin);
-        if (origin.HasFlag(GapOrigin.Favorite)) reasons.Add(new("favorite", "One of your favorite recipes"));
-        else if (origin.HasFlag(GapOrigin.SavedRecipe) && items.Any(i => i.Candidate.IsRecipe)) reasons.Add(new("recipe", "A recipe you've saved"));
-        if (origin.HasFlag(GapOrigin.Pantry)) reasons.Add(new("pantry", "Uses food from your pantry"));
-        if (origin.HasFlag(GapOrigin.Frequent)) reasons.Add(new("frequent", "You eat this often"));
+        // Where it comes from: said about the whole suggestion only when true of all of it.
+        bool All(GapOrigin f) => items.All(i => i.Candidate.Origin.HasFlag(f));
+        bool Any(GapOrigin f) => items.Any(i => i.Candidate.Origin.HasFlag(f));
+        var many = items.Count > 1;
+        if (All(GapOrigin.Favorite)) reasons.Add(new("favorite", "One of your favorite recipes"));
+        else if (items.All(i => i.Candidate.IsRecipe) && All(GapOrigin.SavedRecipe)) reasons.Add(new("recipe", "A recipe you've saved"));
+        if (All(GapOrigin.Pantry)) reasons.Add(new("pantry", many ? "Uses foods from your pantry" : "Uses food from your pantry"));
+        else if (Any(GapOrigin.Pantry)) reasons.Add(new("pantry_some", "Uses some food from your pantry"));
+        if (All(GapOrigin.Frequent)) reasons.Add(new("frequent", many ? "You eat these often" : "You eat this often"));
+        else if (Any(GapOrigin.Frequent)) reasons.Add(new("frequent_some", "Includes something you eat often"));
         return reasons;
     }
 

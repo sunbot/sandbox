@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calorieHeadline, effectLine, emptyCopy, fmtAmount, fmtInt, macroText, modeChips, planPayload, shortOn } from './gapView.ts';
+import { calorieHeadline, effectLine, emptyCopy, fmtAmount, fmtInt, macroText, modeChips, planPayload, shortOn, suggestionId } from './gapView.ts';
 
 test('an overage is stated with its amount, never shown as zero left', () => {
   assert.deepEqual(calorieHeadline(-1214, 'Over'), { text: '1,214 kcal over', over: true });
@@ -47,4 +47,14 @@ test('empty states explain why, in different words for each reason', () => {
   const titles = ['Over', 'AtTarget', 'NeedsMet', 'NoPantry', 'NoRecipes', 'NoRoomForMeal', 'NothingFits'].map((r) => emptyCopy({ ...base, emptyReason: r }).title);
   assert.equal(new Set(titles).size, titles.length);
   assert.equal(emptyCopy({ ...base, emptyReason: 'Over' }).body, 'msg');
+});
+
+test('a suggestion keeps the same id when the list reorders, and differs when its contents differ', () => {
+  const a = [{ foodId: 'f1', recipeId: null, amount: 170 }];
+  const b = [{ foodId: 'f1', recipeId: null, amount: 85 }];
+  const c = [{ foodId: null, recipeId: 'r1', amount: 1 }];
+  assert.equal(suggestionId(a), suggestionId([{ ...a[0] }]));
+  assert.notEqual(suggestionId(a), suggestionId(b));
+  assert.notEqual(suggestionId(a), suggestionId(c));
+  assert.equal(suggestionId([...a, ...c]), 'f1:170|r1:1');
 });

@@ -57,6 +57,8 @@ public static class GapRecommender
         // Single items: a recipe serving, a snack food, a side.
         foreach (var c in eligible)
         {
+            // A side food (oatmeal, carrots, rice) is part of a meal, never a suggestion by itself; a saved side-dish recipe is fine.
+            if (c.Role == GapRole.Side && !c.IsRecipe) continue;
             if (CategoryOf(c.Role) is not { } category || !Allowed(mode, category)) continue;
             foreach (var m in Multiples(c, p)) Try([new(c, m)], category);
         }
@@ -75,11 +77,11 @@ public static class GapRecommender
                 }
         }
 
-        // Meals from parts: a main plus one or two different sides.
+        // Meals from parts: a main with a vegetable, grain or legume, or a vegetable plus a grain/legume.
         if (Allowed(mode, GapCategory.Meal) && kcalLeft >= p.MinMealKcal)
         {
             var mains = Top(eligible.Where(c => c.Role == GapRole.Main), open, p);
-            var sides = Top(eligible.Where(c => c.Role == GapRole.Side && !c.IsRecipe), open, p);
+            var sides = Top(eligible.Where(c => c.Role == GapRole.Side && !c.IsRecipe && GapRoles.IsMealSide(c.Group)), open, p);
             foreach (var main in mains)
                 for (var i = 0; i < sides.Count; i++)
                 {
@@ -88,7 +90,7 @@ public static class GapRecommender
                             Try([new(main, mm), new(sides[i], ms)], GapCategory.Meal);
                     for (var j = i + 1; j < sides.Count; j++)
                     {
-                        if (sides[i].Group == sides[j].Group) continue;
+                        if (!GapRoles.SidePair(sides[i].Group, sides[j].Group)) continue;
                         foreach (var mm in Multiples(main, p))
                             foreach (var m1 in Multiples(sides[i], p))
                                 foreach (var m2 in Multiples(sides[j], p))
@@ -137,7 +139,7 @@ public static class GapRecommender
             var major = open.OrderByDescending(n => n.Weight * Math.Min(1, n.Remaining / n.DailyTarget)).Take(Math.Max(1, p.ScoreNeedsConsidered)).ToList();
             GapSwap? best = null;
             double bestScore = double.NegativeInfinity;
-            foreach (var c in pool.Where(c => c.Role != GapRole.Ingredient && CategoryOf(c.Role) == from.Category))
+            foreach (var c in pool.OrderBy(c => c.Key, StringComparer.Ordinal).Where(c => c.Role != GapRole.Ingredient && CategoryOf(c.Role) == from.Category && c.Key != from.Key))
                 foreach (var m in Multiples(c, p))
                 {
                     var n = c.PerPortion.Scale(m);
@@ -145,7 +147,11 @@ public static class GapRecommender
                     if (k > fromKcal - p.SwapMinSavingsKcal || k < fromKcal * p.SwapMinKeepShare) continue;
                     // A swap may not trade away what you're short on: each major gap is covered about as well (within 10 %) or better.
                     if (!major.All(g => Math.Min(n.Get(g.NutrientId), g.Remaining) >= 0.9 * Math.Min(from.Nutrients.Get(g.NutrientId), g.Remaining) - 1e-9)) continue;
-                    if (!limits.All(l => !(l.Remaining <= p.NearLimitShare * l.DailyTarget) || (c.PerPortion.Has(l.NutrientId) && n.Get(l.NutrientId) <= from.Nutrients.Get(l.NutrientId) + 1e-9))) continue;
+                    // A lighter swap must not add to a limit: where both amounts are known the new one is no higher, and an
+                    // unknown value is skipped when the limit is nearly used up.
+                    if (!limits.All(l => c.PerPortion.Has(l.NutrientId)
+                            ? !from.Nutrients.Has(l.NutrientId) || n.Get(l.NutrientId) <= from.Nutrients.Get(l.NutrientId) + 1e-9
+                            : !(l.Remaining <= p.NearLimitShare * l.DailyTarget))) continue;
                     var rank = NeedScore(n, open, p) * 10 + (fromKcal - k) / 1000 + Math.Min(1, c.Familiarity / 10.0) * 0.01;
                     if (rank <= bestScore) continue;
                     bestScore = rank;
@@ -164,7 +170,7 @@ public static class GapRecommender
         var tips = new List<GapTip>();
         foreach (var n in OpenNeeds(needs, p).OrderByDescending(n => n.Weight * Math.Min(1, n.Remaining / n.DailyTarget)).Take(p.MaxTipNutrients))
         {
-            var items = pool.Where(c => c.Role != GapRole.Ingredient && Multiples(c, p).Contains(1.0) && c.PerPortion.Has(n.NutrientId) && c.PerPortion.Calories <= p.MaxMealKcal)
+            var items = pool.OrderBy(c => c.Key, StringComparer.Ordinal).Where(c => c.Role != GapRole.Ingredient && Multiples(c, p).Contains(1.0) && c.PerPortion.Has(n.NutrientId) && c.PerPortion.Calories <= p.MaxMealKcal)
                 .Select(c => new GapTipItem(c, c.PerPortion.Get(n.NutrientId), c.PerPortion.Get(n.NutrientId) / n.DailyTarget))
                 .Where(t => t.DailyShare >= p.TipMinDailyShare)
                 .OrderByDescending(t => Familiar(t.Candidate)).ThenByDescending(t => t.DailyShare).ThenBy(t => t.Candidate.Key, StringComparer.Ordinal)
@@ -229,6 +235,7 @@ public static class GapRecommender
         var scale = kcalLeft > 0 ? Math.Min(1, hi / kcalLeft) : 1;
 
         // Every item has to earn its place: no token amounts, no filler.
+        if (items.Count > 1 && items.Any(i => i.Nutrients.Calories < p.MinItemKcal - 1e-9)) return null;
         if (!items.All(i => Contributes(i.Nutrients, open, p, scale))) return null;
 
         // Limits: never push one further past where it is, and don't guess when its value is unknown and it's nearly used up.
@@ -241,9 +248,11 @@ public static class GapRecommender
             if (add > allowance + 1e-9) return null;
         }
 
-        var need = NeedScore(added, open, p, scale);
-        if (need < p.MinSuggestionScore) return null;
-        var score = need + p.CalorieFitWeight * Math.Clamp(added.Calories / Math.Max(hi, 1), 0, 1) + Preference(items, ctx, p) - p.ComplexityPenalty * (items.Count - 1);
+        // Gate on coverage of the share of the day's needs a suggestion this size should fill; rank on coverage of the
+        // whole gap and on how much of the room it uses, so a meal isn't outranked by a snack just because snacks are small.
+        if (NeedScore(added, open, p, scale) < p.MinSuggestionScore) return null;
+        var room = Math.Max(1, Math.Min(kcalLeft, p.MaxMealKcal));
+        var score = NeedScore(added, open, p) + p.CalorieFitWeight * Math.Clamp(added.Calories / room, 0, 1) + Preference(items, ctx, p) - p.ComplexityPenalty * (items.Count - 1);
 
         var remaining = new NutrientProfile(needs.ToDictionary(n => n.NutrientId, n => n.Remaining - added.Get(n.NutrientId)));
         return new GapSuggestion(items.ToList(), category, added.Rounded(), remaining.Rounded(), score,

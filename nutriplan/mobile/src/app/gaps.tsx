@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useGaps, useLogFoods, useLogRecipe, usePlanMutations } from '@/api/hooks';
 import type { GapItem, GapMode, GapSuggestion, GapSwap, GapTip, GapTipItem } from '@/api/types';
 import { AppCard, AppText, Badge, EmptyState, FilterChip, PrimaryButton, SecondaryButton, Skeleton, TextButton, useSnackbar } from '@/components/ds';
 import { ArrowLeftRight, CalendarClock, CalendarPlus, Check, CircleCheck, CloudOff, Info, Sparkles } from '@/components/ds/icons';
-import { calorieHeadline, effectLine, emptyCopy, fmtAmount, itemsTitle, MODE_LABEL, macroText, modeChips, originBadges, planPayload, shortOn } from '@/features/gaps/gapView';
+import { calorieHeadline, effectLine, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, shortOn, suggestionId } from '@/features/gaps/gapView';
 import { friendlyFoodName } from '@/lib/foodName';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -26,7 +26,10 @@ export default function GapsScreen() {
   const [meal, setMeal] = useState<Meal>(mealForNow());
   const [done, setDone] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
+  // Steps already saved, so a retry after a partial failure doesn't add them twice.
+  const saved = useRef(new Set<string>());
   const gaps = useGaps(date, mode, meal);
+  const stale = gaps.isPlaceholderData;
   const plan = usePlanMutations();
   const logFoods = useLogFoods();
   const logRecipe = useLogRecipe();
@@ -57,16 +60,23 @@ export default function GapsScreen() {
     } finally { setBusy(null); }
   };
 
-  // Foods go in one all-or-nothing request; recipes are added one by one.
-  const planItems = async (items: GapItem[], on: string) => {
+  // Foods go in one all-or-nothing request; recipes are added one by one. Each step is remembered once saved.
+  const once = async (step: string, work: () => Promise<unknown>) => {
+    if (saved.current.has(step)) return;
+    await work();
+    saved.current.add(step);
+  };
+  const planItems = async (items: Pick<GapItem, 'foodId' | 'recipeId' | 'amount'>[], on: string) => {
     const p = planPayload(items);
-    if (p.foods.length) await plan.addFoods.mutateAsync({ date: on, meal, items: p.foods });
-    for (const r of p.recipes) await plan.addRecipe.mutateAsync({ date: on, meal, recipeId: r.recipeId, servings: r.servings });
+    const base = `plan:${on}:${meal}`;
+    if (p.foods.length) await once(`${base}:foods:${suggestionId(items)}`, () => plan.addFoods.mutateAsync({ date: on, meal, items: p.foods, key: `${base}:${suggestionId(items)}` }));
+    for (const r of p.recipes) await once(`${base}:r:${r.recipeId}:${r.servings}`, () => plan.addRecipe.mutateAsync({ date: on, meal, recipeId: r.recipeId, servings: r.servings }));
   };
   const logItems = async (items: GapItem[]) => {
     const p = planPayload(items);
-    if (p.foods.length) await logFoods.mutateAsync({ date, meal, items: p.foods });
-    for (const r of p.recipes) await logRecipe.mutateAsync({ date, meal, recipeId: r.recipeId, servings: r.servings });
+    const base = `log:${date}:${meal}`;
+    if (p.foods.length) await once(`${base}:foods:${suggestionId(items)}`, () => logFoods.mutateAsync({ date, meal, items: p.foods, key: `${base}:${suggestionId(items)}` }));
+    for (const r of p.recipes) await once(`${base}:r:${r.recipeId}:${r.servings}`, () => logRecipe.mutateAsync({ date, meal, recipeId: r.recipeId, servings: r.servings }));
   };
   const planned = (on: string) => `Planned for ${dayLabel(on).split(',')[0].toLowerCase()} · ${mealLabel(meal).toLowerCase()}. Log it when you eat it.`;
 
@@ -79,7 +89,7 @@ export default function GapsScreen() {
   const emptyIcon = g.emptyReason === 'Over' || g.emptyReason === 'AtTarget' || g.emptyReason === 'NeedsMet' ? CircleCheck : Sparkles;
 
   return (
-    <ScrollView style={shell} contentContainerStyle={page}>
+    <ScrollView style={[shell, stale ? { opacity: 0.7 } : null]} contentContainerStyle={page}>
       <AppCard sheen style={{ gap: t.space.sm }}>
         <AppText variant="label" tone="muted">{(date === today() ? 'TODAY' : dayLabel(date)).toUpperCase()}</AppText>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}>
@@ -91,6 +101,8 @@ export default function GapsScreen() {
         {short.length && g.situation !== 'Over' ? <AppText variant="caption" tone="muted">Short on {short.slice(0, 4).join(', ')}{short.length > 4 ? ` and ${short.length - 4} more` : ''}.</AppText> : null}
         {g.dataNotes.map((n) => <AppText key={n} variant="caption" tone="muted">{n}</AppText>)}
       </AppCard>
+
+      {gaps.isFetching && gaps.isPlaceholderData ? <AppText variant="caption" tone="muted" accessibilityLiveRegion="polite">Updating…</AppText> : null}
 
       {chips.length > 1 || mode !== 'BestMatch' ? (
         <View style={{ gap: t.space.xs }}>
@@ -110,11 +122,16 @@ export default function GapsScreen() {
         </View>
       ) : null}
 
-      {g.suggestions.map((s, i) => (
-        <SuggestionCard key={`${mode}-${i}-${itemsTitle(s.items)}`} s={s} meal={meal} added={done.has(`add:${i}`)} adding={busy === `add:${i}`} logged={done.has(`log:${i}`)} logging={busy === `log:${i}`}
-          onPlan={() => run(`add:${i}`, () => planItems(s.items, date), planned(date))}
-          onLog={() => run(`log:${i}`, () => logItems(s.items), `Logged for ${mealLabel(meal).toLowerCase()}.`)} />
-      ))}
+      {g.suggestions.map((s) => {
+        const sid = suggestionId(s.items);
+        const addId = `add:${sid}:${meal}`;
+        const logId = `log:${sid}:${meal}`;
+        return (
+          <SuggestionCard key={sid} s={s} meal={meal} added={done.has(addId)} adding={busy === addId} logged={done.has(logId)} logging={busy === logId}
+            onPlan={() => run(addId, () => planItems(s.items, date), planned(date))}
+            onLog={() => run(logId, () => logItems(s.items), `Logged for ${mealLabel(meal).toLowerCase()}.`)} />
+        );
+      })}
 
       {g.suggestions.length === 0 ? (
         <EmptyState icon={emptyIcon} title={empty.title} body={empty.body} />
@@ -145,14 +162,15 @@ export default function GapsScreen() {
               <AppText variant="cardTitle">{tip.name}</AppText>
               {tip.items.map((it: GapTipItem, k) => {
                 const id = `tip:${tip.nutrientId}:${k}`;
+                const isDone = done.has(`${id}:${meal}`);
                 return (
                   <View key={id} style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, minHeight: 52 }}>
                     <View style={{ flex: 1, gap: 2 }}>
                       <AppText variant="body" numberOfLines={2}>{nice(it)}</AppText>
                       <AppText variant="caption" tone="muted">{it.portion} · about {fmtAmount(it.nutrientAmount)} {tip.unit} ({it.dailySharePercent}% of daily)</AppText>
                     </View>
-                    <TextButton label={done.has(id) ? 'Planned' : 'Plan tomorrow'} icon={done.has(id) ? Check : CalendarPlus}
-                      onPress={() => { if (!done.has(id) && busy === null) void run(id, () => planItems([{ kind: it.kind, foodId: it.foodId, recipeId: it.recipeId, name: it.name, amount: it.amount, unit: it.unit, portion: it.portion, nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0 } as never }], tomorrow), planned(tomorrow)); }} />
+                    <TextButton label={isDone ? 'Planned' : 'Plan tomorrow'} icon={isDone ? Check : CalendarPlus}
+                      onPress={() => { if (!done.has(`${id}:${meal}`) && busy === null) void run(`${id}:${meal}`, () => planItems([it], tomorrow), planned(tomorrow)); }} />
                   </View>
                 );
               })}

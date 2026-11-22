@@ -32,6 +32,10 @@ public sealed class GapFillPolicy
     // ── Needs ───────────────────────────────────────────────────────────────────────────────────────
     /// <summary>A goal counts as a gap only when at least this share of its daily target is still missing.</summary>
     public double OpenNeedShare { get; set; } = 0.10;
+    /// <summary>In a combination every item must supply at least this many calories (so a few leaves of spinach can't ride along).</summary>
+    public double MinItemKcal { get; set; } = 25;
+    /// <summary>A food or recipe counts as "eaten often" after being logged this many times in the last 90 days.</summary>
+    public int FrequentMinCount { get; set; } = 3;
     /// <summary>Every item must cover at least this share of an open need (capped at what's still needed) to be worth suggesting.</summary>
     public double MinContributionShare { get; set; } = 0.10;
     /// <summary>A nutrient is judged only if it is known for at least this share of the calories logged today.</summary>

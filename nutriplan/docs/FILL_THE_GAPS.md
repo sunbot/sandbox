@@ -27,18 +27,24 @@ combined, and a nutrient absent from the logged foods looked like a deficiency.
    amount) and, for new users, a few staples. A portion is your usual amount, a labelled/NLEA serving, the food's
    natural item ("1 medium") or a cup USDA measured for that food. No usable portion = not suggested (nothing is
    invented). Quantities are ½, 1, 1½ or 2 portions (whole numbers for countable items such as eggs), at least 15 g.
-4. **Coherence.** A suggestion is a saved recipe, a main + one or two different sides (a meal), or a compatible snack
-   pair (yogurt + fruit, or a pair you have eaten together at least twice). Ingredients (oil, coffee, flour) are never
-   suggested on their own. Roles come from a transparent rule table over the food name/category and recipe categories.
+4. **Coherence.** A suggestion is a saved recipe (a meal, snack or side dish), a main with a vegetable, grain or legume
+   (or a vegetable plus a grain/legume), or a compatible snack pair (yogurt + fruit, or a pair you have eaten together
+   at least twice). A side food (carrots, rice, lentils) is never suggested alone, breakfast cereals aren't paired with
+   a main, every item in a combination supplies at least 25 kcal, and ingredients (oil, coffee, flour) are never
+   suggested. Roles come from a transparent rule table over the food's own name (USDA reads "Food, modifiers", so
+   words like "water" or "without salt" in a modifier don't matter), then its category, and recipe categories.
+   Prepared dishes (soup, pizza, sandwich) are sized by their calories rather than assembled.
 5. **Hard constraints:** inside the calorie window for its category (snack 80-300, side 40-300, meal 250-900 kcal,
    never more than 5 % over what's left); an exceeded limit is never pushed further (a food with an unknown value for
    a nearly used-up limit is skipped); every item covers at least 10 % of an open need (judged against the share of the
    day's needs a suggestion of that size is expected to fill, so a snack isn't measured against a whole empty day).
-6. **Ranking:** coverage of the top three needs (capped at what's still needed) + a small calorie-fit term +
-   familiarity (favorite recipe, pantry, often eaten, your meal slot, eaten together) - complexity. A suggestion must
-   cover at least 25 % of those needs to show at all, so the list can be shorter than three, or empty.
+6. **Ranking:** coverage of the top three needs against the whole gap (capped at what's still needed) + how much of
+   the calorie room it uses + familiarity (favorite recipe, pantry, eaten at least 3 times in 90 days, your meal slot,
+   eaten together) - complexity. To show at all, a suggestion must cover at least 25 % of the share of those needs
+   a suggestion of its size is expected to fill, so the list can be shorter than three, or empty. Where something comes
+   from ("You eat this often", "Uses food from your pantry") is only claimed for a combination when true of all of it.
 7. **Modes** (`mode=` on `GET /api/plan/gaps`): `BestMatch`, `Meal` (meals only, needs room for one), `QuickSnack`,
-   `Pantry` (pantry foods only) and `SavedRecipes` (recipes only; `recipesOnly=true` still works). The response lists
+   `Pantry` (pantry foods, and saved recipes whose matched ingredients are all in the pantry) and `SavedRecipes` (recipes only; `recipesOnly=true` still works). The response lists
    only modes that have results; an empty selected mode returns a reason (`NoPantry`, `NoRecipes`, `NoRoomForMeal`, ...).
 8. **Explanations** (`reasons`, `effects`) are generated from the calculated amounts ("Adds about 18 g protein (32 g
    still needed)"), only for nutrients the suggestion really contributes to.
@@ -51,12 +57,17 @@ Every threshold is a property of `GapFillPolicy` and can be set with environment
 
 ## Tests
 
-`GapRecommenderTests` (domain, 70): situations and thresholds; 500 / 200 / 50 kcal left; 1,200 kcal over; protein met;
+`GapRecommenderTests` (domain, 94): situations and thresholds; 500 / 200 / 50 kcal left; 1,200 kcal over; protein met;
 incomplete data; exceeded and near limits; token portions; portion multiples; filler items; meal and snack coherence;
 modes; empty and rich pantry; no suitable suggestion; determinism; explanations; swaps; next-day ideas; role rules.
-`GapFillServiceTests` (13): real portion choice, pantry stock limits, recipes-only, over/at target through the
-service, data coverage, sodium, configuration. `AuthAndIsolationTests`: a second user never sees another's pantry
+`GapFillServiceTests` (18): real portion choice, pantry stock limits (including partly weighed stock), recipes
+cookable from the pantry, recipes-only, over/at target through the service, data coverage and limits the day's data
+can't judge, the "eats often" threshold, real USDA names, sodium, configuration. `AuthAndIsolationTests`: a second user never sees another's pantry
 foods in any mode. App: `features/gaps/gapView.test.ts`.
+
+A second, independent review found and led to fixes for: real USDA names misclassified as ingredients, lone side foods,
+incoherent main + grain pairings, snacks outranking meals, overshoot worded as "fits", combination-wide origin claims,
+partly weighed pantry stock, uncapped starter searches, and app state keyed by list position.
 
 ## Known limits
 

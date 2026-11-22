@@ -52,7 +52,7 @@ export function effectLine(e: GapEffect): string {
 }
 
 /** The API calls a suggestion's items need: foods go in one all-or-nothing request, recipes one by one. */
-export function planPayload(items: GapItem[]): { foods: { foodId: string; grams: number }[]; recipes: { recipeId: string; servings: number }[] } {
+export function planPayload(items: Pick<GapItem, 'foodId' | 'recipeId' | 'amount'>[]): { foods: { foodId: string; grams: number }[]; recipes: { recipeId: string; servings: number }[] } {
   return {
     foods: items.filter((i) => i.foodId && !i.recipeId).map((i) => ({ foodId: i.foodId!, grams: i.amount })),
     recipes: items.filter((i) => i.recipeId).map((i) => ({ recipeId: i.recipeId!, servings: i.amount })),
@@ -60,6 +60,9 @@ export function planPayload(items: GapItem[]): { foods: { foodId: string; grams:
 }
 
 export const itemsTitle = (items: GapItem[]) => items.map((i) => i.name).join(' + ');
+
+/** A stable id for a suggestion (its foods/recipes and amounts), so "Planned" follows the suggestion, not its position in the list. */
+export const suggestionId = (items: Pick<GapItem, 'foodId' | 'recipeId' | 'amount'>[]) => items.map((i) => `${i.foodId ?? i.recipeId}:${i.amount}`).join('|');
 
 const ORIGIN_BADGE: Record<string, string> = { favorite: 'Favorite', recipe: 'Saved recipe', pantry: 'In your pantry', frequent: 'You eat this often' };
 

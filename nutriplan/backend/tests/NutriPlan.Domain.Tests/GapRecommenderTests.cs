@@ -305,7 +305,7 @@ public class GapRecommenderTests
     [Fact]
     public void A_pair_you_have_eaten_together_is_allowed_and_preferred()
     {
-        var oats = Food("Oatmeal, cooked", FoodGroup.Grain, 117, "1/2 cup (117 g)", 83, 3, 2, 5, role: GapRole.Snack);
+        var oats = Food("Rice cakes", FoodGroup.Grain, 18, "2 cakes (18 g)", 70, 1.5, 0.8, 5, role: GapRole.Snack);
         var pb = Food("Peanut butter", FoodGroup.NutsSeeds, 16, "1 tbsp (16 g)", 95, 4, 1, 70);
         var pool = new List<GapCandidate> { oats, pb };
         var together = new GapContext(CoEaten: new HashSet<string> { GapContext.PairKey(oats.Key, pb.Key) });
@@ -488,6 +488,140 @@ public class GapRecommenderTests
         Assert.All(fiber.Items, t => Assert.True(t.DailyShare >= P.TipMinDailyShare));
         Assert.Contains(fiber.Items, t => t.Candidate.Name.StartsWith("Lentil"));
         Assert.DoesNotContain(fiber.Items, t => t.Candidate.Name.StartsWith("Coffee"));
+    }
+
+    // ── Review regressions ─────────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Broccoli, cooked, boiled, drained, without salt", "Vegetables and Vegetable Products", FoodGroup.Vegetable, GapRole.Side)]
+    [InlineData("Lentils, mature seeds, cooked, boiled, without salt", "Legumes and Legume Products", FoodGroup.Legume, GapRole.Side)]
+    [InlineData("Tuna, light, canned in water, drained solids", "Finfish and Shellfish Products", FoodGroup.Protein, GapRole.Main)]
+    [InlineData("Fish, salmon, Atlantic, farmed, cooked, dry heat", "Finfish and Shellfish Products", FoodGroup.Protein, GapRole.Main)]
+    [InlineData("Salmon, canned in oil, drained", null, FoodGroup.Protein, GapRole.Main)]
+    [InlineData("Cereals, oats, regular and quick, not fortified, cooked with water", "Breakfast Cereals", FoodGroup.Cereal, GapRole.Snack)]
+    [InlineData("Bananas, raw", "Fruits and Fruit Juices", FoodGroup.Fruit, GapRole.Snack)]
+    [InlineData("Apples, raw, with skin", "Fruits and Fruit Juices", FoodGroup.Fruit, GapRole.Snack)]
+    [InlineData("Milk, reduced fat, fluid, 2% milkfat, with added vitamin A and vitamin D", "Dairy and Egg Products", FoodGroup.Dairy, GapRole.Snack)]
+    [InlineData("Nuts, almonds", "Nut and Seed Products", FoodGroup.NutsSeeds, GapRole.Snack)]
+    [InlineData("Rice, brown, long-grain, cooked", "Cereal Grains and Pasta", FoodGroup.Grain, GapRole.Side)]
+    [InlineData("Peas, sugar snap, raw", "Vegetables and Vegetable Products", FoodGroup.Vegetable, GapRole.Side)]
+    [InlineData("Soup, chicken noodle, canned, condensed", "Soups, Sauces, and Gravies", FoodGroup.Mixed, GapRole.Snack)]
+    [InlineData("Pizza, cheese, regular crust", null, FoodGroup.Mixed, GapRole.Snack)]
+    [InlineData("Beverages, coffee, brewed, prepared with tap water", "Beverages", FoodGroup.Other, GapRole.Ingredient)]
+    [InlineData("Oil, olive, salad or cooking", "Fats and Oils", FoodGroup.Other, GapRole.Ingredient)]
+    [InlineData("Orange juice, raw", "Fruits and Fruit Juices", FoodGroup.Other, GapRole.Ingredient)]
+    [InlineData("Salad dressing, ranch", "Fats and Oils", FoodGroup.Other, GapRole.Ingredient)]
+    public void Real_USDA_names_are_classified_by_the_food_itself_not_by_words_in_its_modifiers_or_category(string name, string? category, FoodGroup group, GapRole role) =>
+        Assert.Equal((group, role), GapRoles.ClassifyFood(name, category));
+
+    [Fact]
+    public void A_side_food_is_never_suggested_on_its_own()
+    {
+        var oatmeal = Food("Oatmeal, cooked", FoodGroup.Cereal, 234, "1 cup (234 g)", 166, 6, 4, 9);
+        var pool = new List<GapCandidate> { oatmeal, Rice(), Broccoli(), Lentils(), Food("Carrots, cooked", FoodGroup.Vegetable, 156, "1 cup (156 g)", 55, 1.2, 4.7, 90) };
+        foreach (var kcal in new[] { 1500.0, 900, 500, 300 })
+            foreach (var mode in Enum.GetValues<GapMode>())
+                Assert.DoesNotContain(GapRecommender.Suggest(Needs(kcal, 60, 20), pool, mode, NoContext, P),
+                    s => s.Items.Count == 1 && s.Items[0].Candidate is { Role: GapRole.Side, IsRecipe: false });
+
+        // A saved side-dish recipe is a real side dish and may be suggested alone.
+        var salad = Recipe("Side salad", GapRole.Side, 140, 4, 6, 200);
+        Assert.Contains(GapRecommender.Suggest(Needs(300, 10, 12), [salad], GapMode.BestMatch, NoContext, P), s => s.Category == GapCategory.Side);
+    }
+
+    [Fact]
+    public void A_main_is_only_paired_with_a_vegetable_grain_or_legume_never_a_breakfast_cereal_or_two_vegetables()
+    {
+        var oatmeal = Food("Oatmeal, cooked", FoodGroup.Cereal, 234, "1 cup (234 g)", 166, 6, 4, 9);
+        var salmon = Food("Salmon, cooked", FoodGroup.Protein, 150, "1 fillet (150 g)", 280, 38, 0, 90);
+        var carrots = Food("Carrots, cooked", FoodGroup.Vegetable, 156, "1 cup (156 g)", 55, 1.2, 4.7, 90);
+        var pool = new List<GapCandidate> { salmon, oatmeal, carrots, Broccoli(), Rice() };
+
+        var meals = GapRecommender.Suggest(Needs(1200, 60, 22), pool, GapMode.Meal, NoContext, P);
+        Assert.NotEmpty(meals);
+        Assert.DoesNotContain(meals, s => s.Items.Any(i => i.Candidate.Group == FoodGroup.Cereal));
+        Assert.All(meals, s =>
+        {
+            var sides = s.Items.Where(i => i.Candidate.Role == GapRole.Side).Select(i => i.Candidate.Group).ToList();
+            Assert.True(sides.Count == 1 || (sides.Count == 2 && GapRoles.SidePair(sides[0], sides[1])), string.Join("+", s.Items.Select(i => i.Candidate.Name)));
+        });
+    }
+
+    [Fact]
+    public void A_few_leaves_cannot_ride_along_in_a_meal_even_when_they_are_rich_in_a_micronutrient()
+    {
+        // 30 g of spinach is a real portion and covers most of the vitamin K still needed, but at 7 kcal it is garnish.
+        var spinach = new GapCandidate("f:Spinach", ItemKind.Food, Guid.NewGuid(), null, "Spinach, raw", GapRole.Side, FoodGroup.Vegetable, GapOrigin.Frequent,
+            new NutrientProfile(new Dictionary<int, double> { [NutrientIds.Energy] = 7, [NutrientIds.Protein] = 0.9, [NutrientIds.VitaminK] = 145 }), 30, "g", "1 cup (30 g)");
+        var needs = Needs(500, 40, 2).Append(new GapTarget(NutrientIds.VitaminK, 120, 120, TargetKind.Goal, P.MicronutrientWeight)).ToList();
+        var results = GapRecommender.Suggest(needs, [Chicken(), spinach, Rice()], GapMode.Meal, NoContext, P);
+        Assert.NotEmpty(results);
+        Assert.All(results, s => Assert.DoesNotContain(s.Items, i => i.Candidate.Name.StartsWith("Spinach")));
+    }
+
+    [Fact]
+    public void When_a_meal_fits_the_best_match_leads_with_it_not_a_smaller_snack()
+    {
+        // Two yogurts cover all of the protein a snack is expected to fill (so, judged only against its own size, they look
+        // better than a meal that covers 84 % of the whole gap). Against the whole gap, and the room, the meal leads.
+        var pool = new List<GapCandidate> { Yogurt(), Almonds(), Recipe("Chicken and rice bowl", GapRole.Meal, 520, 38, 6, 700) };
+        var results = GapRecommender.Suggest(Needs(520, protein: 45, fiber: 2), pool, GapMode.BestMatch, NoContext, P);
+        Assert.Equal(GapCategory.Meal, results[0].Category);
+        Assert.Contains(results, s => s.Category == GapCategory.Snack); // the snack is still offered, just not first
+    }
+
+    [Fact]
+    public void The_calorie_reason_admits_a_small_overshoot_instead_of_saying_it_fits()
+    {
+        var bowl = Recipe("Salmon bowl", GapRole.Meal, 540, 42, 6, 400);
+        var s = GapRecommender.Suggest(Needs(520, protein: 40, fiber: 4), [bowl], GapMode.BestMatch, NoContext, P).Single();
+        Assert.True(s.Added.Calories > 520); // within the 5 % rounding room
+        var calories = s.Reasons.Single(r => r.Code == "calories");
+        Assert.Contains("over your remaining", calories.Text);
+        Assert.DoesNotContain("Fits within", calories.Text);
+    }
+
+    [Fact]
+    public void Where_things_come_from_is_only_claimed_for_the_whole_suggestion_when_true_of_all_of_it()
+    {
+        var pool = new List<GapCandidate> { Yogurt(GapOrigin.Frequent), Banana() with { Origin = GapOrigin.None } };
+        var pairs = GapRecommender.Suggest(Needs(300, protein: 20, fiber: 8), pool, GapMode.QuickSnack, NoContext, P).Where(s => s.Items.Count == 2).ToList();
+        Assert.NotEmpty(pairs);
+        Assert.All(pairs, s =>
+        {
+            Assert.DoesNotContain(s.Reasons, r => r.Code == "frequent");
+            Assert.Contains(s.Reasons, r => r.Code == "frequent_some");
+        });
+        // A single frequent food is said plainly.
+        var single = GapRecommender.Suggest(Needs(150, protein: 15, fiber: 1), [Yogurt(GapOrigin.Frequent)], GapMode.BestMatch, NoContext, P).Single();
+        Assert.Contains(single.Reasons, r => r.Code == "frequent");
+    }
+
+    [Fact]
+    public void A_swap_never_adds_to_a_limit_and_never_proposes_the_planned_item_itself()
+    {
+        var needs = Needs(-500, protein: 30, fiber: 10, sodiumRemaining: 400);
+        var planned = new GapPlanned(Guid.NewGuid(), "Chicken and rice bowl", GapCategory.Meal, Nutrients(780, 40, 6, 900), Key: "r:Chicken and rice bowl");
+        var saltier = Recipe("Salty noodles", GapRole.Meal, 520, 42, 8, 1500);
+        var lighter = Recipe("Lentil soup", GapRole.Meal, 450, 40, 9, 600);
+        var swaps = GapRecommender.Swaps(needs, [planned], [Recipe("Chicken and rice bowl", GapRole.Meal, 520, 38, 6, 700), saltier, lighter], P);
+
+        var swap = Assert.Single(swaps);
+        Assert.Equal("Lentil soup", swap.To.Candidate.Name);
+        Assert.True(swap.To.Nutrients.Get(NutrientIds.Sodium) <= planned.Nutrients.Get(NutrientIds.Sodium));
+    }
+
+    [Fact]
+    public void Suggestions_swaps_and_ideas_do_not_depend_on_the_order_of_the_pool()
+    {
+        var pool = EverydayPool();
+        var reversed = pool.AsEnumerable().Reverse().ToList();
+        var needs = Needs(-600, protein: 30, fiber: 14);
+        var planned = new GapPlanned(Guid.NewGuid(), "Lasagna", GapCategory.Meal, Nutrients(780, 32, 4, 1400));
+        Assert.Equal(GapRecommender.Swaps(needs, [planned], pool, P).Select(x => x.To.Candidate.Key + x.To.Multiple),
+                     GapRecommender.Swaps(needs, [planned], reversed, P).Select(x => x.To.Candidate.Key + x.To.Multiple));
+        Assert.Equal(GapRecommender.NextDay(needs, pool, P).SelectMany(t => t.Items.Select(i => i.Candidate.Key)),
+                     GapRecommender.NextDay(needs, reversed, P).SelectMany(t => t.Items.Select(i => i.Candidate.Key)));
     }
 
     // ── Roles ──────────────────────────────────────────────────────────────────────────────────────

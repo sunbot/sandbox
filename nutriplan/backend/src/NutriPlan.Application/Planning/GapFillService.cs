@@ -127,6 +127,8 @@ public sealed partial class GapFillService(
         var dataNotes = needs
             .Where(t => t is { Kind: TargetKind.Goal, Evaluable: false } && t.Remaining > t.DailyTarget * p.OpenNeedShare)
             .Select(t => $"Some foods logged today don't list {NutrientCatalog.Get(t.NutrientId).Name.ToLowerInvariant()}, so it isn't counted as a gap or used to rank ideas.")
+            .Concat(needs.Where(t => t is { Kind: TargetKind.Limit, Evaluable: false })
+                .Select(t => $"Some foods logged today don't list {NutrientCatalog.Get(t.NutrientId).Name.ToLowerInvariant()}, so the room left under your limit may be less than shown."))
             .ToList();
 
         var (emptyReason, emptyMessage) = suggestions.Count > 0 ? (null, null) : Explain(situation, mode, kcalLeft, needs, candidates, tips.Count > 0 || swaps.Count > 0, p);
@@ -191,6 +193,8 @@ public sealed partial class GapFillService(
         }
 
         var frequent = await diary.GetFrequentItemsAsync(days: 90, limit: 60, ct);
+        var pantryAll = await pantry.ListAsync(ct);
+        var inPantry = pantryAll.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value).ToHashSet(); // staples included: they count for "can cook it"
         var recipeUse = frequent.Where(f => f.Item.RecipeId is not null).GroupBy(f => f.Item.RecipeId!.Value).ToDictionary(g => g.Key, g => g.ToList());
 
         // 1) Saved recipes with trustworthy nutrition: one serving is the unit.
@@ -200,7 +204,10 @@ public sealed partial class GapFillService(
             if (r.NutritionCoverage < 0.8 || perServing.Calories <= 0) continue;
             var origin = GapOrigin.SavedRecipe | (r.IsFavorite ? GapOrigin.Favorite : 0);
             recipeUse.TryGetValue(r.Id, out var uses);
-            if (uses is not null) origin |= GapOrigin.Frequent;
+            if (uses?.Sum(u => u.Count) >= p.FrequentMinCount) origin |= GapOrigin.Frequent;
+            // A recipe whose matched ingredients are all in the pantry can be made from it.
+            var counted = r.Ingredients.Where(i => i.CountsTowardNutrition && i.FoodId is not null).ToList();
+            if (counted.Count > 0 && counted.All(i => inPantry.Contains(i.FoodId!.Value))) origin |= GapOrigin.Pantry;
             Merge(new GapCandidate($"r:{r.Id}", ItemKind.Recipe, null, r.Id, r.Name, GapRoles.ClassifyRecipe(r.Categories, perServing.Calories, _policy), FoodGroup.Other, origin,
                 perServing, 1, "serving", string.IsNullOrWhiteSpace(r.ServingDescription) ? "1 serving" : $"1 serving ({r.ServingDescription!.Trim()})",
                 Familiarity: uses?.Sum(u => u.Count) ?? 0, Slots: uses?.Select(u => u.Meal).ToHashSet()));
@@ -208,7 +215,7 @@ public sealed partial class GapFillService(
 
         // 2) Foods you log, at the amount you usually eat; 3) what's in the pantry, as much as you have.
         var usualGrams = frequent.Where(f => f.Item.FoodId is not null && f.Item.Grams is > 0).GroupBy(f => f.Item.FoodId!.Value).ToDictionary(g => g.Key, g => g.ToList());
-        var pantryItems = (await pantry.ListAsync(ct)).Where(i => i.FoodId is not null && !i.IsStaple).ToList();
+        var pantryItems = pantryAll.Where(i => i.FoodId is not null && !i.IsStaple).ToList();
         var pantryByFood = pantryItems.GroupBy(i => i.FoodId!.Value).ToDictionary(g => g.Key, g => g.ToList());
         var foodMap = await foods.GetManyAsync(usualGrams.Keys.Concat(pantryByFood.Keys).Distinct().ToList(), ct);
 
@@ -217,19 +224,16 @@ public sealed partial class GapFillService(
             usualGrams.TryGetValue(food.Id, out var uses);
             pantryByFood.TryGetValue(food.Id, out var stocked);
             var typical = uses is null ? (double?)null : uses.OrderByDescending(u => u.Count).First().Item.Grams;
-            var origin = (uses is not null ? GapOrigin.Frequent : 0) | (stocked is not null ? GapOrigin.Pantry : 0);
-            if (FoodCandidate(food, typical, origin, uses?.Sum(u => u.Count) ?? 0, uses?.Select(u => u.Meal).ToHashSet(), stocked) is { } c) Merge(c);
+            var count = uses?.Sum(u => u.Count) ?? 0;
+            var origin = (count >= p.FrequentMinCount ? GapOrigin.Frequent : 0) | (stocked is not null ? GapOrigin.Pantry : 0);
+            if (FoodCandidate(food, typical, origin, count, uses?.Select(u => u.Meal).ToHashSet(), stocked, loggedByYou: uses is not null) is { } c) Merge(c);
         }
 
         // 4) Everyday staples so there's something to suggest on day one.
         if (candidates.Values.Count(c => c.Role != GapRole.Ingredient) < p.StarterThreshold)
         {
-            foreach (var query in StarterFoods)
-            {
-                var best = (await foodService.SearchRankedAsync(query, 1, ct)).FirstOrDefault();
-                if (best is null || best.Food.IsVolume) continue;
-                if (FoodCandidate(best.Food, null, GapOrigin.Starter, 0, null, null) is { } c) Merge(c);
-            }
+            foreach (var food in await StarterFoodsAsync(ct))
+                if (!food.IsVolume && FoodCandidate(food, null, GapOrigin.Starter, 0, null, null) is { } c) Merge(c);
         }
 
         return (candidates.Values.Where(c => c.PerPortion.Calories > 0).ToList(), await CoEatenPairsAsync(date, ct));
@@ -253,22 +257,49 @@ public sealed partial class GapFillService(
         return counts.Where(kv => kv.Value >= _policy.CoEatenMinCount).Select(kv => kv.Key).ToHashSet();
     }
 
-    private GapCandidate? FoodCandidate(Food food, double? usualGrams, GapOrigin origin, int familiarity, IReadOnlySet<MealSlot>? slots, IReadOnlyList<Domain.Pantry.PantryItem>? stocked)
+    /// <summary>
+    /// The starter staples, resolved once per process: they are shared catalog foods, so which food a query maps to is the
+    /// same for everyone (searched without anyone's history). Each request then needs one lookup, not ~20 searches.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Guid> StarterIds = new();
+
+    private async Task<IReadOnlyList<Food>> StarterFoodsAsync(CancellationToken ct)
+    {
+        var found = await foods.GetManyAsync(StarterIds.Values.Distinct().ToList(), ct);
+        var result = new List<Food>();
+        foreach (var query in StarterFoods)
+        {
+            if (StarterIds.TryGetValue(query, out var id) && found.TryGetValue(id, out var cached)) { result.Add(cached); continue; }
+            StarterIds.TryRemove(query, out _);
+            var best = (await foodService.SearchRankedAsync(query, 1, ct, useHistory: false)).FirstOrDefault();
+            if (best is null) continue;
+            if (best.Food.IsShared) StarterIds[query] = best.Food.Id;
+            result.Add(best.Food);
+        }
+        return result;
+    }
+
+    private GapCandidate? FoodCandidate(Food food, double? usualGrams, GapOrigin origin, int familiarity, IReadOnlySet<MealSlot>? slots, IReadOnlyList<Domain.Pantry.PantryItem>? stocked, bool loggedByYou = false)
     {
         var (group, role) = GapRoles.ClassifyFood(food.Name, food.Category);
-        // A food the rules know nothing about is still fine if you eat it; a known ingredient (oil, coffee, flour) never is.
+        // A food the rules know nothing about is still fine if you log it; a known ingredient (oil, coffee, flour) never is.
         if (role == GapRole.Ingredient)
         {
-            if (!origin.HasFlag(GapOrigin.Frequent) || GapRoles.Recognized(food.Name, food.Category)) return null;
+            if (!loggedByYou || GapRoles.Recognized(food.Name, food.Category)) return null;
             role = GapRole.Snack;
         }
         if (ChoosePortion(food, usualGrams, _policy) is not { } portion) return null;
+        // A prepared dish (soup, pizza, sandwich) is sized by its calories, not assembled from parts.
+        if (group == FoodGroup.Mixed) role = GapRoles.ClassifyRecipe([], food.NutrientsFor(portion.Grams).Calories, _policy);
 
         var maxMultiple = double.MaxValue;
         if (stocked is not null)
         {
             // Only what you actually have: pantry items without a weight are treated as "some", so they aren't limited.
-            if (stocked.All(i => i.Grams is not null)) maxMultiple = stocked.Sum(i => i.Grams!.Value) / portion.Grams;
+            // Weighed rows set the limit (rows with no weight add an unknown extra, never less than what's weighed); a food with
+            // no weights at all is "some" and not limited.
+            var weighed = stocked.Where(i => i.Grams is not null).ToList();
+            if (weighed.Count > 0) maxMultiple = weighed.Sum(i => i.Grams!.Value) / portion.Grams;
             if (maxMultiple < _policy.MinPortionFraction)
             {
                 origin &= ~GapOrigin.Pantry;
@@ -334,11 +365,17 @@ public sealed partial class GapFillService(
         foreach (var e in planned)
         {
             GapRole role;
-            if (e.Item.RecipeId is { } rid && recipeMap.TryGetValue(rid, out var recipe)) role = GapRoles.ClassifyRecipe(recipe.Categories, e.Item.Nutrients.Calories, _policy);
-            else if (e.Item.FoodId is not null) role = GapRoles.ClassifyFood(e.Item.Name, null).Role;
+            string? key;
+            if (e.Item.RecipeId is { } rid && recipeMap.TryGetValue(rid, out var recipe)) { role = GapRoles.ClassifyRecipe(recipe.Categories, e.Item.Nutrients.Calories, _policy); key = $"r:{rid}"; }
+            else if (e.Item.FoodId is { } fid)
+            {
+                var (group, foodRole) = GapRoles.ClassifyFood(e.Item.Name, null);
+                role = group == FoodGroup.Mixed ? GapRoles.ClassifyRecipe([], e.Item.Nutrients.Calories, _policy) : foodRole;
+                key = $"f:{fid}";
+            }
             else continue; // quick calories: nothing to swap it with
             var category = role switch { GapRole.Meal => GapCategory.Meal, GapRole.Snack => GapCategory.Snack, GapRole.Side => GapCategory.Side, _ => (GapCategory?)null };
-            if (category is { } c) result.Add(new GapPlanned(e.Id, e.Item.Name, c, e.Item.Nutrients));
+            if (category is { } c) result.Add(new GapPlanned(e.Id, e.Item.Name, c, e.Item.Nutrients, key));
         }
         return result;
     }
