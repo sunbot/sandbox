@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useState } from 'react';
-import { type AccessibilityActionEvent, type AccessibilityActionInfo, Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
+import { type ReactNode, useEffect, useState, type ComponentType } from 'react';
+import { type AccessibilityActionEvent, type AccessibilityActionInfo, Animated, Image, Pressable, type PressableProps, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useLargeText, useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
@@ -183,7 +183,7 @@ export function CalorieRing({ eaten, target, size = 96 }: { eaten: number; targe
 
 /* ───────────────────────── Food row ───────────────────────── */
 
-export function FoodRow({ name, detail, calories, badge, onPress, trailing, accessibilityHint, accessibilityActions, onAccessibilityAction }: {
+export function FoodRow({ name, detail, calories, badge, onPress, trailing, accessibilityHint, accessibilityActions, onAccessibilityAction, pressable }: {
   name: string;
   detail?: string;
   calories: number;
@@ -194,8 +194,10 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
   /** Extra screen-reader actions on the row (e.g. Delete for a swipeable diary row). */
   accessibilityActions?: AccessibilityActionInfo[];
   onAccessibilityAction?: (e: AccessibilityActionEvent) => void;
+  /** The touchable to use: a row inside a gesture-handler view (a swipeable row) needs gesture-handler's Pressable on Android. */
+  pressable?: ComponentType<PressableProps>;
 }) {
-  const a11y = { actions: accessibilityActions, onAction: onAccessibilityAction };
+  const a11y = { actions: accessibilityActions, onAction: onAccessibilityAction, pressable };
   const t = useTheme();
   const s = useStyles(rowStyles);
   const large = useLargeText();
@@ -234,15 +236,16 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
  */
 function Row({ onPress, label, hint, style, pressedStyle, children, a11y }: {
   onPress?: () => void; label: string; hint?: string; style: StyleProp<ViewStyle>; pressedStyle: ViewStyle; children: ReactNode;
-  a11y?: { actions?: AccessibilityActionInfo[]; onAction?: (e: AccessibilityActionEvent) => void };
+  a11y?: { actions?: AccessibilityActionInfo[]; onAction?: (e: AccessibilityActionEvent) => void; pressable?: ComponentType<PressableProps> };
 }) {
   if (!onPress) return <View style={style} accessibilityLabel={label}>{children}</View>;
+  const Touchable = a11y?.pressable ?? Pressable;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint}
+    <Touchable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint}
       accessibilityActions={a11y?.actions} onAccessibilityAction={a11y?.onAction}
       style={({ pressed }) => [style, pressed && pressedStyle]}>
       {children}
-    </Pressable>
+    </Touchable>
   );
 }
 
