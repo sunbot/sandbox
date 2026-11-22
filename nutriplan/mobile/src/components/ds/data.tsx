@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
+import { type AccessibilityActionEvent, type AccessibilityActionInfo, Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useLargeText, useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
@@ -183,7 +183,7 @@ export function CalorieRing({ eaten, target, size = 96 }: { eaten: number; targe
 
 /* ───────────────────────── Food row ───────────────────────── */
 
-export function FoodRow({ name, detail, calories, badge, onPress, trailing, accessibilityHint }: {
+export function FoodRow({ name, detail, calories, badge, onPress, trailing, accessibilityHint, accessibilityActions, onAccessibilityAction }: {
   name: string;
   detail?: string;
   calories: number;
@@ -191,14 +191,18 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
   onPress?: () => void;
   trailing?: ReactNode;
   accessibilityHint?: string;
+  /** Extra screen-reader actions on the row (e.g. Delete for a swipeable diary row). */
+  accessibilityActions?: AccessibilityActionInfo[];
+  onAccessibilityAction?: (e: AccessibilityActionEvent) => void;
 }) {
+  const a11y = { actions: accessibilityActions, onAction: onAccessibilityAction };
   const t = useTheme();
   const s = useStyles(rowStyles);
   const large = useLargeText();
   if (large) {
     // Large text: name gets the full width; calories, badge and actions go underneath.
     return (
-      <Row onPress={onPress} label={`${name}, ${detail ? detail + ', ' : ''}${Math.round(calories)} calories`} hint={accessibilityHint}
+      <Row onPress={onPress} label={`${name}, ${detail ? detail + ', ' : ''}${Math.round(calories)} calories`} hint={accessibilityHint} a11y={a11y}
         style={[s.row, { flexDirection: 'column', alignItems: 'stretch', gap: 4 }]} pressedStyle={{ backgroundColor: t.colors.surfaceMuted }}>
         <AppText variant="body" numberOfLines={4}>{name}</AppText>
         <AppText variant="secondary" tone="secondary" numeric>
@@ -209,7 +213,7 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
     );
   }
   return (
-    <Row onPress={onPress} label={`${name}, ${detail ? detail + ', ' : ''}${Math.round(calories)} calories`} hint={accessibilityHint}
+    <Row onPress={onPress} label={`${name}, ${detail ? detail + ', ' : ''}${Math.round(calories)} calories`} hint={accessibilityHint} a11y={a11y}
       style={s.row} pressedStyle={{ backgroundColor: t.colors.surfaceMuted }}>
       <View style={{ flex: 1, gap: 2 }}>
         <AppText variant="body" numberOfLines={2}>{name}</AppText>
@@ -228,12 +232,14 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
  * A row is only a button when it has an action. A row without one (e.g. a planned food whose action is its own
  * Log button) is a plain View, so it doesn't mark its children as disabled for screen readers.
  */
-function Row({ onPress, label, hint, style, pressedStyle, children }: {
+function Row({ onPress, label, hint, style, pressedStyle, children, a11y }: {
   onPress?: () => void; label: string; hint?: string; style: StyleProp<ViewStyle>; pressedStyle: ViewStyle; children: ReactNode;
+  a11y?: { actions?: AccessibilityActionInfo[]; onAction?: (e: AccessibilityActionEvent) => void };
 }) {
   if (!onPress) return <View style={style} accessibilityLabel={label}>{children}</View>;
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint}
+      accessibilityActions={a11y?.actions} onAccessibilityAction={a11y?.onAction}
       style={({ pressed }) => [style, pressed && pressedStyle]}>
       {children}
     </Pressable>

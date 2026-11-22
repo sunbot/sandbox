@@ -84,3 +84,15 @@ test('a new log starts on the natural item, else on the given grams or 100 g', a
   assert.deepEqual(startingSelection([m('ml', 1, 'Volume', 'ml')], 'ml'), { text: '100', unit: 'ml' });
   assert.ok(Math.abs(previewPer100({ calories: 579, protein: 21, carbs: 22, fat: 50, fiber: 12.5 }, 14.4).calories - 83.376) < 1e-9);
 });
+
+test('logged amounts read naturally', async () => {
+  const { amountText } = await import('./quantity.ts');
+  assert.equal(amountText(12, 'almond'), '12 almonds');
+  assert.equal(amountText(1, 'almond'), '1 almond');
+  assert.equal(amountText(2, 'cup'), '2 cups');
+  assert.equal(amountText(28, 'g'), '28 g');
+  assert.equal(amountText(2, 'large'), '2 large');
+  assert.equal(amountText(1.5, 'servings'), '1.5 servings');
+  assert.equal(amountText(2, 'patty'), '2 patties');
+  assert.equal(amountText(2, 'medium (7" long)'), '2 medium (7" long)'); // an old USDA description is left as it is
+});

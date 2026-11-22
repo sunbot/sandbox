@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView as PlainScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { AppText, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryBu
 import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
+import { SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -130,14 +132,14 @@ export default function TodayScreen() {
   const page = { paddingTop: insets.top + t.space.sm, paddingHorizontal: t.screenPadding, paddingBottom: t.space.huge * 2, gap: t.space.lg };
 
   if (data.day.isLoading || data.targets.isLoading) {
-    return <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{header}<TodaySkeleton /></ScrollView>;
+    return <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{header}<TodaySkeleton /></PlainScrollView>;
   }
 
   if (data.day.error || data.targets.error || !data.view || !data.targets.data) {
     const err = data.day.error ?? data.targets.error;
     const status = (err as { status?: number } | null)?.status;
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+      <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
         {header}
         <EmptyState icon={CloudOff}
           title={status === 401 ? 'Enter your API key' : status === 0 ? "Can't reach your server" : "Couldn't load today"}
@@ -146,7 +148,7 @@ export default function TodayScreen() {
             <PrimaryButton label="Try again" onPress={() => { data.refetchAll(); }} />
             {status === 401 || status === 0 ? <SecondaryButton label="Open settings" onPress={() => router.push('/settings')} /> : null}
           </View>} />
-      </ScrollView>
+      </PlainScrollView>
     );
   }
 
@@ -159,8 +161,10 @@ export default function TodayScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
       <TopGlow />
+      <SwipeGroup>{(closeOpenRow) => (
       <ScrollView
         contentContainerStyle={page}
+        onScrollBeginDrag={closeOpenRow} // scrolling closes a swiped-open row
         refreshControl={<RefreshControl refreshing={data.day.isRefetching} onRefresh={() => { data.refetchAll(); }} colors={[t.colors.primary]} progressViewOffset={insets.top} />}
       >
         {header}
@@ -182,7 +186,7 @@ export default function TodayScreen() {
             return (
               <MealSection key={m} meal={m} totals={md?.totals.calories ?? 0} entries={entries} planned={planned}
                 expanded={isExpanded} onToggle={() => setExpanded((x) => ({ ...x, [m]: !isExpanded }))}
-                onAdd={() => go('/food/search', m)} onEntry={setEditing} onLogPlanned={logPlanned} loggingId={loggingId} />
+                onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry} onLogPlanned={logPlanned} loggingId={loggingId} />
             );
           })}
         </View>
@@ -190,6 +194,7 @@ export default function TodayScreen() {
         <NutrientsCard progress={day.progress} mode={nutrientMode} anythingLogged={anythingLogged} onSeeAll={() => setShowNutrients(true)}
           onFillGaps={() => router.push({ pathname: '/gaps', params: { date } })} />
       </ScrollView>
+      )}</SwipeGroup>
 
       <EntrySheet
         entry={editing}

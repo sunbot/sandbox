@@ -5,9 +5,11 @@ import {
   AppCard, AppText, Badge, BottomSheet, CalorieRing, FilterChip, FoodRow, IconButton, MacroProgress, NutrientProgress,
   PrimaryButton, SecondaryButton, Skeleton, TextButton, nutrientStatus, nutrientStatusInProgress, type NutrientStatus,
 } from '@/components/ds';
-import { amount as fmtQty, meals, type Meal } from '@/lib/format';
+import { meals, type Meal } from '@/lib/format';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useLargeText, useTheme } from '@/theme/ThemeProvider';
+import { SwipeableDiaryRow } from '@/features/diary/SwipeableDiaryRow';
+import { amountText } from '@/features/quantity/quantity';
 
 const mealLabel = (m: Meal) => (m === 'Snack' ? 'Snacks' : m);
 const MACRO_IDS = new Set([1008, 1003, 1004, 1005]);
@@ -136,7 +138,7 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
 
 /* ───────────────────────── Meal section ───────────────────────── */
 
-export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onLogPlanned, loggingId }: {
+export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onLogPlanned, loggingId }: {
   meal: Meal;
   totals: number;
   entries: DiaryEntry[];
@@ -145,6 +147,7 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   onToggle: () => void;
   onAdd: () => void;
   onEntry: (e: DiaryEntry) => void;
+  onDeleteEntry: (e: DiaryEntry) => void;
   onLogPlanned: (p: PlanEntry) => void;
   loggingId?: string | null;
 }) {
@@ -184,8 +187,8 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
       {expanded ? (
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.xs }}>
           {entries.map((e) => (
-            <FoodRow key={e.id} name={displayName(e.item)} detail={detailFor(e.item)} calories={e.item.nutrition.calories}
-              onPress={() => onEntry(e)} accessibilityHint="Edit amount, change meal, or delete" />
+            <SwipeableDiaryRow key={e.id} name={displayName(e.item)} detail={detailFor(e.item)} calories={e.item.nutrition.calories}
+              onPress={() => onEntry(e)} onDelete={() => onDeleteEntry(e)} accessibilityHint="Edit amount or meal. Swipe left to delete" />
           ))}
           {planned.map((p) => (
             <FoodRow key={p.id} name={displayName(p.item)} detail={detailFor(p.item)} calories={p.item.nutrition.calories}
@@ -202,9 +205,9 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   );
 }
 
-function detailFor(item: DiaryEntry['item']) {
+export function detailFor(item: DiaryEntry['item']) {
   if (item.kind === 'QuickCalories') return 'Quick entry';
-  const qty = fmtQty(item.quantity, item.unit);
+  const qty = amountText(item.quantity, item.unit);
   return item.grams && item.unit !== 'g' ? `${qty} · ${Math.round(item.grams)} g` : qty;
 }
 

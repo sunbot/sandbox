@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView as PlainScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
+import { SwipeableDiaryRow, SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
+import { amountText } from '@/features/quantity/quantity';
 import { router } from 'expo-router';
 import { useDeleteEntry, usePlanMutations, useRebalance, useUpdateEntry, useWeek } from '@/api/hooks';
 import type { DiaryEntry, PlanDay, PlanEntry } from '@/api/types';
@@ -14,7 +17,7 @@ import { displayName } from '@/features/today/sections';
 import { CopyDaySheet, PlanEntrySheet, type PlanAction } from '@/features/week/PlanEntrySheet';
 import { WeekChart } from '@/features/week/WeekChart';
 import { chartDays, weekSummary } from '@/features/week/weekChart';
-import { addDays, amount as fmtQty, fromIsoDate, mealForNow, shortDay, today } from '@/lib/format';
+import { addDays, fromIsoDate, mealForNow, shortDay, today } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -103,18 +106,18 @@ export default function WeekScreen() {
 
   if (week.isLoading) {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+      <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
         <Skeleton width="60%" height={28} />
         {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} width="100%" height={84} radius={20} />)}
-      </ScrollView>
+      </PlainScrollView>
     );
   }
   if (week.error || !week.data) {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
+      <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>
         <EmptyState icon={CloudOff} title="Couldn't load your week" body={week.error instanceof Error ? week.error.message : undefined}
           action={<PrimaryButton label="Try again" onPress={() => week.refetch()} />} />
-      </ScrollView>
+      </PlainScrollView>
     );
   }
 
@@ -125,7 +128,8 @@ export default function WeekScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
-      <ScrollView contentContainerStyle={page}
+      <SwipeGroup>{(closeOpenRow) => (
+      <ScrollView contentContainerStyle={page} onScrollBeginDrag={closeOpenRow}
         refreshControl={<RefreshControl refreshing={week.isRefetching} onRefresh={() => { week.refetch(); rebalance.refetch(); }} colors={[t.colors.primary]} />}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.xs }}>
           <IconButton icon={ChevronLeft} label="Previous week" onPress={() => setAnchor(addDays(w.weekStart, -7))} />
@@ -188,7 +192,7 @@ export default function WeekScreen() {
         <View style={{ gap: t.space.md }}>
           {days.map((d) => (
             <DayCard key={d.date} day={d} open={open === d.date} onToggle={() => { haptic.select(); setOpen(open === d.date ? null : d.date); }}
-              onPlanned={setSelected} onLogged={setEditing} onCopy={() => setCopyFrom(d)} />
+              onPlanned={setSelected} onLogged={setEditing} onDeleteLogged={deleteLogged} onCopy={() => setCopyFrom(d)} />
           ))}
         </View>
 
@@ -198,6 +202,7 @@ export default function WeekScreen() {
           <ListRow icon={Grid3x3} title="Weekly nutrients" hint="Every nutrient, day by day" onPress={() => router.push({ pathname: '/insights', params: { date: w.weekStart } })} />
         </ListGroup>
       </ScrollView>
+      )}</SwipeGroup>
 
       <PlanEntrySheet entry={selected} days={w.days} busy={busy} onAction={act} onClose={() => setSelected(null)}
         loggedEntry={selected ? w.days.flatMap((d) => d.logged).find((l) => l.planEntryId === selected.id) ?? null : null}
@@ -233,8 +238,8 @@ function Bar({ eaten, planned, target, height = 6 }: { eaten: number; planned: n
   );
 }
 
-function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
-  day: PlanDay; open: boolean; onToggle: () => void; onPlanned: (e: PlanEntry) => void; onLogged: (e: DiaryEntry) => void; onCopy: () => void;
+function DayCard({ day, open, onToggle, onPlanned, onLogged, onDeleteLogged, onCopy }: {
+  day: PlanDay; open: boolean; onToggle: () => void; onPlanned: (e: PlanEntry) => void; onLogged: (e: DiaryEntry) => void; onDeleteLogged: (e: DiaryEntry) => void; onCopy: () => void;
 }) {
   const t = useTheme();
   const left = day.adjustedCalorieTarget - day.projected.calories;
@@ -266,15 +271,15 @@ function DayCard({ day, open, onToggle, onPlanned, onLogged, onCopy }: {
       {open ? (
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>
           {planned.map((e) => (
-            <FoodRow key={e.id} name={displayName(e.item)} detail={`${e.meal === 'Snack' ? 'Snacks' : e.meal} · ${fmtQty(e.item.quantity, e.item.unit)}`}
+            <FoodRow key={e.id} name={displayName(e.item)} detail={`${e.meal === 'Snack' ? 'Snacks' : e.meal} · ${amountText(e.item.quantity, e.item.unit)}`}
               calories={e.item.nutrition.calories} onPress={() => onPlanned(e)} accessibilityHint="Log, skip, move or remove"
               badge={e.status === 'Eaten' ? <Badge label="Logged" tone="success" icon={Check} />
                 : e.status === 'Skipped' ? <Badge label="Skipped" icon={Minus} />
                 : <Badge label="Planned" tone="primary" icon={CalendarClock} />} />
           ))}
           {logged.map((l) => (
-            <FoodRow key={l.id} name={displayName(l.item)} detail={`${l.meal === 'Snack' ? 'Snacks' : l.meal} · ${l.item.kind === 'QuickCalories' ? 'quick entry' : fmtQty(l.item.quantity, l.item.unit)}`}
-              calories={l.item.nutrition.calories} onPress={() => onLogged(l)} accessibilityHint="Edit amount, change meal, or delete"
+            <SwipeableDiaryRow key={l.id} name={displayName(l.item)} detail={`${l.meal === 'Snack' ? 'Snacks' : l.meal} · ${l.item.kind === 'QuickCalories' ? 'quick entry' : amountText(l.item.quantity, l.item.unit)}`}
+              calories={l.item.nutrition.calories} onPress={() => onLogged(l)} onDelete={() => onDeleteLogged(l)} accessibilityHint="Edit amount or meal. Swipe left to delete"
               badge={<Badge label="Logged" tone="success" icon={Check} />} />
           ))}
           {planned.length === 0 && logged.length === 0 ? <AppText variant="secondary" tone="muted" style={{ paddingVertical: t.space.sm }}>Nothing planned or logged yet.</AppText> : null}

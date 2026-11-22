@@ -143,3 +143,16 @@ export function previewPer100<T extends { calories: number; protein: number; car
   const f = base / 100;
   return { calories: per100.calories * f, protein: per100.protein * f, carbs: per100.carbs * f, fat: per100.fat * f, fiber: per100.fiber * f };
 }
+
+const NO_PLURAL = new Set(['g', 'kg', 'mg', 'oz', 'lb', 'ml', 'l', 'tbsp', 'tsp', 'fl oz', 'small', 'medium', 'large', 'extra-large', 'jumbo', 'regular', 'mini', 'entry']);
+
+/** A unit word for an amount: "12 almonds", "1 almond", "2 cups", "28 g", "2 large" (same plural rules as the server). */
+export function unitFor(qty: number, unit: string): string {
+  const u = unit.trim();
+  if (Math.abs(qty - 1) < 1e-9 || NO_PLURAL.has(u.toLowerCase()) || /[\s(),\d]/.test(u) || u.endsWith('s')) return u;
+  if (/[^aeiou]y$/i.test(u)) return u.slice(0, -1) + 'ies';
+  if (/(ch|sh|x)$/i.test(u)) return u + 'es';
+  return u + 's';
+}
+
+export const amountText = (qty: number, unit: string) => `${formatQuantity(qty)} ${unitFor(qty, unit)}`;
