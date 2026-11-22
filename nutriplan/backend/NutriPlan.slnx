@@ -6,6 +6,7 @@
     <Project Path="src/NutriPlan.Infrastructure/NutriPlan.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/NutriPlan.Api.Tests/NutriPlan.Api.Tests.csproj" />
     <Project Path="tests/NutriPlan.Application.Tests/NutriPlan.Application.Tests.csproj" />
     <Project Path="tests/NutriPlan.Domain.Tests/NutriPlan.Domain.Tests.csproj" />
     <Project Path="tests/NutriPlan.Infrastructure.Tests/NutriPlan.Infrastructure.Tests.csproj" />

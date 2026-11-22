@@ -52,8 +52,10 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         await new NpgsqlCommand($"DROP DATABASE IF EXISTS {_database} WITH (FORCE)", conn).ExecuteNonQueryAsync();
     }
 
-    private NutriPlanDbContext NewContext() =>
-        new(new DbContextOptionsBuilder<NutriPlanDbContext>().UseNpgsql(_connectionString).UseSnakeCaseNamingConvention().Options);
+    /// <summary>A context acting as one signed-in user (the migrated legacy owner unless another user is named).</summary>
+    private NutriPlanDbContext NewContext(Guid? user = null) =>
+        new(new DbContextOptionsBuilder<NutriPlanDbContext>().UseNpgsql(_connectionString).UseSnakeCaseNamingConvention().Options,
+            new TestUser(user ?? Domain.Users.AppUser.LegacyOwnerId));
 
     [PostgresFact]
     public async Task Usda_import_search_and_logging_work_end_to_end()
@@ -223,4 +225,10 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(dir, "food_category.csv"), "\"id\",\"code\",\"description\"\n\"1\",\"0100\",\"Dairy and Egg Products\"\n\"11\",\"1100\",\"Vegetables and Vegetable Products\"\n");
         return dir;
     }
+}
+
+internal sealed class TestUser(Guid id) : Application.Abstractions.ICurrentUser
+{
+    public bool IsAuthenticated => true;
+    public Guid Id => id;
 }
