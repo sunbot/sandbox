@@ -30,6 +30,8 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.AddIntakeGridAuth();
+// Fill the Gaps thresholds (snack/meal calorie windows, portion limits, …) can be tuned with GapFill__* settings.
+builder.Services.Configure<NutriPlan.Domain.Planning.GapFillPolicy>(builder.Configuration.GetSection("GapFill"));
 builder.Services.AddSingleton<NutriPlan.Application.Common.IdempotencyStore>();
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o =>

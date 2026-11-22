@@ -105,8 +105,8 @@ public static class PlanEndpoints
         g.MapDelete("/{id:guid}", async (Guid id, PlanService s, CancellationToken ct) => { await s.DeleteAsync(id, ct); return Results.NoContent(); });
         g.MapGet("/rebalance", (DateOnly date, DateOnly? today, PlanService s, CancellationToken ct) => s.ProposeRebalanceAsync(date, today, ct));
         g.MapPost("/rebalance", (RebalanceApplyRequest r, PlanService s, CancellationToken ct) => s.ApplyRebalanceAsync(r.Date, r.Scale, ct));
-        g.MapGet("/gaps", (DateOnly date, bool? includePlanned, bool? micros, bool? recipesOnly, int? maxItems, GapFillService s, CancellationToken ct) =>
-            s.SuggestAsync(new GapFillRequest(date, includePlanned ?? true, micros ?? true, maxItems ?? 3, recipesOnly ?? false), ct));
+        g.MapGet("/gaps", (DateOnly date, bool? includePlanned, bool? micros, bool? recipesOnly, int? maxItems, NutriPlan.Domain.Planning.GapMode? mode, MealSlot? meal, GapFillService s, CancellationToken ct) =>
+            s.SuggestAsync(new GapFillRequest(date, includePlanned ?? true, micros ?? true, maxItems ?? 3, recipesOnly ?? false, mode, meal), ct));
         g.MapGet("/grocery", (DateOnly from, DateOnly to, bool? subtractPantry, GroceryService s, CancellationToken ct) => s.BuildAsync(from, to, subtractPantry ?? true, ct));
 
         var t = api.MapGroup("/targets").WithTags("Targets");
