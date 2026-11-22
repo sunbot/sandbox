@@ -25,8 +25,12 @@ const DELETE_WIDTH = 96;
 const Pressable: ComponentType<PressableProps> = Platform.OS === 'web' ? RNPressable : (GHPressable as unknown as ComponentType<PressableProps>);
 
 /**
- * A logged diary food: tap to edit; swipe left to reveal Delete (never deletes by itself). The row looks exactly like
- * any other food row until swiped. Screen readers get a "Delete" action on the row, and Delete is also in the editor.
+ * A logged diary food: tap to edit; swipe left to delete it (the screen shows Undo for a few seconds before anything is
+ * removed on the server). The row looks exactly like any other food row until swiped. The Delete button revealed by the swipe
+ * also works, screen readers get a "Delete" action on the row, and Delete is also in the editor.
+ *
+ * Why the swipe itself deletes: on some Android phones a tap on the button inside the swipe panel never arrived (the button
+ * showed but did nothing), so deleting can't depend on that tap. A swipe past the threshold is the same gesture that revealed it.
  * Reduced motion: Reanimated follows the system setting, so the reveal/close animations are skipped when it's on.
  *
  * On Android/iOS both the row and Delete use gesture-handler's Pressable: React Native's own Pressable inside a swipeable
@@ -53,7 +57,11 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
     onPress();
   }, [group, onPress]);
 
+  // Once per swipe: the open event and the button can both ask to delete the same row.
+  const deleting = useRef(false);
   const remove = useCallback(() => {
+    if (deleting.current) return;
+    deleting.current = true;
     methods.current?.close();
     group?.forget(methods.current);
     onDelete();
@@ -65,13 +73,14 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
     <ReanimatedSwipeable
       ref={methods}
       friction={1.5}
-      rightThreshold={DELETE_WIDTH / 2}
+      rightThreshold={DELETE_WIDTH * 0.65}
       overshootRight={false}
       dragOffsetFromRight={16}
       // The row covers the Delete action until it's swiped: same surface as the meal card it sits in.
       childrenContainerStyle={{ backgroundColor: t.colors.surface }}
       onSwipeableWillOpen={() => methods.current && group?.opened(methods.current)}
-      onSwipeableClose={() => group?.forget(methods.current)}
+      onSwipeableOpen={remove}
+      onSwipeableClose={() => { deleting.current = false; group?.forget(methods.current); }}
       renderRightActions={() => (
         <View style={{ width: DELETE_WIDTH, paddingLeft: t.space.sm, justifyContent: 'center' }}>
           <Pressable onPress={remove} accessibilityRole="button" accessibilityLabel={`Delete ${name}`}

@@ -77,13 +77,15 @@ async function openDefault(): Promise<Opened> {
  */
 async function chooseCamera(first: Opened, isAlive: () => boolean): Promise<Opened> {
   if (!needsBetterCamera(first.summary) || !navigator.mediaDevices.enumerateDevices) return first;
-  let devices: MediaDeviceInfo[] = [];
-  try { devices = await navigator.mediaDevices.enumerateDevices(); } catch { return first; }
-  const others = rearCandidates(devices.map((d) => ({
-    deviceId: d.deviceId, label: d.label, kind: d.kind,
-    facing: typeof (d as MediaDeviceInfo & { getCapabilities?: () => TrackCaps }).getCapabilities === 'function'
-      ? (d as MediaDeviceInfo & { getCapabilities: () => TrackCaps }).getCapabilities().facingMode : undefined,
-  })), first.deviceId);
+  let others: string[] = [];
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    others = rearCandidates(devices.map((d) => ({
+      deviceId: d.deviceId, label: d.label, kind: d.kind,
+      facing: typeof (d as MediaDeviceInfo & { getCapabilities?: () => TrackCaps }).getCapabilities === 'function'
+        ? (d as MediaDeviceInfo & { getCapabilities: () => TrackCaps }).getCapabilities().facingMode : undefined,
+    })), first.deviceId);
+  } catch { return first; } // nothing was changed: the camera that's open stays open
   if (others.length === 0) return first;
 
   stop(first.stream);
@@ -97,11 +99,16 @@ async function chooseCamera(first: Opened, isAlive: () => boolean): Promise<Open
       stop(o.stream);
     } catch { /* that lens can't be opened: skip it */ }
   }
-  const best = pickBestCamera(tried) ?? first;
-  // Whatever isn't kept is closed; a camera that was closed to try others is reopened by its id.
+  // A lens is only preferred for focusing: if none can, the browser's own choice stays (no swapping for a larger picture).
+  const best = tried.some((t) => t.summary.continuousFocus) ? (pickBestCamera(tried) ?? first) : first;
+  // Whatever isn't kept is closed; a camera that was closed to try others is reopened by its id, else as the browser would.
   tried.forEach((t) => { if (t !== best) stop(t.stream); });
   if (best.stream.active) return best;
-  return inspect(await navigator.mediaDevices.getUserMedia({ video: buildVideoConstraints(best.deviceId), audio: false }));
+  try {
+    return inspect(await navigator.mediaDevices.getUserMedia({ video: buildVideoConstraints(best.deviceId), audio: false }));
+  } catch {
+    return openDefault(); // some phones refuse an immediate reopen by id: the plain request worked before and still can
+  }
 }
 
 function DetectorCamera({ torch, zoomed, onScanned, onError, onSupport, formats }: ScanCameraProps & { formats: string[] }) {
@@ -109,6 +116,8 @@ function DetectorCamera({ torch, zoomed, onScanned, onError, onSupport, formats 
   const opened = useRef<Opened | null>(null);
   const callbacks = useRef({ onScanned, onError, onSupport });
   useEffect(() => { callbacks.current = { onScanned, onError, onSupport }; });
+  const latest = useRef({ zoomed, torch });
+  useEffect(() => { latest.current = { zoomed, torch }; });
 
   // Open the camera, show it, scan it; release everything when leaving.
   useEffect(() => {
@@ -137,12 +146,19 @@ function DetectorCamera({ torch, zoomed, onScanned, onError, onSupport, formats 
 
         const focus = focusConstraint(summary);
         if (focus) await track.applyConstraints({ advanced: [focus] }).catch(() => undefined);
+        if (!alive) return; // left the screen while the camera was being set up: cleanup already stopped it
         if (__DEV__) console.debug('[scan] camera', { size: `${summary.width}x${summary.height}`, focusModes: summary.focusModes, zoom: summary.zoom, torch: summary.torch });
         callbacks.current.onSupport?.({ zoom: zoomedLevel(summary) !== null, torch: summary.torch });
         track.addEventListener('ended', () => { if (alive) callbacks.current.onError('The camera stopped. Close other apps using it, then reopen this screen, or type the barcode.'); });
 
         video.srcObject = current.stream;
         await video.play().catch(() => undefined);
+        if (!alive) return;
+        // Zoom and torch may already be on (set before this camera finished opening).
+        const wanted = latest.current;
+        const zoomNow = wanted.zoomed ? zoomedLevel(summary) : null;
+        if (zoomNow !== null) void track.applyConstraints({ advanced: [{ zoom: zoomNow } as MediaTrackConstraintSet] }).catch(() => undefined);
+        if (wanted.torch && summary.torch) void track.applyConstraints({ advanced: [{ torch: true } as MediaTrackConstraintSet] }).catch(() => undefined);
 
         const detector = new Ctor({ formats });
         let busy = false;
@@ -151,7 +167,9 @@ function DetectorCamera({ torch, zoomed, onScanned, onError, onSupport, formats 
           if (busy || document.hidden || video.readyState < 2) return;
           busy = true;
           try {
-            for (const b of await detector.detect(video)) if (b.rawValue) callbacks.current.onScanned(b.rawValue);
+            const found = await detector.detect(video);
+            if (!alive) return; // a detection that finished after leaving the screen is dropped
+            for (const b of found) if (b.rawValue) callbacks.current.onScanned(b.rawValue);
           } catch { /* a missed frame; the next one tries again */ } finally { busy = false; }
         }, SCAN_INTERVAL_MS);
       } catch (e) {
