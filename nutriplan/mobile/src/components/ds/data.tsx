@@ -24,11 +24,15 @@ function Track({ ratio, color, height = 8 }: { ratio: number; color: string; hei
 /**
  * One macro: name, "eaten / target g", thin bar in the macro's own color. Always labelled (color is never the only cue).
  * `layout="column"` is the compact version used three-across in the summary card.
+ * The bar can't grow past full, so going over the target is said in words ("12 g over") and the bar turns the over color,
+ * like the calorie ring; the number itself is never capped.
  */
 export function MacroProgress({ label, value, target, color, layout = 'row' }: { label: string; value: number; target: number; color: string; layout?: 'row' | 'column' }) {
   const t = useTheme();
   const over = target > 0 && value > target * 1.05;
-  const a11y = `${label}: ${round(value)} of ${round(target)} grams${over ? ', over target' : ''}`;
+  const a11y = `${label}: ${round(value)} of ${round(target)} grams${over ? `, ${round(value - target)} grams over target` : ''}`;
+  const barColor = over ? t.colors.accent : color;
+  const overNote = over ? <AppText variant="caption" numeric style={{ color: t.colors.accentText }} numberOfLines={1}>{round(value - target)} g over</AppText> : null;
   const name = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
@@ -37,7 +41,7 @@ export function MacroProgress({ label, value, target, color, layout = 'row' }: {
   );
   const amount = (
     <AppText variant="label" numeric numberOfLines={1}>
-      <AppText variant="label" numeric style={{ fontWeight: '600' }}>{round(value)}</AppText>
+      <AppText variant="label" numeric style={over ? { fontWeight: '600', color: t.colors.accentText } : { fontWeight: '600' }}>{round(value)}</AppText>
       <AppText variant="label" tone="secondary" numeric> / {round(target)} g</AppText>
     </AppText>
   );
@@ -46,7 +50,8 @@ export function MacroProgress({ label, value, target, color, layout = 'row' }: {
       <View accessible accessibilityLabel={a11y} style={{ flex: 1, gap: 4, minWidth: 0 }}>
         {name}
         {amount}
-        <Track ratio={target > 0 ? value / target : 0} color={color} height={6} />
+        <Track ratio={target > 0 ? value / target : 0} color={barColor} height={6} />
+        {overNote}
       </View>
     );
   }
@@ -56,7 +61,8 @@ export function MacroProgress({ label, value, target, color, layout = 'row' }: {
         {name}
         {amount}
       </View>
-      <Track ratio={target > 0 ? value / target : 0} color={color} />
+      <Track ratio={target > 0 ? value / target : 0} color={barColor} />
+      {overNote}
     </View>
   );
 }
