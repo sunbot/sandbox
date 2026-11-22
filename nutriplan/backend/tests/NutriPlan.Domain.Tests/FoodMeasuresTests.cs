@@ -99,4 +99,15 @@ public class FoodMeasuresTests
         Assert.Equal("g", FoodMeasures.Match(m, "grams")!.Unit);
         Assert.Null(FoodMeasures.Match(m, "slice"));
     }
+
+    [Fact]
+    public void A_size_that_names_a_kind_of_part_is_not_a_measure_of_its_own()
+    {
+        var bread = F("Bread, whole-wheat", new FoodPortion("slice, regular", 28), new FoodPortion("slice, large", 32), new FoodPortion("slice, thin", 20));
+        var m = FoodMeasures.For(bread);
+        Assert.DoesNotContain(m, x => x.Unit is "large" or "thin" or "regular");
+        Assert.Contains(m, x => x.Unit == "slice" && x.BasePerUnit == 28);
+        // A size that is the item itself still is one.
+        Assert.Contains(FoodMeasures.For(F("Egg, whole, raw", new FoodPortion("large", 50))), x => x.Unit == "large");
+    }
 }

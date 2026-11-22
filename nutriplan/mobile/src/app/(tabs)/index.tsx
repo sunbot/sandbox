@@ -84,7 +84,7 @@ export default function TodayScreen() {
         message: `Updated ${displayName(e.item)}`,
         actionLabel: 'Undo',
         // Undo puts back exactly what was there: the same amount in the same measure, and the same meal.
-        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, meal: c.meal ? e.meal : undefined }),
+        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, grams: c.amount !== undefined ? e.item.grams ?? undefined : undefined, meal: c.meal ? e.meal : undefined }),
       });
     } catch (err) {
       snackbar({ message: errorText(err, "Couldn't save changes") }); // the draft is kept, so nothing typed is lost

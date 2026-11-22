@@ -5,7 +5,7 @@ import type { DiaryEntry, PlanDay, PlanEntry } from '@/api/types';
 import { AppText, BottomSheet, FilterChip, PrimaryButton, SecondaryButton, TextButton } from '@/components/ds';
 import { ArrowLeftRight, CalendarArrowDown, Check, Pencil, Trash2, Undo2 } from '@/components/ds/icons';
 import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
-import { checkQuantity, initialSelection, matchMeasure, measuresForItem, parseQuantity, scaleFactor } from '@/features/quantity/quantity';
+import { checkQuantity, initialSelection, matchMeasure, measuresForItem, parseQuantity, roundAmount, scaleFactor } from '@/features/quantity/quantity';
 import { displayName } from '@/features/today/sections';
 import { amount as fmtQty, meals, shortDay, today, type Meal } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -142,7 +142,7 @@ function AmountPanel({ entry, measures, baseUnit, value, onChange, busy, onSave,
   const v = value ?? initialSelection(entry.item, measures);
   const measure = matchMeasure(measures, v.unit) ?? measures[0];
   const q = parseQuantity(v.text);
-  const check = checkQuantity(q, measure, entry.item.kind === 'Recipe');
+  const check = checkQuantity(q, measure, entry.item.kind === 'Recipe', baseUnit);
   const factor = check.ok && measure ? scaleFactor(entry.item, q!, measure, measures) : null;
   const error = !check.ok ? (v.text.trim() ? check.message : null) : factor === null ? 'This amount can’t be converted from the planned amount. Use its own measure.' : null;
   return (
@@ -150,7 +150,7 @@ function AmountPanel({ entry, measures, baseUnit, value, onChange, busy, onSave,
       <QuantityPicker measures={measures} value={{ text: v.text, unit: measure?.unit ?? v.unit }} baseUnit={baseUnit} onChange={onChange} error={error} />
       <AppText variant="secondary" tone="secondary" numeric>{factor !== null ? `${Math.round(entry.item.nutrition.calories * factor)} kcal` : ' '}</AppText>
       <PrimaryButton label="Save amount" loading={busy} fullWidth disabled={!check.ok || factor === null || busy}
-        onPress={() => measure && q !== null && onSave(q, measure.unit)} />
+        onPress={() => measure && q !== null && onSave(roundAmount(q), measure.unit)} />
       <TextButton label="Back" tone="secondary" onPress={onBack} />
     </View>
   );

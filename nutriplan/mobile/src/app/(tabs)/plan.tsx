@@ -72,7 +72,7 @@ export default function WeekScreen() {
         snackbar({ message: `Swapped for ${a.name}` });
       } else if (a.kind === 'amount') {
         await m.setAmount.mutateAsync({ id: e.id, amount: a.amount, unit: a.unit });
-        snackbar({ message: `Updated ${name}`, actionLabel: 'Undo', onAction: () => m.setAmount.mutate({ id: e.id, amount: e.item.quantity, unit: e.item.unit }) });
+        snackbar({ message: `Updated ${name}`, actionLabel: 'Undo', onAction: () => m.setAmount.mutate({ id: e.id, amount: e.item.quantity, unit: e.item.unit, grams: e.item.grams ?? undefined }) });
       } else if (a.kind === 'remove') {
         hide(e.id);
         snackbar({ message: `Removed ${name}`, actionLabel: 'Undo', onAction: () => unhide(e.id),
@@ -91,11 +91,12 @@ export default function WeekScreen() {
       setDrafts(({ [e.id]: _, ...rest }) => rest);
       setEditing(null);
       snackbar({ message: `Updated ${displayName(e.item)}`, actionLabel: 'Undo',
-        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, meal: c.meal ? e.meal : undefined }) });
+        onAction: () => update.mutate({ id: e.id, amount: c.amount !== undefined ? e.item.quantity : undefined, unit: c.amount !== undefined ? e.item.unit : undefined, grams: c.amount !== undefined ? e.item.grams ?? undefined : undefined, meal: c.meal ? e.meal : undefined }) });
     } catch (err) { fail(err, "Couldn't save changes"); }
   };
 
   const deleteLogged = (e: DiaryEntry) => {
+    setDrafts(({ [e.id]: _, ...rest }) => rest);
     setEditing(null);
     hide(e.id);
     snackbar({ message: `Deleted ${displayName(e.item)}`, actionLabel: 'Undo', onAction: () => unhide(e.id),

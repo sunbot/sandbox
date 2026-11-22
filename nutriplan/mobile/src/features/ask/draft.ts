@@ -71,7 +71,9 @@ export function draftFrom(groups: FoodMatchGroup[]): DraftItem[] {
  */
 export function selectMatch(item: DraftItem, matchIndex: number): DraftItem {
   if (matchIndex === item.matchIndex || !item.group.matches[matchIndex]) return item;
-  if (item.status === 'Edited' && item.grams != null) return { ...item, matchIndex };
+  // An amount you set is kept as its weight: a measure of the previous food ("12 almonds") doesn't carry over to another food.
+  if (item.status === 'Edited' && item.grams != null)
+    return { ...item, matchIndex, amount: null, amountLabel: item.amount ? `${fmtNumber(round(item.grams, 1))} g` : item.amountLabel };
   return { ...item, matchIndex, ...fromMatch(item.group, matchIndex) };
 }
 
@@ -84,6 +86,9 @@ export function setAmount(item: DraftItem, count: number, option: AmountOption):
 }
 
 export const setRemoved = (item: DraftItem, removed: boolean): DraftItem => ({ ...item, removed });
+
+/** The amount was cleared or isn't a number: the food needs an amount again before it can be logged. */
+export const clearAmount = (item: DraftItem): DraftItem => ({ ...item, grams: null, amountLabel: null, amount: null, status: 'NeedsAmount' });
 
 export function replaceItem(items: DraftItem[], next: DraftItem): DraftItem[] {
   return items.map((i) => (i.key === next.key ? next : i));

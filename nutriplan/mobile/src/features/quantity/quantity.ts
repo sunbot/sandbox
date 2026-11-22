@@ -12,6 +12,8 @@ export const SERVING: Measure = { unit: 'serving', label: 'serving', plural: 'se
 /** Upper bounds that catch a misplaced zero (mirrors the server's ItemAmounts limits). */
 export const MAX_GRAMS = 5000;
 export const MAX_SERVINGS = 50;
+export const MIN_QUANTITY = 0.001;
+export const MIN_BASE = 0.01;
 
 const VULGAR: Record<string, number> = { '½': 0.5, '⅓': 1 / 3, '⅔': 2 / 3, '¼': 0.25, '¾': 0.75, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875 };
 
@@ -33,6 +35,8 @@ export function parseQuantity(text: string): number | null {
   if (mixed) return Number(mixed[3]) === 0 ? null : Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
   const frac = /^(\d+)\/(\d+)$/.exec(s);
   if (frac) return Number(frac[2]) === 0 ? null : Number(frac[1]) / Number(frac[2]);
+  // "1,000" could mean one thousand or 1.000: refuse rather than guess (a decimal comma with 1-2 or 4+ digits is fine).
+  if (/^\d+,\d{3}$/.test(s)) return null;
   s = s.replace(',', '.');
   if (!/^\d*\.?\d+$|^\d+\.$/.test(s)) return null;
   const n = Number(s);
@@ -58,6 +62,7 @@ const ALIASES: Record<string, string> = {
 /** The measure a stored unit ("g", "almonds", "medium (7\" long)") corresponds to, if the food has it. */
 export function matchMeasure(measures: Measure[], unit: string | null | undefined): Measure | undefined {
   if (!unit) return undefined;
+  if (unit.trim() === 'T') return measures.find((m) => m.unit === 'tbsp'); // recipe shorthand: capital T is a tablespoon
   const u = unit.trim().toLowerCase();
   const key = ALIASES[u] ?? u;
   return measures.find((m) => m.unit.toLowerCase() === key || m.plural.toLowerCase() === u || m.label.toLowerCase() === u);
@@ -78,15 +83,20 @@ export function convert(qty: number, from: Measure, to: Measure): number {
 export type QuantityCheck = { ok: true; base: number } | { ok: false; message: string };
 
 /** Whether an amount can be saved, and its base amount (grams, ml or servings). */
-export function checkQuantity(qty: number | null, m: Measure | undefined, isRecipe = false): QuantityCheck {
+export function checkQuantity(qty: number | null, m: Measure | undefined, isRecipe = false, baseUnit: 'g' | 'ml' = 'g'): QuantityCheck {
   if (!m) return { ok: false, message: 'Choose a measure.' };
   if (qty === null) return { ok: false, message: 'Enter an amount, like 12, 0.5 or 1/2.' };
   if (!(qty > 0)) return { ok: false, message: 'Enter an amount greater than zero.' };
   const base = qty * m.base;
+  // Mirrors the server: amounts that would round to nothing, and a misplaced zero, are refused.
+  if (qty < MIN_QUANTITY || (m.base > 0 && base < MIN_BASE)) return { ok: false, message: 'That amount is too small to log.' };
   if (isRecipe && qty > MAX_SERVINGS) return { ok: false, message: `That's more than ${MAX_SERVINGS} servings. Check the amount.` };
-  if (!isRecipe && base > MAX_GRAMS) return { ok: false, message: 'That’s more than 5 kg. Check the amount.' };
+  if (!isRecipe && base > MAX_GRAMS) return { ok: false, message: baseUnit === 'ml' ? 'That’s more than 5 litres. Check the amount.' : 'That’s more than 5 kg. Check the amount.' };
   return { ok: true, base };
 }
+
+/** The amount to send: rounded to 3 decimals, as the server stores it (so "1/3" is saved and shown as 0.333). */
+export const roundAmount = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
  * The measures to offer when editing an item: recipes in servings; foods in the server's list. If the item's own unit
@@ -109,10 +119,18 @@ function ownBase(item: Item) {
  * The factor to scale an item's logged nutrition by for a new amount, exactly as the server does: same unit → ratio of
  * amounts; otherwise ratio of weights. Returns null when it can't be worked out (the unit can't be converted).
  */
+/** Same unit however it's written ("almond"/"almonds", "oz"/"ounces"), as the server judges it. */
+export function sameUnit(a: string, b: string, measures: Measure[]): boolean {
+  const norm = (s: string) => { const t = s.trim().toLowerCase(); return t.length > 3 && t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t; };
+  if (norm(a) === norm(b)) return true;
+  const ma = matchMeasure(measures, a);
+  return ma !== undefined && ma === matchMeasure(measures, b);
+}
+
 export function scaleFactor(item: Item, qty: number, to: Measure, measures: Measure[]): number | null {
   if (!(item.quantity > 0)) return null;
-  const sameUnit = matchMeasure([to], item.unit) !== undefined || to.unit === item.unit;
-  if (sameUnit) return qty / item.quantity;
+  const same = sameUnit(to.unit, item.unit, measures);
+  if (same) return qty / item.quantity;
   const from = matchMeasure(measures, item.unit);
   const oldBase = item.grams && item.grams > 0 ? item.grams : from && from.base > 0 ? item.quantity * from.base : 0;
   if (!(oldBase > 0) || !(to.base > 0)) return null;
@@ -156,3 +174,18 @@ export function unitFor(qty: number, unit: string): string {
 }
 
 export const amountText = (qty: number, unit: string) => `${formatQuantity(qty)} ${unitFor(qty, unit)}`;
+
+/** The exact amount behind a converted number, so browsing measures (almonds → oz → almonds) never drifts. */
+export type ExactAmount = { text: string; base: number } | null;
+
+/**
+ * The same physical amount in another measure. While the shown number is one this function produced, it converts from
+ * the exact base amount it remembered, not from the rounded number on screen.
+ */
+export function switchMeasure(text: string, from: Measure, to: Measure, exact: ExactAmount): { text: string; exact: ExactAmount } {
+  const qty = parseQuantity(text);
+  if (qty === null || !(qty > 0) || !(from.base > 0) || !(to.base > 0)) return { text, exact: null };
+  const base = exact && exact.text === text ? exact.base : qty * from.base;
+  const next = formatQuantity(roundFor(to, base / to.base));
+  return { text: next, exact: { text: next, base } };
+}

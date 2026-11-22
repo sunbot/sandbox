@@ -45,20 +45,18 @@ export default function ScanScreen() {
     setFailure(null);
     setLooking(true);
     setStatus(`Looking up ${code}…`);
-    let failed = true;
     try {
       const food = await lookupBarcode(code);
-      failed = false;
+      // Leaving the screen: the gate stays closed so the still-running camera can't look it up (and navigate) again.
       router.replace({ pathname: '/food/[id]', params: { ...params, id: food.id } });
     } catch (e) {
       const f = scanFailure(e);
-      if (f.kind === 'notFound') { failed = false; setStatus(f.message); manual(code); return; }
+      if (f.kind === 'notFound') { setStatus(f.message); manual(code); return; }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
-      if (f.kind === 'invalid') setStatus(f.message);
-      else setFailure({ ...f, code });
+      if (f.kind === 'invalid') { setStatus(f.message); gate.done(code, true, 60_000); } // not a food barcode: don't keep retrying it
+      else { setFailure({ ...f, code }); gate.done(code, true); }
     } finally {
       setLooking(false);
-      gate.done(code, failed);
     }
   };
 
@@ -69,6 +67,7 @@ export default function ScanScreen() {
   };
 
   const submitTyped = () => {
+    if (looking) return; // the keyboard's return key while a lookup runs
     const c = checkManualBarcode(typed);
     if (!c.ok) { setTypedError(c.message); return; }
     setTypedError(null);

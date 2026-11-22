@@ -178,4 +178,76 @@ public class AmountEditTests
         Assert.Equal((12.0, "almond"), (logged.Item.Quantity, logged.Item.Unit));
         Assert.Equal(14.4, logged.Item.Grams!.Value, 6);
     }
+
+    // ── Review regressions ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task An_entry_logged_without_a_unit_can_change_amount_in_its_own_unit()
+    {
+        var egg = _store.AddFood("Egg, whole, raw", 143, 12.6, 0.7, 9.5, FoodSource.UsdaSrLegacy, new FoodPortion("large", 50));
+        var logged = await Log(egg, amount: 2); // "2 eggs": stored with the unit "serving"
+        var updated = await Diary().UpdateAsync(logged.Id, null, null, null, null, default, amount: 3, unit: logged.Item.Unit);
+        Assert.Equal((3.0, logged.Item.Unit, 150.0), (updated.Item.Quantity, updated.Item.Unit, updated.Item.Grams!.Value));
+        Assert.Equal(143 * 1.5, updated.Item.Nutrition.Calories, 0);
+    }
+
+    [Fact]
+    public async Task An_older_entry_in_a_raw_USDA_unit_can_change_its_amount_and_undo_back_to_it()
+    {
+        var f = Almonds();
+        var entry = new DiaryEntry(_store.Today, MealSlot.Snack, ItemSnapshot.ForFood(f.Id, f.Name, 28.35, f.NutrientsFor(28.35), 1, "oz (23 whole kernels)"));
+        _store.Diary.Add(entry);
+        var twice = await Diary().UpdateAsync(entry.Id, null, null, null, null, default, amount: 2, unit: "oz (23 whole kernels)");
+        Assert.Equal((2.0, "oz (23 whole kernels)", 56.7), (twice.Item.Quantity, twice.Item.Unit, twice.Item.Grams!.Value));
+
+        // To grams, then Undo back to the old unit with its weight: exactly as before.
+        await Diary().UpdateAsync(entry.Id, null, null, null, null, default, amount: 40, unit: "g");
+        var undone = await Diary().UpdateAsync(entry.Id, null, null, null, null, default, amount: 2, unit: "oz (23 whole kernels)", grams: 56.7);
+        Assert.Equal((2.0, "oz (23 whole kernels)", 56.7), (undone.Item.Quantity, undone.Item.Unit, undone.Item.Grams!.Value));
+        Assert.Equal(579 * 0.567, undone.Item.Nutrition.Calories, 0);
+    }
+
+    [Fact]
+    public async Task Same_unit_edits_keep_weight_and_nutrition_together_even_when_the_stored_weight_differs_from_the_portion()
+    {
+        var f = Almonds();
+        var entry = new DiaryEntry(_store.Today, MealSlot.Snack, ItemSnapshot.ForFood(f.Id, f.Name, 15, f.NutrientsFor(15), 10, "almond")); // 1.5 g each, not 1.2
+        _store.Diary.Add(entry);
+        var updated = await Diary().UpdateAsync(entry.Id, null, null, null, null, default, amount: 20, unit: "almonds"); // plural: still the same unit
+        Assert.Equal(30, updated.Item.Grams!.Value, 6);
+        Assert.Equal(579 * 0.30, updated.Item.Nutrition.Calories, 0);
+        Assert.Equal("almond", updated.Item.Unit);
+    }
+
+    [Theory]
+    [InlineData(0.0004, "g")]
+    [InlineData(0.0009, "almond")]
+    [InlineData(0.005, "g")]
+    public async Task Amounts_that_would_round_to_nothing_are_refused(double amount, string unit)
+    {
+        var logged = await Log(Almonds(), grams: 28);
+        await Assert.ThrowsAsync<ValidationException>(() => Diary().UpdateAsync(logged.Id, null, null, null, null, default, amount: amount, unit: unit));
+        Assert.Equal(28, Entry(logged.Id).Item.Grams);
+    }
+
+    [Fact]
+    public async Task Drinks_have_a_size_limit_too_and_new_logs_are_checked()
+    {
+        var shake = new Food("Protein shake", FoodSource.UsdaBranded, new NutrientProfile(new Dictionary<int, double> { [NutrientIds.Energy] = 60 }),
+            portions: [new FoodPortion("bottle", 340)], basis: NutrientBasis.Volume);
+        _store.Foods.Add(shake);
+        var logged = await Log(shake, amount: 1, unit: "bottle");
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => Diary().UpdateAsync(logged.Id, null, null, null, null, default, amount: 100000, unit: "ml"));
+        Assert.Contains("litres", ex.Message);
+        await Assert.ThrowsAsync<ValidationException>(() => Diary().UpdateAsync(logged.Id, null, null, null, null, default, amount: 100, unit: "bottle"));
+        await Assert.ThrowsAsync<ValidationException>(() => Log(shake, amount: 100000, unit: "ml"));
+        await Assert.ThrowsAsync<ValidationException>(() => Log(Almonds(), grams: 6000));
+    }
+
+    [Fact]
+    public async Task A_unit_without_an_amount_is_refused_instead_of_ignored()
+    {
+        var logged = await Log(Almonds(), grams: 28);
+        await Assert.ThrowsAsync<ValidationException>(() => Diary().UpdateAsync(logged.Id, null, null, null, null, default, amount: null, unit: "oz"));
+    }
 }

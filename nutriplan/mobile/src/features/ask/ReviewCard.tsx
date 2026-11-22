@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useDeleteEntry, useFoodSearch, useLogFoods, usePlanMutations } from '@/api/hooks';
 import type { AssistantResponse, Food, Measure } from '@/api/types';
 import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
-import { formatQuantity, matchMeasure, parseQuantity } from '@/features/quantity/quantity';
+import { formatQuantity, matchMeasure, parseQuantity, roundAmount } from '@/features/quantity/quantity';
 import { AppCard, AppText, Badge, BottomSheet, FilterChip, PrimaryButton, SearchField, SecondaryButton, TextButton, useSnackbar } from '@/components/ds';
 import { CalendarClock, Check, ChevronRight, CircleAlert, Trash2, Undo2 } from '@/components/ds/icons';
 import { friendlyFoodName } from '@/lib/foodName';
@@ -12,7 +12,7 @@ import { dayLabel, mealForNow, meals, today, type Meal } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import {
-  amountOptions, blockers, draftFrom, otherPreparationIndex, preview, replaceItem, selectMatch, selectedMatch, setAmount, setRemoved, toRequest, totals, withPickedFood,
+  amountOptions, blockers, clearAmount, draftFrom, otherPreparationIndex, preview, replaceItem, selectMatch, selectedMatch, setAmount, setRemoved, toRequest, totals, withPickedFood,
   type DraftItem,
 } from './draft';
 
@@ -313,7 +313,8 @@ function AmountEditor({ item, food, onChange }: { item: DraftItem; food: Food; o
     setValue(v);
     const q = parseQuantity(v.text);
     const m = matchMeasure(measures, v.unit);
-    if (q !== null && q > 0 && m) onChange(setAmount(item, q, { label: Math.abs(q - 1) < 1e-9 ? m.label : m.plural, grams: m.base, unit: food.measures?.length ? m.unit : undefined }));
+    if (q !== null && q > 0 && m) onChange(setAmount(item, roundAmount(q), { label: Math.abs(q - 1) < 1e-9 ? m.label : m.plural, grams: m.base, unit: food.measures?.length ? m.unit : undefined }));
+    else onChange(clearAmount(item)); // an empty or invalid amount can't be logged with the old one
   };
   const q = parseQuantity(value.text);
   return <QuantityPicker measures={measures} value={value} onChange={change} baseUnit={base}

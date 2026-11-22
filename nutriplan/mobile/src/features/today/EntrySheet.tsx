@@ -5,7 +5,7 @@ import type { DiaryEntry } from '@/api/types';
 import { AppText, BottomSheet, FilterChip, PrimaryButton, SecondaryButton } from '@/components/ds';
 import { Trash2 } from '@/components/ds/icons';
 import { QuantityPicker } from '@/features/quantity/QuantityPicker';
-import { checkQuantity, formatQuantity, initialSelection, matchMeasure, measuresForItem, parseQuantity, scaleFactor } from '@/features/quantity/quantity';
+import { checkQuantity, formatQuantity, initialSelection, matchMeasure, measuresForItem, parseQuantity, roundAmount, scaleFactor } from '@/features/quantity/quantity';
 import { meals, type Meal } from '@/lib/format';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -44,8 +44,9 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
   const d = draft ?? { ...start, meal: e.meal };
   const measure = matchMeasure(measures, d.unit) ?? measures[0];
   const qty = parseQuantity(d.text);
-  const amountChanged = editableAmount && (qty !== item.quantity || (measure?.unit ?? d.unit) !== start.unit);
-  const check = amountChanged ? checkQuantity(qty, measure, item.kind === 'Recipe') : null;
+  // Changed only if what's shown was changed: a stored 0.3333 shows as 0.33 and isn't a change until edited.
+  const amountChanged = editableAmount && (d.text.trim() !== start.text || (measure?.unit ?? d.unit) !== start.unit);
+  const check = amountChanged ? checkQuantity(qty, measure, item.kind === 'Recipe', food.data?.baseUnit ?? 'g') : null;
   const factor = !amountChanged ? 1 : check?.ok && measure ? scaleFactor(item, qty!, measure, measures) : null;
   const error = !amountChanged ? null
     : check && !check.ok ? check.message
@@ -62,7 +63,7 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
     Keyboard.dismiss();
     if (!changed) return onClose();
     onSave(e, {
-      amount: amountChanged ? qty! : undefined,
+      amount: amountChanged ? roundAmount(qty!) : undefined,
       unit: amountChanged ? measure!.unit : undefined,
       meal: mealChanged ? d.meal : undefined,
     });

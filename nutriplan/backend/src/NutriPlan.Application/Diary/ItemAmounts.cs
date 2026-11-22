@@ -17,9 +17,18 @@ public static class ItemAmounts
     public const double MaxGrams = 5000;
     public const double MaxServings = 50;
 
-    public static async Task<ItemSnapshot> ChangeAsync(ItemSnapshot item, double amount, string? unit, IFoodRepository foods, CancellationToken ct)
+    /// <summary>Below these an amount rounds away to nothing (and couldn't be undone), so it's refused.</summary>
+    public const double MinQuantity = 0.001;
+    public const double MinBase = 0.01;
+
+    /// <param name="grams">
+    /// Optional weight for the amount, used only when the unit itself can't be converted (an older entry's own unit such
+    /// as "oz (23 whole kernels)", restored by Undo). Never used for a drink measured by volume.
+    /// </param>
+    public static async Task<ItemSnapshot> ChangeAsync(ItemSnapshot item, double amount, string? unit, IFoodRepository foods, CancellationToken ct, double? grams = null)
     {
         if (!double.IsFinite(amount) || amount <= 0) throw new ValidationException("Enter an amount greater than zero.");
+        if (amount < MinQuantity) throw new ValidationException("That amount is too small to log.");
         switch (item.Kind)
         {
             case ItemKind.QuickCalories:
@@ -30,49 +39,65 @@ public static class ItemAmounts
                 if (!string.IsNullOrWhiteSpace(unit) && !unit.Trim().StartsWith("serving", StringComparison.OrdinalIgnoreCase))
                     throw new ValidationException("Recipes are measured in servings.");
                 if (amount > MaxServings) throw new ValidationException($"That's more than {MaxServings} servings. Check the amount.");
+                if (amount < MinBase) throw new ValidationException("That amount is too small to log.");
                 if (item.Quantity <= 0) throw new ValidationException("This entry has no amount to scale from.");
                 return item.WithAmount(amount / item.Quantity, amount, amount == 1 ? "serving" : "servings", null);
             }
         }
 
         var food = item.FoodId is { } id ? await foods.GetAsync(id, ct) : null;
-        var sameUnit = string.IsNullOrWhiteSpace(unit) || SameUnit(unit, item.QuantityUnit);
+        var measures = food is null ? [] : FoodMeasures.For(food);
+
+        // Same unit as the entry already has ("2 eggs" → 3, "10 almonds" → 20): scale by the ratio of amounts, keep the
+        // entry's own unit, and never need a conversion (so any entry, however old its unit, can always change its amount).
+        if (item.Quantity > 0 && (string.IsNullOrWhiteSpace(unit) || SameUnit(unit, item.QuantityUnit, measures)))
+        {
+            var f = amount / item.Quantity;
+            var ml = food is { IsVolume: true } ? QuantityResolver.Resolve(food, amount, item.QuantityUnit).Grams : null; // a drink's size, when its unit converts
+            return Bounded(item.WithAmount(f, amount, item.QuantityUnit, item.Grams is { } g0 ? g0 * f : null), food?.IsVolume ?? false, ml);
+        }
         if (food is null)
-        {
-            // The food is gone (or not yours): only the amount in the entry's own unit can change.
-            if (!sameUnit || item.Quantity <= 0) throw new ValidationException("This food is no longer available, so only its amount in the same unit can change.");
-            return Bounded(item.WithAmount(amount / item.Quantity, amount, item.QuantityUnit, null));
-        }
+            throw new ValidationException("This food is no longer available, so only its amount in the same unit can change.");
 
-        var unitText = string.IsNullOrWhiteSpace(unit) ? item.QuantityUnit : unit.Trim();
+        var unitText = unit!.Trim();
         var resolved = QuantityResolver.Resolve(food, amount, unitText);
-        if (resolved.Grams is not { } newBase || newBase <= 0) throw new ValidationException(resolved.Explanation);
+        double newBase;
+        if (resolved.Grams is { } r && r > 0) newBase = r;
+        else if (grams is > 0 && !food.IsVolume && item.Grams is > 0) newBase = grams.Value; // Undo back to an older entry's own unit
+        else throw new ValidationException(resolved.Explanation);
+        if (newBase < MinBase) throw new ValidationException("That amount is too small to log.");
 
-        // How much the entry held before, in the same base (grams, or ml for a drink): its recorded weight, else its own
-        // amount converted the same way. Same unit → the exact ratio of amounts, needing no conversion at all.
-        double factor;
-        if (sameUnit && item.Quantity > 0) factor = amount / item.Quantity;
-        else
-        {
-            var oldBase = !food.IsVolume && item.Grams is > 0 ? item.Grams.Value : QuantityResolver.Resolve(food, item.Quantity, item.QuantityUnit).Grams;
-            if (oldBase is not > 0) throw new ValidationException("This entry's original amount can't be converted, so change it in its own unit.");
-            factor = newBase / oldBase.Value;
-        }
-        var canonical = CanonicalUnit(food, unitText);
-        return Bounded(item.WithAmount(factor, amount, canonical, food.IsVolume ? null : newBase));
+        // Different unit: scale by the ratio of weights (grams, or ml for a drink). The entry's previous weight is its
+        // recorded one, else its own amount converted the same way.
+        var oldBase = !food.IsVolume && item.Grams is > 0 ? item.Grams.Value : QuantityResolver.Resolve(food, item.Quantity, item.QuantityUnit).Grams;
+        if (oldBase is not > 0) throw new ValidationException("This entry's original amount can't be converted, so change it in its own unit.");
+        var factor = newBase / oldBase.Value;
+        var canonical = resolved.Grams is > 0 ? FoodMeasures.Match(measures, unitText)?.Unit ?? unitText : unitText;
+        return Bounded(item.WithAmount(factor, amount, canonical, food.IsVolume ? null : newBase), food.IsVolume, food.IsVolume ? newBase : null);
     }
 
-    private static ItemSnapshot Bounded(ItemSnapshot item) =>
-        item.Grams > MaxGrams ? throw new ValidationException($"That's more than {MaxGrams / 1000:0} kg. Check the amount.") : item;
-
-    private static bool SameUnit(string a, string b)
+    /// <summary>Refuses an amount over the typo limit: 5 kg, or 5 litres for a drink measured by volume.</summary>
+    public static void CheckBase(double baseAmount, bool isVolume)
     {
-        if (string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase)) return true;
-        var ua = Units.Find(a);
-        return ua is not null && ua == Units.Find(b);
+        if (baseAmount > MaxGrams) throw new ValidationException(isVolume ? $"That's more than {MaxGrams / 1000:0} litres. Check the amount." : $"That's more than {MaxGrams / 1000:0} kg. Check the amount.");
     }
 
-    /// <summary>The unit as the food's measures name it ("almond", "cup", "g"), so the entry reads naturally.</summary>
-    private static string CanonicalUnit(Domain.Foods.Food food, string unitText) =>
-        FoodMeasures.Match(FoodMeasures.For(food), unitText)?.Unit ?? unitText;
+    private static ItemSnapshot Bounded(ItemSnapshot item, bool isVolume, double? ml)
+    {
+        if (item.Grams is { } g) CheckBase(g, false);
+        if (ml is { } v) CheckBase(v, true);
+        if (item.Grams is < MinBase) throw new ValidationException("That amount is too small to log.");
+        return item;
+    }
+
+    /// <summary>Same unit, however it's written: "almond"/"almonds", "oz"/"ounces", "serving"/"servings".</summary>
+    private static bool SameUnit(string a, string b, IReadOnlyList<FoodMeasure> measures)
+    {
+        string Norm(string s) { var t = s.Trim().ToLowerInvariant(); return t.EndsWith('s') && !t.EndsWith("ss") && t.Length > 3 ? t[..^1] : t; }
+        if (Norm(a) == Norm(b)) return true;
+        var ua = Units.Find(a);
+        if (ua is not null && ua == Units.Find(b)) return true;
+        var ma = FoodMeasures.Match(measures, a);
+        return ma is not null && ma == FoodMeasures.Match(measures, b);
+    }
 }

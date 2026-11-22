@@ -96,3 +96,37 @@ test('logged amounts read naturally', async () => {
   assert.equal(amountText(2, 'patty'), '2 patties');
   assert.equal(amountText(2, 'medium (7" long)'), '2 medium (7" long)'); // an old USDA description is left as it is
 });
+
+test('review regressions: thousands-looking commas, tiny amounts, litres, plural units', async () => {
+  const q = await import('./quantity.ts');
+  assert.equal(q.parseQuantity('1,000'), null);   // could be 1000 or 1.000: not guessed
+  assert.equal(q.parseQuantity('1,5'), 1.5);
+  assert.equal(q.parseQuantity('0,25'), 0.25);
+  assert.equal(q.parseQuantity('1,2500'), 1.25);
+  assert.equal(q.checkQuantity(0.0004, g).ok, false);
+  assert.equal(q.checkQuantity(0.005, g).ok, false);
+  assert.equal(q.checkQuantity(0.01, g).ok, true);
+  const ml = m('ml', 1, 'Volume', 'ml');
+  assert.match((q.checkQuantity(6000, ml, false, 'ml') as { message: string }).message, /litres/);
+  assert.equal(q.roundAmount(1 / 3), 0.333);
+  // Plural spellings are the same unit, as on the server: a same-unit edit scales by the ratio of amounts.
+  assert.equal(q.sameUnit('almonds', 'almond', almonds), true);
+  assert.equal(q.sameUnit('ounces', 'oz', almonds), true);
+  assert.equal(q.scaleFactor(item({ unit: 'almond', quantity: 10, grams: 15 }), 20, almond, almonds), 2);
+  assert.equal(q.matchMeasure(almonds, 'T'), tbsp);
+});
+
+test('browsing measures and coming back gives back exactly what was typed', async () => {
+  const { switchMeasure } = await import('./quantity.ts');
+  let v = switchMeasure('12', almond, oz, null);
+  assert.equal(v.text, '0.51');
+  v = switchMeasure(v.text, oz, g, v.exact);
+  assert.equal(v.text, '14.4');
+  v = switchMeasure(v.text, g, almond, v.exact);
+  assert.equal(v.text, '12');                 // not 12.05
+  // Typing a new number starts from that number.
+  const typed = switchMeasure('1', oz, almond, v.exact);
+  assert.equal(typed.text, '23.62');
+  // An amount that isn't a number is kept as typed.
+  assert.deepEqual(switchMeasure('abc', g, oz, null), { text: 'abc', exact: null });
+});

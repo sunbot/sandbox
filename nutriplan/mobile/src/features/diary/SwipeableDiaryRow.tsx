@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { AppText, FoodRow } from '@/components/ds';
@@ -37,6 +37,8 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
   const t = useTheme();
   const group = useContext(SwipeContext);
   const methods = useRef<SwipeableMethods | null>(null);
+  // A row that goes away while open (deleted, meal collapsed, day changed) must not keep swallowing the next tap.
+  useEffect(() => () => { group?.forget(methods.current); }, [group]);
 
   // A tap while some row is swiped open just closes it (it doesn't also open the editor).
   const press = useCallback(() => {

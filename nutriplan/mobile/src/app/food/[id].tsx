@@ -3,7 +3,7 @@ import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFood, useLogFood, usePlanMutations, useRecipeMutations } from '@/api/hooks';
 import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
-import { checkQuantity, matchMeasure, parseQuantity, previewPer100, startingSelection } from '@/features/quantity/quantity';
+import { checkQuantity, matchMeasure, parseQuantity, previewPer100, roundAmount, startingSelection } from '@/features/quantity/quantity';
 import { MacroLine } from '@/components/charts';
 import { Button, Card, Chip, ErrorView, Loading, QualityBadge } from '@/components/ui';
 import { dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
@@ -32,7 +32,7 @@ export default function FoodAmount() {
   const v = value ?? startingSelection(measures, base, params.grams ? Number(params.grams) : undefined);
   const measure = matchMeasure(measures, v.unit) ?? measures[0];
   const qty = parseQuantity(v.text);
-  const check = checkQuantity(qty, measure);
+  const check = checkQuantity(qty, measure, false, base);
   const preview = previewPer100(f.per100g, check.ok ? check.base : 0);
   const busy = log.isPending || addFood.isPending || updateIngredient.isPending;
 
@@ -42,7 +42,7 @@ export default function FoodAmount() {
     Keyboard.dismiss();
     try {
       // The chosen measure is sent as-is ("12 almond"), so the entry reads the way it was logged; the server converts.
-      const amount = { amount: qty!, unit: measure!.unit };
+      const amount = { amount: roundAmount(qty!), unit: measure!.unit };
       if (forIngredient) {
         await updateIngredient.mutateAsync({ id: params.recipeId!, position: Number(params.position), foodId: f.id, ...amount });
         router.dismissTo({ pathname: '/recipe/[id]', params: { id: params.recipeId! } });

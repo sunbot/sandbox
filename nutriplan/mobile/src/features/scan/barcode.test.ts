@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkManualBarcode, createScanGate, digitsOf, validGtin } from './barcode.ts';
+import { checkManualBarcode, createScanGate, digitsOf, expandUpcE, validGtin } from './barcode.ts';
 
 test('typed barcodes: digits only, a real length and a valid check digit', () => {
   assert.equal(digitsOf('0 12345 67890 5'), '012345678905');
@@ -30,4 +30,22 @@ test('a scan is not looked up twice at once, and a failed code is ignored for a 
   assert.equal(gate.accept('A'), true);  // after the cool-down the code can be tried again
   gate.reset();
   assert.equal(gate.accept('A'), true);
+});
+
+test('a UPC-E code typed as printed is accepted (checked through its UPC-A form)', () => {
+  assert.equal(expandUpcE('04252614'), '042100005264');
+  assert.equal(validGtin('042100005264'), true);
+  assert.deepEqual(checkManualBarcode('04252614'), { ok: true, code: '04252614' });
+  assert.equal(checkManualBarcode('04252615').ok, false); // wrong check digit
+});
+
+test('an invalid code stays ignored for as long as asked', () => {
+  let t = 0;
+  const gate = createScanGate(4000, () => t);
+  assert.equal(gate.accept('X'), true);
+  gate.done('X', true, 60_000);
+  t = 10_000;
+  assert.equal(gate.accept('X'), false);
+  t = 61_000;
+  assert.equal(gate.accept('X'), true);
 });

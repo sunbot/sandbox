@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, View } from 'react-native';
 import type { Measure } from '@/api/types';
 import { AppText } from '@/components/ds';
 import { Check, ChevronDown, ChevronUp } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
-import { convert, formatQuantity, matchMeasure, parseQuantity, volumeNote } from './quantity';
+import { formatQuantity, matchMeasure, parseQuantity, switchMeasure, volumeNote, type ExactAmount } from './quantity';
 
 export type QuantityValue = { text: string; unit: string };
 
@@ -24,6 +24,8 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
+  // The exact amount behind a converted number, so browsing measures (almonds -> oz -> almonds) doesn't drift.
+  const exact = useRef<ExactAmount>(null);
   const measure = matchMeasure(measures, value.unit) ?? measures[0];
   const qty = parseQuantity(value.text);
   const equivalent = measure && qty !== null && qty > 0 && measure.base > 0 && measure.unit !== baseUnit
@@ -34,8 +36,9 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
     setOpen(false);
     if (!measure || m.unit === measure.unit) return;
     // Same physical amount in the new measure, when both are known; otherwise keep what was typed.
-    const text = qty !== null && qty > 0 && measure.base > 0 && m.base > 0 ? formatQuantity(convert(qty, measure, m)) : value.text;
-    onChange({ text, unit: m.unit });
+    const next = switchMeasure(value.text, measure, m, exact.current);
+    exact.current = next.exact;
+    onChange({ text: next.text, unit: m.unit });
   };
 
   const field = { minHeight: t.sizes.touch, borderRadius: t.radii.button, borderWidth: 1, borderColor: error ? t.colors.error : t.colors.border, backgroundColor: t.colors.surface };

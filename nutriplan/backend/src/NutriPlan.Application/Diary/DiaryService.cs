@@ -61,6 +61,7 @@ public sealed class DiaryService(
             grams = resolved.Grams ?? throw new ValidationException(resolved.Explanation);
         }
         if (grams <= 0) throw new ValidationException("Amount must be greater than zero.");
+        ItemAmounts.CheckBase(grams.Value, food.IsVolume);
         // A volume food's base amount ("grams" in the request) is millilitres.
         if (food.IsVolume)
             return ItemSnapshot.ForVolumeFood(food.Id, food.DisplayName, grams.Value, food.NutrientsFor(grams.Value),
@@ -147,13 +148,14 @@ public sealed class DiaryService(
     }
 
     public async Task<DiaryEntryDto> UpdateAsync(Guid id, double? scale, DateOnly? date, MealSlot? meal, string? note, CancellationToken ct = default,
-        double? amount = null, string? unit = null)
+        double? amount = null, string? unit = null, double? grams = null)
     {
         var entry = await diary.GetAsync(id, ct) ?? throw new NotFoundException($"Entry {id} not found.");
+        if (amount is null && (unit is not null || grams is not null)) throw new ValidationException("Send the amount with its unit.");
         if (amount is not null)
         {
             if (scale is not null) throw new ValidationException("Send an amount or a scale, not both.");
-            entry.Replace(await ItemAmounts.ChangeAsync(entry.Item, amount.Value, unit, foods, ct));
+            entry.Replace(await ItemAmounts.ChangeAsync(entry.Item, amount.Value, unit, foods, ct, grams));
         }
         else if (scale is not null)
         {
@@ -167,8 +169,8 @@ public sealed class DiaryService(
     }
 
     /// <summary>The same item in a new amount and/or measure (see <see cref="ItemAmounts"/>); used for logged and planned items.</summary>
-    public Task<ItemSnapshot> ChangeAmountAsync(ItemSnapshot item, double amount, string? unit, CancellationToken ct = default) =>
-        ItemAmounts.ChangeAsync(item, amount, unit, foods, ct);
+    public Task<ItemSnapshot> ChangeAmountAsync(ItemSnapshot item, double amount, string? unit, CancellationToken ct = default, double? grams = null) =>
+        ItemAmounts.ChangeAsync(item, amount, unit, foods, ct, grams);
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {

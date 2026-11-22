@@ -163,11 +163,11 @@ public sealed class PlanService(
     }
 
     /// <summary>Change a planned item's amount in any measure its food supports (see <see cref="Diary.ItemAmounts"/>).</summary>
-    public async Task<PlanEntryDto> SetAmountAsync(Guid id, double amount, string? unit, CancellationToken ct = default)
+    public async Task<PlanEntryDto> SetAmountAsync(Guid id, double amount, string? unit, CancellationToken ct = default, double? grams = null)
     {
         var entry = await GetEntry(id, ct);
         if (entry.Status != PlanStatus.Planned) throw new ValidationException("Only planned items can be changed. Edit the logged entry instead.");
-        entry.ChangeAmount(await diaryService.ChangeAmountAsync(entry.Item, amount, unit, ct));
+        entry.ChangeAmount(await diaryService.ChangeAmountAsync(entry.Item, amount, unit, ct, grams));
         await uow.SaveChangesAsync(ct);
         return PlanEntryDto.From(entry);
     }

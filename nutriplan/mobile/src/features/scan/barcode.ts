@@ -14,6 +14,18 @@ export function validGtin(code: string): boolean {
   return (10 - (sum % 10)) % 10 === check;
 }
 
+/** UPC-E (the short code on small packages, 8 digits starting 0 or 1) expanded to its 12-digit UPC-A. */
+export function expandUpcE(code: string): string | null {
+  if (!/^[01]\d{7}$/.test(code)) return null;
+  const [ns, d1, d2, d3, d4, d5, d6, check] = code.split('');
+  const body =
+    d6 === '0' || d6 === '1' || d6 === '2' ? `${d1}${d2}${d6}0000${d3}${d4}${d5}` :
+    d6 === '3' ? `${d1}${d2}${d3}00000${d4}${d5}` :
+    d6 === '4' ? `${d1}${d2}${d3}${d4}00000${d5}` :
+    `${d1}${d2}${d3}${d4}${d5}0000${d6}`;
+  return `${ns}${body}${check}`;
+}
+
 export type ManualCheck = { ok: true; code: string } | { ok: false; message: string };
 
 /** Whether a typed barcode can be looked up, and why not. UPC-E (6–8 digits printed short) should be typed as printed in full. */
@@ -21,7 +33,9 @@ export function checkManualBarcode(text: string): ManualCheck {
   const code = digitsOf(text);
   if (!code) return { ok: false, message: 'Type the numbers under the barcode.' };
   if (![8, 12, 13, 14].includes(code.length)) return { ok: false, message: `That's ${code.length} digits. Barcodes on food have 8, 12 or 13.` };
-  if (!validGtin(code)) return { ok: false, message: 'One of the digits looks wrong (the last digit doesn’t check out). Check and try again.' };
+  // 8 digits may be EAN-8, or a UPC-E code (checked through its full UPC-A form).
+  const upcA = code.length === 8 ? expandUpcE(code) : null;
+  if (!validGtin(code) && !(upcA && validGtin(upcA))) return { ok: false, message: 'One of the digits looks wrong (the last digit doesn’t check out). Check and try again.' };
   return { ok: true, code };
 }
 
@@ -40,10 +54,10 @@ export function createScanGate(cooldownMs = 4000, now: () => number = Date.now) 
       busy = true;
       return true;
     },
-    /** The lookup finished; `failed` starts the cool-down for that code. */
-    done(code: string, failed: boolean) {
+    /** The lookup finished; `failed` starts the cool-down for that code (`blockMs` overrides it, e.g. for an invalid code). */
+    done(code: string, failed: boolean, blockMs?: number) {
       busy = false;
-      last = failed ? { code, at: now() } : null;
+      last = failed ? { code, at: now() + (blockMs ?? cooldownMs) - cooldownMs } : null;
     },
     reset() { busy = false; last = null; },
   };

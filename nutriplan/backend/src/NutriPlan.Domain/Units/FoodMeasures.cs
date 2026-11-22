@@ -41,13 +41,14 @@ public static partial class FoodMeasures
         foreach (var p in food.Portions.Where(p => p.GramsPerUnit > 0))
         {
             if (QuantityResolver.LeadingVolumeUnit(p.Description) is not null) continue; // volume measures are offered as cup/tbsp below
-            foreach (var word in Words(p.Description))
-            {
-                var r = QuantityResolver.Resolve(food, 1, word);
-                if (r is not { Method: ResolutionMethod.NamedPortion, Grams: { } g, Portion: { } match } || !ReferenceEquals(match, p)) continue;
-                Add(new FoodMeasure(word, word, PluralOf(word), Math.Round(g, 3), MeasureKind.Count, p.Description, true));
-                break;
-            }
+            // Only the first word names the measure ("slice", "large", "container", "scoop"); later words describe a kind of
+            // that portion ("slice, thin"), which on its own would be misleading ("2 thin"). A portion whose name resolves to a
+            // different (plainer) portion isn't offered separately.
+            var word = Words(p.Description).FirstOrDefault();
+            if (word is null) continue;
+            var r = QuantityResolver.Resolve(food, 1, word);
+            if (r is not { Method: ResolutionMethod.NamedPortion, Grams: { } g, Portion: { } match } || !ReferenceEquals(match, p)) continue;
+            Add(new FoodMeasure(word, word, PluralOf(word), Math.Round(g, 3), MeasureKind.Count, p.Description, true));
         }
 
         // 2) Household volumes: exact for a drink; for a solid food only through a volume USDA measured for it.

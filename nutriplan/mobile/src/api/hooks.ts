@@ -105,7 +105,7 @@ export function useLogQuick() {
 export function useUpdateEntry() {
   const invalidate = useInvalidateNutrition();
   return useMutation({
-    mutationFn: ({ id, ...r }: { id: string; scale?: number; amount?: number; unit?: string; date?: string; meal?: Meal; note?: string }) => patch<T.DiaryEntry>(`/diary/${id}`, r),
+    mutationFn: ({ id, ...r }: { id: string; scale?: number; amount?: number; unit?: string; grams?: number; date?: string; meal?: Meal; note?: string }) => patch<T.DiaryEntry>(`/diary/${id}`, r),
     onSuccess: invalidate,
   });
 }
@@ -158,7 +158,7 @@ export function usePlanMutations() {
     reopen: useMutation({ mutationFn: (id: string) => post<T.PlanEntry>(`/plan/${id}/reopen`), ...opts }),
     copy: useMutation({ mutationFn: (r: { from: string; to: string; meal?: Meal }) => post<T.PlanEntry[]>('/plan/copy', r), ...opts }),
     setAmount: useMutation({
-      mutationFn: ({ id, amount, unit }: { id: string; amount: number; unit: string }) => post<T.PlanEntry>(`/plan/${id}/amount`, { amount, unit }),
+      mutationFn: ({ id, amount, unit, grams }: { id: string; amount: number; unit: string; grams?: number }) => post<T.PlanEntry>(`/plan/${id}/amount`, { amount, unit, grams }),
       ...opts,
     }),
     swapFood: useMutation({
