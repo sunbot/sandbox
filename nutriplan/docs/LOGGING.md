@@ -146,7 +146,7 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
 2. Editor: decimal keypad appears, the field isn't hidden by the keyboard, switching measure keeps the amount, Save/Undo work.
 3. Scanner: sharpness at 15–20 cm, with and without zoom; torch on/off; a small barcode; dim light; denied permission;
    typing a barcode.
-   **Web in Android Chrome** (the blur fix is unconfirmed until this passes on a phone): open the site in Chrome, Today → scan;
+   **Web in Android Chrome** (confirmed on a Pixel: sharp, reads a barcode; repeat on other phones): open the site in Chrome, Today → scan;
    hold a barcode 15–20 cm away: the preview should be sharp and refocus as you move; a pickle jar's barcode should read
    within a couple of seconds; try the zoom button; deny camera access (Chrome site settings) and check the message and that
    typing works; open the camera in another app first and check the "in use" message; leave the screen and check the camera
