@@ -21,6 +21,7 @@ Build a trustworthy, fast, intuitive nutrition and recipe-planning experience. P
 - `backend/src/NutriPlan.Api`: thin minimal API endpoints, validation and composition.
 - `backend/tests`: xUnit domain, application and Postgres integration tests.
 - Fill the Gaps (`GapRecommender` in Domain, `GapFillService`, `docs/FILL_THE_GAPS.md`): deterministic, real portions only, hard constraints, nothing added when at/over target. Thresholds live in `GapFillPolicy`; don't reintroduce a global optimizer or invented serving sizes.
+- Logging and editing (`docs/LOGGING.md`): foods are logged/edited in the measures `FoodMeasures` derives (never invented weights or densities); amount edits go through `ItemAmounts`, which scales the entry's own snapshot. The app's `features/quantity` model and `QuantityPicker` are the only amount UI; don't add another.
 - `mobile`: Expo SDK 58, React Native/TypeScript, Expo Router, TanStack Query; keep reusable logic outside route components.
 
 Dependencies point inward. Don't put business rules in endpoints or nutrition calculation in UI. Reuse existing patterns rather than creating unnecessary services or frameworks.
@@ -116,6 +117,7 @@ Current providers:
   labelled Given; "Understood by" in Ask and `/api/status` show whether Claude or the built-in rules handled a request.
   `IdempotencyStore` is in-memory (single instance, keys per user); the unique index on `diary_entries.plan_entry_id` is the durable guard.
 - Sign-in: Android Google sign-in needs the APK signing key's SHA-1 registered in Firebase (currently the template debug key).
+- Swipe-to-delete works with touch (Android, phone browsers) but not a desktop mouse drag; Delete is also in the editor. Camera focus/zoom behaviour varies by phone and hasn't been verified on a physical device (`docs/LOGGING.md` lists the checks).
 
 ## Definition of done
 
