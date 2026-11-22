@@ -53,6 +53,11 @@ dotnet run -- enrich-usda-portions <foundation folder> <sr legacy folder> --appl
 #   dotnet NutriPlan.Api.dll enrich-usda-portions /data/usda/<foundation>/<…> /data/usda/<sr legacy>/<…> [--apply]
 ```
 
+On a hosted deployment with no shell (Render), set the environment variable `Usda__EnrichPortions` to `dry-run` and restart: the
+server logs every food it would change and each one it leaves alone, and saves nothing. Then set it to `apply` and restart to
+save, and **remove the variable afterwards** (it is harmless but runs every start). It uses the USDA files baked into the image
+(`Usda:SeedFolder`).
+
 It only touches Foundation foods with **no** portions, so re-running changes nothing. A fresh database gets this automatically
 after the first-start USDA import; an existing one only when someone runs the command. Undo:
 `update foods set portions = '[]' where source = 'UsdaFoundation' and portions @> '[{}]' and not exists (select 1 from jsonb_array_elements(portions) p where p->>'origin' is null);`
@@ -86,9 +91,10 @@ itself), the source's trust and your own history all count for more.
 
 ## Deleting
 
-Swipe a logged diary row left (Today and Week) to reveal **Delete**; it never deletes by itself. Tapping Delete hides the row
-and shows Undo; the server delete happens when the Undo window closes. One row is open at a time; tapping a row or starting to
-scroll closes it (that tap doesn't open the editor). Screen readers get a "Delete" action on the row, and Delete is also in
+Swipe a logged diary row left (Today and Week) past the threshold to delete it: the row disappears at once and Undo shows; the
+server delete happens when the Undo window closes (about 5 s), so Undo restores it exactly. A lighter drag only reveals **Delete**,
+and tapping that button does the same. (The swipe itself deletes because on some Android phones a tap on the button inside the
+swipe panel didn't arrive.) Tapping a row or starting to scroll closes a half-open row (that tap doesn't open the editor). Screen readers get a "Delete" action on the row, and Delete is also in
 the editor. Long press is reserved (not used).
 
 - Implementation: `features/diary/SwipeableDiaryRow.tsx` (react-native-gesture-handler `ReanimatedSwipeable`, with
@@ -109,11 +115,39 @@ the editor. Long press is reserved (not used).
   never reported as "not found".
 - Devices whose Google Play services lack ML Kit barcode scanning can't scan with the camera; typing the barcode still works.
 
+### Web scanner (Chrome on Android, desktop browsers)
+
+`features/scan/ScanCamera` is split by platform. Android/iOS use `ExpoScanCamera` (expo-camera `CameraView`, the same props as before).
+On web, `ScanCamera.web.tsx` opens the camera itself when the browser has `BarcodeDetector`, because expo-camera's web camera
+can't be told a picture size, a focus mode or a lens: it asks for `facingMode: environment` only, so Chrome returns its default
+size (measured: 640×480 even from a camera that supports 3840 px wide), stretched over the screen, and the focus mode it tries
+to set is dropped by its own converter. What the web scanner does (pure logic in `webCamera.ts`, tested):
+
+- Requests the rear camera at an ideal 1920×1080; if the browser says that can't be met it retries looser (rear camera, then any).
+- Applies continuous focus only when the camera's capabilities list it. If the default lens reports focus modes **without**
+  continuous (fixed focus), it tries the other rear lenses once, one at a time (a phone can't open two), keeps the first with
+  continuous focus (if none has it, the browser's own choice stays), and closes the rest. No device ids or labels are hard-coded; a camera that reports
+  nothing about focus is left as the browser chose it. No repeated restarts.
+- **Zoom** is offered only when the camera has a zoom range with a real step above the normal view; it goes to 2× (never
+  further: more is only digital enlargement). **Torch** is offered only when the camera lists it. Native buttons are unchanged.
+- Reads EAN-13, EAN-8, UPC-A and UPC-E (the formats this browser's detector supports) about four times a second, one detection
+  at a time, paused while the tab is hidden. The screen's gate, lookup, haptics and manual entry are shared with native.
+- Browsers without `BarcodeDetector` (Safari, Firefox) use the previous expo-camera scanner unchanged (it loads a decoder).
+- Failures say what to do: blocked (how to allow it in Chrome), no camera, in use by another app/tab, not https. Typing the
+  barcode is always offered. The camera and the detection loop stop when you leave the screen or the camera is taken away.
+- Development builds log the chosen camera's size, focus modes, zoom range and torch support to the console (no images, ids or tokens).
+
 ## Needs checking on a physical Android phone (not verifiable in CI)
 
-1. Swipe left on a logged food on Today and Week: Delete appears; tap it; Undo restores; vertical scrolling still works and
-   doesn't open swipes; only one row open at a time; TalkBack offers "Delete".
+1. Swipe left on a logged food on Today and Week: it disappears with Undo (Undo brings it back; after ~5 s it's gone on the server
+   and stays gone after a refresh); a light drag shows Delete, which also works; tapping a food opens the editor, where Save and Delete
+   work; vertical scrolling doesn't open swipes; TalkBack offers "Delete".
 2. Editor: decimal keypad appears, the field isn't hidden by the keyboard, switching measure keeps the amount, Save/Undo work.
 3. Scanner: sharpness at 15–20 cm, with and without zoom; torch on/off; a small barcode; dim light; denied permission;
    typing a barcode.
+   **Web in Android Chrome** (the blur fix is unconfirmed until this passes on a phone): open the site in Chrome, Today → scan;
+   hold a barcode 15–20 cm away: the preview should be sharp and refocus as you move; a pickle jar's barcode should read
+   within a couple of seconds; try the zoom button; deny camera access (Chrome site settings) and check the message and that
+   typing works; open the camera in another app first and check the "in use" message; leave the screen and check the camera
+   light goes off. Use `chrome://inspect` → the page's console in a dev build to see the chosen camera's size and focus modes.
 4. Large text (Android font size at maximum) on the editor, rows and scanner.
