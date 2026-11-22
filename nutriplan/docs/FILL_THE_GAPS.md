@@ -62,6 +62,9 @@ estimated or randomised.
 - Filters (Best match, Meal, Quick snack, Pantry, Saved recipes) and the destination meal stay as chosen; rotation works within
   them. Planning or logging an idea recalculates what's left, and foods/recipes already logged or planned for the day aren't
   suggested again.
+- Each filter keeps its own list of skipped ideas, so rotating in Best match doesn't use up Saved recipes.
+- Meals and snack pairs are assembled from the 10 most relevant candidates of each kind (`CombinationPoolSize`), so "all
+  ideas" means all qualifying ideas within that bounded search, not every possible pairing in the database.
 - When every qualifying idea has been shown, the screen says "No more matching ideas right now." (`emptyReason: Exhausted`,
   or under the last page when `moreIdeas` is 0) with **Start over**, which clears the skipped list. Leaving the screen ends the
   session. No language model or paid service is involved: one candidate build per request, as before.

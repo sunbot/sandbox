@@ -87,6 +87,7 @@ export function emptyCopy(r: Pick<GapReport, 'situation' | 'emptyReason' | 'empt
     case 'NoPantry': return { title: 'No pantry foods to suggest', body };
     case 'NoRecipes': return { title: 'No saved recipes to suggest', body };
     case 'NoRoomForMeal': return { title: 'No room for a meal', body };
+    case 'AlreadyOnToday': return { title: 'Already on today', body };
     case 'Exhausted': return { title: 'No more matching ideas right now.', body: 'You’ve seen every idea that fits. Start over to see them again, or try another filter.' };
     default: return { title: 'Nothing fits well right now', body };
   }

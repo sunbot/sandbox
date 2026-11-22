@@ -32,8 +32,13 @@ export default function GapsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   // Steps already saved, so a retry after a partial failure doesn't add them twice.
   const saved = useRef(new Set<string>());
-  const [skipped, setSkipped] = useState<string[]>([]); // ideas shown and passed over in this visit
-  const scrollPending = useRef(false); // bring new ideas into view once they arrive
+  // Ideas shown and passed over in this visit, per filter: rotating in Best match doesn't use up Saved recipes.
+  const [skippedBy, setSkippedBy] = useState<Partial<Record<GapMode, string[]>>>({});
+  const skipped = skippedBy[mode] ?? [];
+  const setSkipped = (f: (s: string[]) => string[]) => setSkippedBy((all) => ({ ...all, [mode]: f(all[mode] ?? []) }));
+  // The page "Show different ideas" or "Start over" asked for: the button spins and the view scrolls only for that one.
+  const [requested, setRequested] = useState<string | null>(null);
+  const scrolledTo = useRef<string | null>(null);
   const scroll = useRef<ScrollViewInstance>(null);
   const ideasY = useRef(0);
   const gaps = useGaps(date, mode, meal, skipped);
@@ -42,12 +47,13 @@ export default function GapsScreen() {
   const logFoods = useLogFoods();
   const logRecipe = useLogRecipe();
   // New ideas arrived after "Show different ideas": bring the first one into view (the summary above stays as it was).
-  const rotating = gaps.isFetching && gaps.isPlaceholderData; // the next page is being worked out
+  const pageKey = `${mode}|${skipped.join(',')}`;
+  const rotating = requested === pageKey && gaps.isFetching;
   useEffect(() => {
-    if (!scrollPending.current || gaps.isPlaceholderData || gaps.isFetching) return;
-    scrollPending.current = false;
+    if (requested !== pageKey || gaps.isFetching || gaps.isPlaceholderData || !gaps.data || scrolledTo.current === pageKey) return;
+    scrolledTo.current = pageKey;
     scroll.current?.scrollTo({ y: Math.max(0, ideasY.current - t.space.md), animated: true });
-  }, [gaps.data, gaps.isPlaceholderData, gaps.isFetching, t.space.md]);
+  }, [requested, pageKey, gaps.data, gaps.isFetching, gaps.isPlaceholderData, t.space.md]);
   const page = { padding: t.screenPadding, gap: t.space.lg, paddingBottom: t.space.huge };
   const shell = { flex: 1, backgroundColor: t.colors.background } as const;
 
@@ -101,8 +107,13 @@ export default function GapsScreen() {
   }, `Swapped ${s.fromName} for ${nice(s.to)}.`);
 
   const rotation = rotationState(g, skipped);
-  const showDifferent = () => { if (rotating) return; scrollPending.current = true; setSkipped((s) => skipShown(s, g.suggestions)); };
-  const startOver = () => { scrollPending.current = true; setSkipped([]); };
+  const showDifferent = () => {
+    if (rotating) return;
+    const next = skipShown(skipped, g.suggestions);
+    setRequested(`${mode}|${next.join(',')}`);
+    setSkipped(() => next);
+  };
+  const startOver = () => { setRequested(`${mode}|`); setSkipped(() => []); };
   const empty = emptyCopy(g);
   const emptyIcon = g.emptyReason === 'Over' || g.emptyReason === 'AtTarget' || g.emptyReason === 'NeedsMet' ? CircleCheck : Sparkles;
 

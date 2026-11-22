@@ -83,12 +83,17 @@ public class GapRotationTests
     }
 
     [Fact]
-    public void The_first_page_is_exactly_what_the_screen_showed_before_rotation_existed()
+    public void The_first_page_is_the_best_ideas_with_different_leads_in_score_order()
     {
-        var plain = GapRecommender.Suggest(Needs(), Pool(), GapMode.BestMatch, new GapContext(), P);
-        var page = GapRecommender.SuggestPage(Needs(), Pool(), GapMode.BestMatch, new GapContext(Exclude: new HashSet<string>()), P);
-        Assert.Equal(plain.Select(GapRecommender.IdOf), page.Items.Select(GapRecommender.IdOf));
+        var page = GapRecommender.SuggestPage(Needs(), Pool(), GapMode.BestMatch, new GapContext(), P);
         Assert.Equal(0, page.Skipped);
+        Assert.Equal(P.MaxSuggestions, page.Items.Count);
+        // Same rule as before rotation existed: walk all qualifying ideas best-first, keep the first per lead food.
+        var second = PageThrough(Needs(), Pool(), GapMode.BestMatch, max: 1)[0];
+        Assert.Equal(page.Items.Select(GapRecommender.IdOf), second.Items.Select(GapRecommender.IdOf));
+        Assert.True(page.Items.Zip(page.Items.Skip(1)).All(x => x.First.Score >= x.Second.Score - 1e-9));
+        Assert.Equal(page.Items.Count, page.Items.Select(s => s.Items.OrderBy(i => i.Candidate.Role switch { GapRole.Meal => 0, GapRole.Main => 1, GapRole.Snack => 2, _ => 3 })
+            .ThenBy(i => i.Candidate.Key, StringComparer.Ordinal).First().Candidate.Key).Distinct().Count());
     }
 
     [Fact]

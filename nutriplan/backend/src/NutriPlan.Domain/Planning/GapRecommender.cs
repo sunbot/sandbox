@@ -157,7 +157,7 @@ public static class GapRecommender
     // ── Swaps and next-day ideas ───────────────────────────────────────────────────────────────────
 
     /// <summary>For planned, uneaten items on a day with little or no room: a lighter replacement of the same kind that doesn't lose what you're short on.</summary>
-    public static IReadOnlyList<GapSwap> Swaps(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapPlanned> planned, IReadOnlyList<GapCandidate> pool, GapFillPolicy p)
+    public static IReadOnlyList<GapSwap> Swaps(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapPlanned> planned, IReadOnlyList<GapCandidate> pool, GapFillPolicy p, IReadOnlySet<string>? onToday = null)
     {
         var open = OpenNeeds(needs, p);
         var limits = needs.Where(n => n.Kind == TargetKind.Limit && n.NutrientId != NutrientIds.Energy && n.DailyTarget > 0).ToList();
@@ -168,7 +168,7 @@ public static class GapRecommender
             var major = open.OrderByDescending(n => n.Weight * Math.Min(1, n.Remaining / n.DailyTarget)).Take(Math.Max(1, p.ScoreNeedsConsidered)).ToList();
             GapSwap? best = null;
             double bestScore = double.NegativeInfinity;
-            foreach (var c in pool.OrderBy(c => c.Key, StringComparer.Ordinal).Where(c => c.Role != GapRole.Ingredient && CategoryOf(c.Role) == from.Category && c.Key != from.Key))
+            foreach (var c in pool.OrderBy(c => c.Key, StringComparer.Ordinal).Where(c => c.Role != GapRole.Ingredient && CategoryOf(c.Role) == from.Category && c.Key != from.Key && onToday?.Contains(c.Key) != true))
                 foreach (var m in Multiples(c, p))
                 {
                     var n = c.PerPortion.Scale(m);

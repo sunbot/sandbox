@@ -5,6 +5,7 @@ using NutriPlan.Domain.Foods;
 using NutriPlan.Domain.Nutrients;
 using NutriPlan.Domain.Pantry;
 using NutriPlan.Domain.Planning;
+using NutriPlan.Domain.Recipes;
 
 namespace NutriPlan.Application.Tests;
 
@@ -119,6 +120,39 @@ public class GapRotationServiceTests
         var junk = await Service().SuggestAsync(new GapFillRequest(Day, Exclude: ["", "nope", "f:almonds", new string('a', 500), "0123456789abcdef"]));
         Assert.Equal(normal.Suggestions.Select(s => s.Id), junk.Suggestions.Select(s => s.Id));
         Assert.Equal(0, junk.SkippedIdeas);
+    }
+
+    [Fact]
+    public async Task A_saved_recipe_already_planned_today_is_explained_not_called_unfit()
+    {
+        Everyday();
+        var r = new Recipe("Lentil soup", 1);
+        r.SetCategories(["Dinner"]);
+        var per = new NutrientProfile(new Dictionary<int, double> { [NutrientIds.Energy] = 300, [NutrientIds.Protein] = 18, [NutrientIds.Fiber] = 12, [NutrientIds.Sodium] = 600 });
+        r.ApplyNutrition(new RecipeNutrition(per, per, 1.0, []));
+        _store.Recipes.Add(r);
+        Assert.NotEmpty((await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.SavedRecipes))).Suggestions);
+
+        _store.Plan.Add(new PlanEntry(Day, MealSlot.Dinner, ItemSnapshot.ForRecipe(r.Id, r.Name, 1, per)));
+        var report = await Service().SuggestAsync(new GapFillRequest(Day, Mode: GapMode.SavedRecipes));
+        Assert.Empty(report.Suggestions);
+        Assert.Equal("AlreadyOnToday", report.EmptyReason);
+    }
+
+    [Fact]
+    public void Lighter_swaps_never_offer_something_already_on_today()
+    {
+        var p = new GapFillPolicy();
+        GapCandidate C(string key, double kcal, double protein) => new(key, ItemKind.Food, Guid.NewGuid(), null, key, GapRole.Meal, FoodGroup.Mixed, GapOrigin.Frequent,
+            new NutrientProfile(new Dictionary<int, double> { [NutrientIds.Energy] = kcal, [NutrientIds.Protein] = protein }), 300, "g", "1 plate");
+        var needs = new List<GapTarget> { new(NutrientIds.Energy, -300, 2000, TargetKind.Goal, 4), new(NutrientIds.Protein, 30, 100, TargetKind.Goal, p.ProteinWeight) };
+        var planned = new[] { new GapPlanned(Guid.NewGuid(), "Lasagna", GapCategory.Meal, new NutrientProfile(new Dictionary<int, double> { [NutrientIds.Energy] = 800, [NutrientIds.Protein] = 30 })) };
+        var pool = new List<GapCandidate> { C("f:bowl", 500, 35), C("f:salad", 450, 32) };
+        var free = GapRecommender.Swaps(needs, planned, pool, p);
+        Assert.NotEmpty(free);
+        var taken = free[0].To.Candidate.Key;
+        var swaps = GapRecommender.Swaps(needs, planned, pool, p, new HashSet<string> { taken });
+        Assert.DoesNotContain(swaps, s => s.To.Candidate.Key == taken);
     }
 
     [Fact]

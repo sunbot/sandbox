@@ -123,7 +123,7 @@ public sealed partial class GapFillService(
         IReadOnlyList<GapTip> tips = [];
         if (situation != GapSituation.Open)
         {
-            swaps = GapRecommender.Swaps(needs, await PlannedForSwapsAsync(planned, ct), candidates, p);
+            swaps = GapRecommender.Swaps(needs, await PlannedForSwapsAsync(planned, ct), candidates, p, onToday);
             tips = GapRecommender.NextDay(needs, candidates, p);
         }
 
@@ -145,7 +145,7 @@ public sealed partial class GapFillService(
 
         var (emptyReason, emptyMessage) = suggestions.Count > 0 ? (null, null)
             : page.Skipped > 0 ? ("Exhausted", "No more matching ideas right now.")
-            : Explain(situation, mode, kcalLeft, needs, candidates, tips.Count > 0 || swaps.Count > 0, p);
+            : Explain(situation, mode, kcalLeft, needs, candidates, tips.Count > 0 || swaps.Count > 0, p, onToday);
 
         return new GapReportDto(date, NutritionDto.From(remaining), gaps, suggestions.Select(s => ToDto(s, needs)).ToList(),
             situation.ToString(), SituationMessage(situation, kcalLeft), mode.ToString(),
@@ -404,7 +404,7 @@ public sealed partial class GapFillService(
         _ => $"About {Math.Round(kcalLeft):N0} kcal left to plan.",
     };
 
-    private (string Reason, string Message) Explain(GapSituation situation, GapMode mode, double kcalLeft, IReadOnlyList<GapTarget> needs, IReadOnlyList<GapCandidate> pool, bool hasOtherIdeas, GapFillPolicy p)
+    private (string Reason, string Message) Explain(GapSituation situation, GapMode mode, double kcalLeft, IReadOnlyList<GapTarget> needs, IReadOnlyList<GapCandidate> pool, bool hasOtherIdeas, GapFillPolicy p, IReadOnlySet<string>? onToday = null)
     {
         if (situation == GapSituation.Over)
             return ("Over", hasOtherIdeas ? "Here are some swaps and ideas for tomorrow instead." : "Today is done. Tomorrow is a fresh start.");
@@ -416,6 +416,10 @@ public sealed partial class GapFillService(
         {
             GapMode.Pantry when !pool.Any(c => c.Origin.HasFlag(GapOrigin.Pantry)) => ("NoPantry", "No pantry foods to suggest. Add foods to your pantry, or try Best match."),
             GapMode.SavedRecipes when !pool.Any(c => c.IsRecipe) => ("NoRecipes", "No saved recipes with full nutrition yet. Import or save a few, or try Best match."),
+            GapMode.Pantry when pool.Where(c => c.Origin.HasFlag(GapOrigin.Pantry)).All(c => onToday?.Contains(c.Key) == true) =>
+                ("AlreadyOnToday", "Everything from your pantry that could fit is already on today. Try Best match."),
+            GapMode.SavedRecipes when pool.Where(c => c.IsRecipe).All(c => onToday?.Contains(c.Key) == true) =>
+                ("AlreadyOnToday", "Your saved recipes are already on today. Try Best match."),
             GapMode.Meal when kcalLeft < p.MinMealKcal => ("NoRoomForMeal", "There isn't room for a full meal today. Try Quick snack."),
             GapMode.Pantry => ("NothingFits", "Nothing in your pantry fits well right now. Try Best match."),
             GapMode.SavedRecipes => ("NothingFits", "None of your saved recipes fit what's left today. Try Best match."),
