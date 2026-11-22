@@ -282,6 +282,13 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
         Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync($"/api/diary/{entry["id"]}/relog", new { date = Day })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.DeleteAsync($"/api/plan/{plan["id"]}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync($"/api/plan/{plan["id"]}/eaten", new { scale = 1.0 })).StatusCode);
+        // Attaching a log to A's planned meal would take its "logged once" slot and block A: refused.
+        var bFood = await Json(await b.PostAsJsonAsync("/api/foods", new
+        {
+            name = "B's yogurt", brand = (string?)null, barcode = (string?)null, servingGrams = 100.0, servingDescription = "1 cup",
+            nutrientsPerServing = new Dictionary<string, double> { ["1008"] = 90 },
+        }));
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Lunch", foodId = (string)bFood["id"]!, grams = 100.0, planEntryId = (string)plan["id"]! })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PutAsJsonAsync($"/api/pantry/{pantry["id"]}", new { name = "stolen" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.DeleteAsync($"/api/pantry/{pantry["id"]}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.GetAsync($"/api/recipes/{recipeId}")).StatusCode);
@@ -297,6 +304,10 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
         Assert.Contains("A's oats", await a.GetStringAsync("/api/pantry"));
         Assert.Contains("secret porridge", await a.GetStringAsync("/api/recipes"));
         Assert.Equal(HttpStatusCode.OK, (await a.GetAsync($"/api/recipes/{recipeId}")).StatusCode);
+
+        // A can still log the planned meal.
+        Assert.Equal(HttpStatusCode.OK, (await a.PostAsJsonAsync($"/api/plan/{plan["id"]}/eaten", new { scale = 1.0 })).StatusCode);
+        Assert.DoesNotContain("B's yogurt", await a.GetStringAsync("/api/foods/search?q=yogurt"));
 
         // A's own frequent foods and times-logged count only A's history.
         Assert.Contains("Zqxv", await a.GetStringAsync("/api/diary/quick-log"));
