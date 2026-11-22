@@ -14,6 +14,32 @@ namespace NutriPlan.Infrastructure.Usda;
 /// </summary>
 public sealed class UsdaSeeder(IServiceProvider services, IConfiguration config, ILogger<UsdaSeeder> logger) : BackgroundService
 {
+    /// <summary>
+    /// One-time, opt-in data step for an existing database: set <c>Usda:EnrichPortions</c> to <c>dry-run</c> (logs what would change,
+    /// saves nothing) or <c>apply</c> (gives Foundation foods that have no portions their NDB-linked SR Legacy food's measures, see
+    /// <see cref="UsdaPortionEnricher"/>). Idempotent; remove the setting afterwards.
+    /// </summary>
+    private async Task EnrichExistingAsync(IServiceProvider sp, string root, CancellationToken ct)
+    {
+        var mode = config["Usda:EnrichPortions"]?.Trim().ToLowerInvariant();
+        if (mode is not ("dry-run" or "apply")) return;
+        var folders = Directory.GetFiles(root, "food.csv", SearchOption.AllDirectories).Select(Path.GetDirectoryName).OfType<string>().Order().ToList();
+        try
+        {
+            var result = await sp.GetRequiredService<UsdaPortionEnricher>().RunAsync(folders, apply: mode == "apply", ct);
+            foreach (var c in result.Changes)
+                logger.LogInformation("USDA portion enrichment ({Mode}): {Food} <- {Donor} (SR {Sr}, NDB {Ndb}): {Portions}", mode, c.FoodName, c.DonorName, c.DonorFdcId, c.Ndb,
+                    string.Join("; ", c.Portions.Select(p => $"{p.Description} = {p.GramsPerUnit:0.##} g")));
+            foreach (var r in result.Rejected) logger.LogInformation("USDA portion enrichment ({Mode}): left without measures: {Reason}", mode, r);
+            logger.LogWarning("USDA portion enrichment ({Mode}): {Changed} of {Candidates} linked Foundation foods without portions {Verb}. Remove Usda__EnrichPortions now.",
+                mode, result.Changes.Count, result.Candidates, mode == "apply" ? "updated" : "would be updated");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "USDA portion enrichment failed");
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var root = config["Usda:SeedFolder"];
@@ -21,7 +47,11 @@ public sealed class UsdaSeeder(IServiceProvider services, IConfiguration config,
 
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NutriPlanDbContext>();
-        if (await db.Foods.AnyAsync(stoppingToken)) return;
+        if (await db.Foods.AnyAsync(stoppingToken))
+        {
+            await EnrichExistingAsync(scope.ServiceProvider, root, stoppingToken);
+            return;
+        }
 
         var folders = Directory.GetFiles(root, "food.csv", SearchOption.AllDirectories).Select(Path.GetDirectoryName).OfType<string>().Order().ToList();
         logger.LogInformation("Empty food database: importing {Count} USDA dataset(s) from {Root}", folders.Count, root);

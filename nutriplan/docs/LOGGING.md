@@ -53,6 +53,11 @@ dotnet run -- enrich-usda-portions <foundation folder> <sr legacy folder> --appl
 #   dotnet NutriPlan.Api.dll enrich-usda-portions /data/usda/<foundation>/<…> /data/usda/<sr legacy>/<…> [--apply]
 ```
 
+On a hosted deployment with no shell (Render), set the environment variable `Usda__EnrichPortions` to `dry-run` and restart: the
+server logs every food it would change and each one it leaves alone, and saves nothing. Then set it to `apply` and restart to
+save, and **remove the variable afterwards** (it is harmless but runs every start). It uses the USDA files baked into the image
+(`Usda:SeedFolder`).
+
 It only touches Foundation foods with **no** portions, so re-running changes nothing. A fresh database gets this automatically
 after the first-start USDA import; an existing one only when someone runs the command. Undo:
 `update foods set portions = '[]' where source = 'UsdaFoundation' and portions @> '[{}]' and not exists (select 1 from jsonb_array_elements(portions) p where p->>'origin' is null);`
