@@ -58,3 +58,22 @@ test('a suggestion keeps the same id when the list reorders, and differs when it
   assert.notEqual(suggestionId(a), suggestionId(c));
   assert.equal(suggestionId([...a, ...c]), 'f1:170|r1:1');
 });
+
+test('show different ideas: shown ids are remembered once, capped, and the end of the list is recognised', async () => {
+  const { skipShown, rotationState, MAX_SKIPPED, emptyCopy } = await import('./gapView.ts');
+  const a = { id: 'aaaaaaaaaaaaaaaa' }, b = { id: 'bbbbbbbbbbbbbbbb' }, c = { id: 'cccccccccccccccc' };
+  assert.deepEqual(skipShown([], [a, b]), [a.id, b.id]);
+  assert.deepEqual(skipShown([a.id], [a, c]), [a.id, c.id]); // the same idea (same foods, any order: same id) is kept once
+  const many = Array.from({ length: MAX_SKIPPED + 5 }, (_, i) => ({ id: i.toString(16).padStart(16, '0') }));
+  const capped = skipShown([], many);
+  assert.equal(capped.length, MAX_SKIPPED);
+  assert.equal(capped[capped.length - 1], many[many.length - 1].id); // the newest are kept
+
+  const report = (suggestions: number, moreIdeas: number, skippedIdeas = 0) =>
+    ({ suggestions: Array.from({ length: suggestions }, () => ({}) as never), moreIdeas, skippedIdeas });
+  assert.equal(rotationState(report(3, 4), []), 'more');
+  assert.equal(rotationState(report(3, 0), []), 'none');           // only a few ideas and none skipped: nothing to say
+  assert.equal(rotationState(report(2, 0, 3), [a.id, b.id, c.id]), 'end');
+  assert.equal(rotationState(report(0, 0, 3), [a.id]), 'none');    // the empty state explains instead
+  assert.equal(emptyCopy({ situation: 'Open', emptyReason: 'Exhausted', emptyMessage: 'No more matching ideas right now.', mode: 'BestMatch' }).title, 'No more matching ideas right now.');
+});

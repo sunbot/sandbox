@@ -49,6 +49,26 @@ combined, and a nutrient absent from the logged foods looked like a deficiency.
 8. **Explanations** (`reasons`, `effects`) are generated from the calculated amounts ("Adds about 18 g protein (32 g
    still needed)"), only for nutrients the suggestion really contributes to.
 
+## Show different ideas
+
+The engine already builds and checks every qualifying idea (each combination at its best real amount) and shows the best
+three with different lead foods. "Show different ideas" pages through the rest of that same list; nothing is added,
+estimated or randomised.
+
+- Each idea has a stable `id`: a short hash of its sorted food/recipe keys, so the same foods in any order or amount are one
+  idea. The app keeps the ids it has shown this visit and sends them back (`GET /api/plan/gaps?…&exclude=id1,id2`, at most
+  300, malformed ids ignored); `GapRecommender.SuggestPage` skips them and puts ideas led by a food that already led a shown
+  idea after fresh ones. The same inputs always give the same pages.
+- Filters (Best match, Meal, Quick snack, Pantry, Saved recipes) and the destination meal stay as chosen; rotation works within
+  them. Planning or logging an idea recalculates what's left, and foods/recipes already logged or planned for the day aren't
+  suggested again.
+- Each filter keeps its own list of skipped ideas, so rotating in Best match doesn't use up Saved recipes.
+- Meals and snack pairs are assembled from the 10 most relevant candidates of each kind (`CombinationPoolSize`), so "all
+  ideas" means all qualifying ideas within that bounded search, not every possible pairing in the database.
+- When every qualifying idea has been shown, the screen says "No more matching ideas right now." (`emptyReason: Exhausted`,
+  or under the last page when `moreIdeas` is 0) with **Start over**, which clears the skipped list. Leaving the screen ends the
+  session. No language model or paid service is involved: one candidate build per request, as before.
+
 ## Tuning
 
 Every threshold is a property of `GapFillPolicy` and can be set with environment variables (`GapFill__MinSnackKcal`,

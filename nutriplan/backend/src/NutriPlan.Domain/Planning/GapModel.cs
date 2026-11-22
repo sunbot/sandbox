@@ -61,6 +61,10 @@ public sealed record GapReason(string Code, string Text, int? NutrientId = null)
 /// <summary>What a suggestion does to one nutrient: for a goal, how much is still missing before/after; for a limit, how much room is left.</summary>
 public sealed record GapEffect(int NutrientId, double Before, double After, TargetKind Kind);
 
+/// <summary>One page of ideas: <see cref="More"/> is how many other qualifying ideas haven't been shown yet; <see cref="Skipped"/>
+/// how many qualifying ideas are being passed over because they were already shown.</summary>
+public sealed record GapPage(IReadOnlyList<GapSuggestion> Items, int More, int Skipped);
+
 public sealed record GapSuggestion(
     IReadOnlyList<GapSuggestionItem> Items,
     GapCategory Category,
@@ -80,8 +84,12 @@ public sealed record GapTipItem(GapCandidate Candidate, double NutrientAmount, d
 /// <summary>For a nutrient that ran short today: familiar foods that are real sources of it, for tomorrow.</summary>
 public sealed record GapTip(int NutrientId, IReadOnlyList<GapTipItem> Items);
 
-/// <summary>What the recommender needs to know beyond targets and candidates.</summary>
-public sealed record GapContext(MealSlot? Meal = null, IReadOnlySet<string>? CoEaten = null)
+/// <summary>
+/// What the recommender needs to know beyond targets and candidates. <see cref="OnToday"/>: candidate keys already logged or
+/// planned for the day (not suggested again). <see cref="Exclude"/>: ids (<see cref="GapRecommender.IdOf"/>) of ideas already
+/// shown and passed over this session, so "Show different ideas" brings the next qualifying ones.
+/// </summary>
+public sealed record GapContext(MealSlot? Meal = null, IReadOnlySet<string>? CoEaten = null, IReadOnlySet<string>? OnToday = null, IReadOnlySet<string>? Exclude = null)
 {
     public static string PairKey(string a, string b) => string.CompareOrdinal(a, b) <= 0 ? $"{a}|{b}" : $"{b}|{a}";
 }

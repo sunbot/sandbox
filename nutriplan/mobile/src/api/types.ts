@@ -98,7 +98,8 @@ export type GapMode = 'BestMatch' | 'Meal' | 'QuickSnack' | 'Pantry' | 'SavedRec
 export type GapSituation = 'Open' | 'Near' | 'AtTarget' | 'Over';
 export type GapReason = { code: string; text: string; nutrientId?: number | null };
 export type GapEffect = { nutrientId: number; name: string; unit: string; kind: 'Goal' | 'Limit'; before: number; after: number };
-export type GapSuggestion = { items: GapItem[]; adds: Nutrition; remainingAfter: Nutrition; summary: string; category: 'Meal' | 'Snack' | 'Side'; reasons: GapReason[]; effects: GapEffect[] };
+/** `id` is stable for the same foods/recipes in any order: send it back in `exclude` to see different ideas. */
+export type GapSuggestion = { id: string; items: GapItem[]; adds: Nutrition; remainingAfter: Nutrition; summary: string; category: 'Meal' | 'Snack' | 'Side'; reasons: GapReason[]; effects: GapEffect[] };
 export type GapSwap = { planEntryId: string; fromName: string; fromCalories: number; to: GapItem; savesCalories: number; reasons: GapReason[] };
 export type GapTipItem = { kind: 'Food' | 'Recipe'; foodId?: string | null; recipeId?: string | null; name: string; portion: string; amount: number; unit: string; nutrientAmount: number; dailySharePercent: number };
 export type GapTip = { nutrientId: number; name: string; unit: string; items: GapTipItem[] };
@@ -117,6 +118,10 @@ export type GapReport = {
   swaps: GapSwap[];
   nextDay: GapTip[];
   dataNotes: string[];
+  /** Other qualifying ideas not shown yet (0 = this is the last page). */
+  moreIdeas: number;
+  /** Qualifying ideas skipped because they were already shown this session. */
+  skippedIdeas: number;
 };
 
 export type GroceryItem = { name: string; foodId?: string | null; totalGrams?: number | null; display: string; inPantry: boolean; usedIn: string[]; unconvertedAmounts: string[] };

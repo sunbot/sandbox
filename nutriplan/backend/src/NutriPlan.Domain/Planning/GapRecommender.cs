@@ -34,7 +34,43 @@ public static class GapRecommender
 
     // ── Suggestions ────────────────────────────────────────────────────────────────────────────────
 
-    public static IReadOnlyList<GapSuggestion> Suggest(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapCandidate> pool, GapMode mode, GapContext ctx, GapFillPolicy p)
+    public static IReadOnlyList<GapSuggestion> Suggest(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapCandidate> pool, GapMode mode, GapContext ctx, GapFillPolicy p) =>
+        SuggestPage(needs, pool, mode, ctx, p).Items;
+
+    /// <summary>
+    /// The best few ideas not yet shown (<see cref="GapContext.Exclude"/>). Every qualifying idea is built and checked exactly
+    /// as before; shown ones are skipped, and ideas led by a food or recipe that led a shown one come after fresh ones, so
+    /// each page is genuinely different. Deterministic: the same inputs give the same page.
+    /// </summary>
+    public static GapPage SuggestPage(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapCandidate> pool, GapMode mode, GapContext ctx, GapFillPolicy p)
+    {
+        var all = Qualifying(needs, pool, mode, ctx, p);
+        var exclude = ctx.Exclude ?? new HashSet<string>();
+        var shownAnchors = all.Where(s => exclude.Contains(IdOf(s))).Select(Anchor).ToHashSet(StringComparer.Ordinal);
+        var unseen = all.Where(s => !exclude.Contains(IdOf(s))).ToList();
+        var result = new List<GapSuggestion>();
+        var anchors = new HashSet<string>();
+        foreach (var s in unseen.OrderBy(s => shownAnchors.Contains(Anchor(s)) ? 1 : 0)) // stable: keeps the score order within each group
+        {
+            if (!anchors.Add(Anchor(s))) continue;
+            result.Add(s);
+            if (result.Count == p.MaxSuggestions) break;
+        }
+        return new GapPage(result, unseen.Count - result.Count, all.Count - unseen.Count);
+    }
+
+    /// <summary>A suggestion's identity: its foods and recipes, whatever their order or amounts (short and stable, for the app to send back).</summary>
+    public static string IdOf(GapSuggestion s) => IdOf(s.Items.Select(i => i.Candidate.Key));
+
+    public static string IdOf(IEnumerable<string> keys)
+    {
+        var text = string.Join('+', keys.Distinct().Order(StringComparer.Ordinal));
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text));
+        return Convert.ToHexString(hash, 0, 8).ToLowerInvariant();
+    }
+
+    /// <summary>Every qualifying idea (best amount per combination of foods), best first.</summary>
+    private static List<GapSuggestion> Qualifying(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapCandidate> pool, GapMode mode, GapContext ctx, GapFillPolicy p)
     {
         var energy = needs.FirstOrDefault(n => n.NutrientId == NutrientIds.Energy);
         if (energy is null) return [];
@@ -45,7 +81,7 @@ public static class GapRecommender
 
         var kcalLeft = energy.Remaining;
         var limits = needs.Where(n => n.Kind == TargetKind.Limit && n.NutrientId != NutrientIds.Energy && n.DailyTarget > 0).ToList();
-        var eligible = pool.Where(c => c.Role != GapRole.Ingredient && Multiples(c, p).Any()
+        var eligible = pool.Where(c => c.Role != GapRole.Ingredient && Multiples(c, p).Any() && ctx.OnToday?.Contains(c.Key) != true // not what's already on today
                                        && mode switch { GapMode.Pantry => c.Origin.HasFlag(GapOrigin.Pantry), GapMode.SavedRecipes => c.IsRecipe, _ => true }).ToList();
 
         var found = new List<GapSuggestion>();
@@ -99,18 +135,11 @@ public static class GapRecommender
                 }
         }
 
-        // Best quantity per combination, then the best few with different leads.
-        var bestPerSet = found.GroupBy(s => string.Join('|', s.Items.Select(i => i.Candidate.Key).Order(StringComparer.Ordinal)))
-            .Select(g => g.OrderByDescending(s => s.Score).ThenBy(s => s.Added.Calories).First());
-        var result = new List<GapSuggestion>();
-        var anchors = new HashSet<string>();
-        foreach (var s in bestPerSet.OrderByDescending(s => s.Score).ThenBy(s => string.Join('|', s.Items.Select(i => i.Candidate.Key)), StringComparer.Ordinal))
-        {
-            if (!anchors.Add(Anchor(s))) continue;
-            result.Add(s);
-            if (result.Count == p.MaxSuggestions) break;
-        }
-        return result;
+        // Best quantity per combination (the same foods in any order are one idea), best first.
+        return found.GroupBy(s => IdOf(s))
+            .Select(g => g.OrderByDescending(s => s.Score).ThenBy(s => s.Added.Calories).First())
+            .OrderByDescending(s => s.Score).ThenBy(s => string.Join('|', s.Items.Select(i => i.Candidate.Key)), StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>Which modes have at least one suggestion right now (so the app only offers filters that lead somewhere).</summary>
@@ -119,7 +148,7 @@ public static class GapRecommender
         var list = new List<GapModeAvailability>();
         foreach (var mode in Enum.GetValues<GapMode>())
         {
-            var count = Suggest(needs, pool, mode, ctx, p).Count;
+            var count = Suggest(needs, pool, mode, ctx with { Exclude = null }, p).Count;
             if (count > 0) list.Add(new(mode, count));
         }
         return list;
@@ -128,7 +157,7 @@ public static class GapRecommender
     // ── Swaps and next-day ideas ───────────────────────────────────────────────────────────────────
 
     /// <summary>For planned, uneaten items on a day with little or no room: a lighter replacement of the same kind that doesn't lose what you're short on.</summary>
-    public static IReadOnlyList<GapSwap> Swaps(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapPlanned> planned, IReadOnlyList<GapCandidate> pool, GapFillPolicy p)
+    public static IReadOnlyList<GapSwap> Swaps(IReadOnlyList<GapTarget> needs, IReadOnlyList<GapPlanned> planned, IReadOnlyList<GapCandidate> pool, GapFillPolicy p, IReadOnlySet<string>? onToday = null)
     {
         var open = OpenNeeds(needs, p);
         var limits = needs.Where(n => n.Kind == TargetKind.Limit && n.NutrientId != NutrientIds.Energy && n.DailyTarget > 0).ToList();
@@ -139,7 +168,7 @@ public static class GapRecommender
             var major = open.OrderByDescending(n => n.Weight * Math.Min(1, n.Remaining / n.DailyTarget)).Take(Math.Max(1, p.ScoreNeedsConsidered)).ToList();
             GapSwap? best = null;
             double bestScore = double.NegativeInfinity;
-            foreach (var c in pool.OrderBy(c => c.Key, StringComparer.Ordinal).Where(c => c.Role != GapRole.Ingredient && CategoryOf(c.Role) == from.Category && c.Key != from.Key))
+            foreach (var c in pool.OrderBy(c => c.Key, StringComparer.Ordinal).Where(c => c.Role != GapRole.Ingredient && CategoryOf(c.Role) == from.Category && c.Key != from.Key && onToday?.Contains(c.Key) != true))
                 foreach (var m in Multiples(c, p))
                 {
                     var n = c.PerPortion.Scale(m);

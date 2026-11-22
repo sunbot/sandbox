@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { Platform, Pressable as RNPressable, View, type PressableProps } from 'react-native';
+import { Pressable as GHPressable } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { AppText, FoodRow } from '@/components/ds';
 import { Trash2 } from '@/components/ds/icons';
@@ -19,11 +20,17 @@ export function SwipeGroup({ children }: { children: (closeOpen: () => void) => 
 }
 
 const DELETE_WIDTH = 96;
+// On Android/iOS: gesture-handler's Pressable (same props, recognised by the swipe's native gesture system). On web it
+// doesn't receive clicks, and React Native's own Pressable works there, so web keeps that.
+const Pressable: ComponentType<PressableProps> = Platform.OS === 'web' ? RNPressable : (GHPressable as unknown as ComponentType<PressableProps>);
 
 /**
  * A logged diary food: tap to edit; swipe left to reveal Delete (never deletes by itself). The row looks exactly like
  * any other food row until swiped. Screen readers get a "Delete" action on the row, and Delete is also in the editor.
  * Reduced motion: Reanimated follows the system setting, so the reveal/close animations are skipped when it's on.
+ *
+ * On Android/iOS both the row and Delete use gesture-handler's Pressable: React Native's own Pressable inside a swipeable
+ * row didn't reliably get its taps on Android (the row couldn't be opened for editing, and Delete didn't respond).
  */
 export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDelete, accessibilityHint }: {
   name: string;
@@ -76,7 +83,7 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
         </View>
       )}
     >
-      <FoodRow name={name} detail={detail} calories={calories} badge={badge} onPress={press} accessibilityHint={accessibilityHint}
+      <FoodRow name={name} detail={detail} calories={calories} badge={badge} onPress={press} accessibilityHint={accessibilityHint} pressable={Pressable}
         accessibilityActions={actions} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'delete') onDelete(); }} />
     </ReanimatedSwipeable>
   );
