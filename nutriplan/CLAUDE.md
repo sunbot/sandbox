@@ -113,6 +113,7 @@ Current providers:
 
 ## Known gaps against these rules (keep this list current)
 
+- Pull requests from the Copilot agent don't get CI until someone approves their workflow runs (GitHub shows `action_required`); check that CI actually ran before merging them, or run the suite locally.
 - The APK workflow doesn't wait for CI, overwrites the mutable `android-latest` release, and signs with the Expo template debug key. Moving to a protected key forces a one-time reinstall.
 - Daily nutrient totals still add known values only; entries missing a nutrient are counted per nutrient (`missingFrom`) and the app marks those totals as minimums (≥). The weekly heatmap now flags this per cell and per row (`missingFrom`, `incompleteDays`), and its averages cover finished days only.
 - Branded search: no restaurant provider yet; Ask doesn't search USDA Branded (only saved foods); USDA's own search order is weak, so
@@ -121,7 +122,7 @@ Current providers:
   labelled Given; "Understood by" in Ask and `/api/status` show whether Claude or the built-in rules handled a request.
   `IdempotencyStore` is in-memory (single instance, keys per user); the unique index on `diary_entries.plan_entry_id` is the durable guard.
 - Sign-in: Android Google sign-in needs the APK signing key's SHA-1 registered in Firebase (currently the template debug key).
-- USDA measures: 66 Foundation foods linked to SR Legacy are left without household measures because equivalence can't be shown by name (e.g. "Cabbage, green, raw" vs "Cabbage, raw"); production needs a one-time `enrich-usda-portions --apply` (approval required) for the 49 that qualify.
+- USDA measures: 66 Foundation foods linked to SR Legacy are left without household measures because equivalence can't be shown by name (e.g. "Cabbage, green, raw" vs "Cabbage, raw"). The 49 that qualify were enriched in production on 2026-11-22 (`enrich-usda-portions`, run by the owner after a dry run; two odd USDA portions came along unchanged: ground turkey "serving (cooked from 4 oz)" and plain whole-milk yogurt "container (4 oz)").
 - Swipe-to-delete (swipe reveals Delete, tap deletes, with Undo) uses React Native's PanResponder/Pressable because taps inside the gesture-handler swipe component never arrived on one Android phone; confirmed on the owner's Android phone (tap opens the editor; swipe reveals Delete); a desktop mouse drag doesn't open it; Delete is also in the editor. Native camera focus/zoom behaviour varies by phone (`docs/LOGGING.md` lists the checks). The web scanner (1080p request, continuous focus where supported, `features/scan/ScanCamera.web.tsx`) is confirmed sharp in Chrome on the owner's Pixel; other phones/browsers are unverified.
 
 ## Definition of done
