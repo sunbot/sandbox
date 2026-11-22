@@ -80,7 +80,11 @@ npm run typecheck
 npm run lint
 npx expo export --platform web
 npx expo-doctor
+npm run e2e:build && npm run e2e   # browser regression tests (mobile/e2e/README.md); needs Playwright
 ```
+
+Every bug fix gets a regression test: a unit test for logic (move logic out of screens into pure modules to make that possible),
+a browser test in `mobile/e2e` for UI behaviour, and a guard test where only a device can show the failure (see `swipe.test.ts`).
 
 Check current version-specific Expo SDK 58 documentation for native APIs and use `npx expo install` for compatible dependencies. Validate Android permission flows, barcode and voice features, loading/error/empty states, accessibility and smaller devices.
 
@@ -119,7 +123,7 @@ Current providers:
 - Sign-in: Android Google sign-in needs the APK signing key's SHA-1 registered in Firebase (currently the template debug key).
 - USDA measures: 66 Foundation foods linked to SR Legacy are left without household measures because equivalence can't be shown by name (e.g. "Cabbage, green, raw" vs "Cabbage, raw"); production needs a one-time `enrich-usda-portions --apply` (approval required) for the 49 that qualify.
 - Web barcode scanning in Android Chrome now requests a 1080p picture (looser if refused) and continuous focus where the camera supports it (`features/scan/ScanCamera.web.tsx`); the blur fix hasn't been confirmed on a physical phone yet (`docs/LOGGING.md` has the steps).
-- Swipe-to-delete (swipe reveals Delete, tap deletes, with Undo) uses React Native's PanResponder/Pressable because taps inside the gesture-handler swipe component never arrived on one Android phone; verified with touch in a phone-sized browser here, needs a device check on Android; a desktop mouse drag doesn't open it; Delete is also in the editor. Camera focus/zoom behaviour varies by phone and hasn't been verified on a physical device (`docs/LOGGING.md` lists the checks).
+- Swipe-to-delete (swipe reveals Delete, tap deletes, with Undo) uses React Native's PanResponder/Pressable because taps inside the gesture-handler swipe component never arrived on one Android phone; confirmed on the owner's Android phone (tap opens the editor; swipe reveals Delete); a desktop mouse drag doesn't open it; Delete is also in the editor. Camera focus/zoom behaviour varies by phone and hasn't been verified on a physical device (`docs/LOGGING.md` lists the checks).
 
 ## Definition of done
 

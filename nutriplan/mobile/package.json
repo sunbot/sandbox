@@ -44,7 +44,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "doctor": "expo-doctor",
-    "test": "node --experimental-strip-types --no-warnings --test \"src/**/*.test.ts\""
+    "test": "node --experimental-strip-types --no-warnings --test \"src/**/*.test.ts\"",
+    "e2e:build": "bash e2e/build-web.sh",
+    "e2e": "node --test --test-concurrency=1 \"e2e/*.e2e.mjs\""
   },
   "private": true
 }

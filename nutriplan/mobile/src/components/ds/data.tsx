@@ -3,6 +3,7 @@ import { type AccessibilityActionEvent, type AccessibilityActionInfo, Animated, 
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useLargeText, useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
+import { barFill, macroOver } from './macroOver';
 import type { Theme } from '@/theme/tokens';
 import { AppText, Badge } from './primitives';
 
@@ -16,7 +17,7 @@ function Track({ ratio, color, height = 8 }: { ratio: number; color: string; hei
   const t = useTheme();
   return (
     <View style={{ height, borderRadius: height, backgroundColor: t.colors.track, overflow: 'hidden' }}>
-      <View style={{ width: `${Math.max(0, Math.min(1, ratio)) * 100}%`, height: '100%', borderRadius: height, backgroundColor: color }} />
+      <View style={{ width: `${barFill(ratio, 1) * 100}%`, height: '100%', borderRadius: height, backgroundColor: color }} />
     </View>
   );
 }
@@ -29,10 +30,11 @@ function Track({ ratio, color, height = 8 }: { ratio: number; color: string; hei
  */
 export function MacroProgress({ label, value, target, color, layout = 'row' }: { label: string; value: number; target: number; color: string; layout?: 'row' | 'column' }) {
   const t = useTheme();
-  const over = target > 0 && value > target * 1.05;
-  const a11y = `${label}: ${round(value)} of ${round(target)} grams${over ? `, ${round(value - target)} grams over target` : ''}`;
+  const overBy = macroOver(value, target);
+  const over = overBy !== null;
+  const a11y = `${label}: ${round(value)} of ${round(target)} grams${over ? `, ${round(overBy)} grams over target` : ''}`;
   const barColor = over ? t.colors.accent : color;
-  const overNote = over ? <AppText variant="caption" numeric style={{ color: t.colors.accentText }} numberOfLines={1}>{round(value - target)} g over</AppText> : null;
+  const overNote = over ? <AppText variant="caption" numeric style={{ color: t.colors.accentText }} numberOfLines={1}>{round(overBy ?? 0)} g over</AppText> : null;
   const name = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />

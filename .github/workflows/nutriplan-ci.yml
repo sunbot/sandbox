@@ -80,9 +80,31 @@ jobs:
       - name: Web export (same build the Docker image uses)
         run: npx expo export --platform web
 
+  e2e:
+    name: App (browser regression tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nutriplan/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nutriplan/mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      # Test-only tool, not an app dependency: installed for this job, never shipped.
+      - run: npm i --no-save --no-audit --no-fund playwright@1.63.0
+      - run: npx playwright install --with-deps chromium
+      - name: Web build for the tests (mocked API, sign-in gate bypassed; never deployed)
+        run: npm run e2e:build
+      - name: Browser regression tests (diary swipe/edit/delete, scanner, Fill the Gaps, macro summary)
+        run: npm run e2e
+
   deploy:
     name: Deploy (Render hook)
-    needs: [backend, app]
+    needs: [backend, app, e2e]
     # The repo's default branch is master; derive it instead of hard-coding a name that can drift.
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest

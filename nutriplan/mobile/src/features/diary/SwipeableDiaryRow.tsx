@@ -4,6 +4,7 @@ import { AppText, FoodRow } from '@/components/ds';
 import { Trash2 } from '@/components/ds/icons';
 import { useReducedMotion, useTheme } from '@/theme/ThemeProvider';
 import { createOpenRowTracker, type OpenRowTracker } from './openRow';
+import { DELETE_WIDTH, claimsSwipe, dragPosition, settle as settleSwipe } from './swipe';
 
 /** What a screen can ask an open row to do. */
 type RowHandle = { close: () => void };
@@ -20,10 +21,6 @@ export function SwipeGroup({ children }: { children: (closeOpen: () => void) => 
   return <SwipeContext.Provider value={tracker}>{children(closeOpen)}</SwipeContext.Provider>;
 }
 
-const DELETE_WIDTH = 96;
-/** How far a drag (or how fast a flick) has to go to leave the row open. */
-const OPEN_AT = DELETE_WIDTH * 0.4;
-const FLICK = 0.5;
 
 /**
  * A logged diary food: tap to edit; swipe left to reveal Delete (never deletes by itself), then tap Delete. The row looks
@@ -69,15 +66,14 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
   useEffect(() => () => { group?.forget(handle); }, [group, handle]);
 
   const settle = useCallback((dx: number, vx: number) => {
-    const at = drag.from + dx;
-    if (vx < -FLICK || (vx <= FLICK && at < -OPEN_AT)) open(); else close();
+    if (settleSwipe(drag.from, dx, vx) === 'open') open(); else close();
   }, [open, close, drag]);
 
   const pan = useMemo(() => PanResponder.create({
     // Only a clearly sideways drag takes the touch; a tap or a vertical scroll never does.
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onMoveShouldSetPanResponder: (_, g) => claimsSwipe(g.dx, g.dy),
     onPanResponderGrant: () => { x.stopAnimation((v) => { drag.from = v; }); },
-    onPanResponderMove: (_, g) => { x.setValue(Math.min(0, Math.max(-DELETE_WIDTH, drag.from + g.dx))); },
+    onPanResponderMove: (_, g) => { x.setValue(dragPosition(drag.from, g.dx)); },
     onPanResponderRelease: (_, g) => settle(g.dx, g.vx),
     onPanResponderTerminate: (_, g) => settle(g.dx, g.vx),
     // Once swiping, a scroll view shouldn't take the touch away.

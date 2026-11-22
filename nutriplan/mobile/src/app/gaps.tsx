@@ -5,7 +5,7 @@ import { useGaps, useLogFoods, useLogRecipe, usePlanMutations } from '@/api/hook
 import type { GapItem, GapMode, GapSuggestion, GapSwap, GapTip, GapTipItem } from '@/api/types';
 import { AppCard, AppText, Badge, EmptyState, FilterChip, PrimaryButton, SecondaryButton, Skeleton, TextButton, useSnackbar } from '@/components/ds';
 import { ArrowLeftRight, CalendarClock, CalendarPlus, Check, CircleCheck, CloudOff, Info, RefreshCw, Sparkles } from '@/components/ds/icons';
-import { calorieHeadline, effectLine, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, rotationState, shortOn, skipShown, suggestionId } from '@/features/gaps/gapView';
+import { calorieHeadline, effectLine, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, rotationState, shortOn, skipShown, skippedFor, suggestionId, withSkipped, type SkippedByMode } from '@/features/gaps/gapView';
 import { friendlyFoodName } from '@/lib/foodName';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -33,9 +33,9 @@ export default function GapsScreen() {
   // Steps already saved, so a retry after a partial failure doesn't add them twice.
   const saved = useRef(new Set<string>());
   // Ideas shown and passed over in this visit, per filter: rotating in Best match doesn't use up Saved recipes.
-  const [skippedBy, setSkippedBy] = useState<Partial<Record<GapMode, string[]>>>({});
-  const skipped = skippedBy[mode] ?? [];
-  const setSkipped = (f: (s: string[]) => string[]) => setSkippedBy((all) => ({ ...all, [mode]: f(all[mode] ?? []) }));
+  const [skippedBy, setSkippedBy] = useState<SkippedByMode>({});
+  const skipped = skippedFor(skippedBy, mode);
+  const setSkipped = (f: (s: string[]) => string[]) => setSkippedBy((all) => withSkipped(all, mode, f(skippedFor(all, mode))));
   // The page "Show different ideas" or "Start over" asked for: the button spins and the view scrolls only for that one.
   const [requested, setRequested] = useState<string | null>(null);
   const scrolledTo = useRef<string | null>(null);
