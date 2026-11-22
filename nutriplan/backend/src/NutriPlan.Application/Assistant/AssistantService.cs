@@ -91,8 +91,8 @@ public sealed class AssistantService(
             {
                 var gaps = await gapFillService.SuggestAsync(new GapFillRequest(date), ct);
                 var reply = gaps.Suggestions.Count == 0
-                    ? "You're on target for the day — nothing to fill."
-                    : $"Here are {gaps.Suggestions.Count} ways to round out {(date == clock.Today ? "today" : date.ToString("ddd MMM d"))}.";
+                    ? $"{gaps.Message} {gaps.EmptyMessage}".Trim()
+                    : $"Here {(gaps.Suggestions.Count == 1 ? "is 1 idea" : $"are {gaps.Suggestions.Count} ideas")} to round out {(date == clock.Today ? "today" : date.ToString("ddd MMM d"))}.";
                 return Response(interpreted, reply, info, meal, date, gaps: gaps);
             }
 

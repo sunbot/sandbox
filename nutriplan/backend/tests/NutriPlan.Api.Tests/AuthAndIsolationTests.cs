@@ -314,6 +314,33 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     }
 
     [PostgresFact]
+    public async Task Fill_the_gaps_only_uses_the_callers_own_pantry_foods_and_history()
+    {
+        var a = await NewMember();
+        var b = await NewMember();
+        var food = await Json(await a.PostAsJsonAsync("/api/foods", new
+        {
+            name = "Zqxv pantry yogurt", brand = (string?)null, barcode = (string?)null, servingGrams = 170.0, servingDescription = "1 container",
+            nutrientsPerServing = new Dictionary<string, double> { ["1008"] = 100, ["1003"] = 17 },
+        }));
+        (await a.PostAsJsonAsync("/api/pantry", new { name = "Zqxv pantry yogurt", foodId = (string)food["id"]!, grams = 340.0 })).EnsureSuccessStatusCode();
+        (await a.PostAsJsonAsync("/api/diary/food", new { date = Day.AddDays(-1), meal = "Snack", foodId = (string)food["id"]!, grams = 170.0 })).EnsureSuccessStatusCode();
+
+        // A's own pantry feeds A's Pantry mode; the endpoint accepts the mode and meal.
+        var mine = await Json(await a.GetAsync($"/api/plan/gaps?date={Day:yyyy-MM-dd}&mode=Pantry&meal=Snack"));
+        Assert.Equal("Pantry", (string?)mine["mode"]);
+        foreach (var item in mine["suggestions"]!.AsArray().SelectMany(s => s!["items"]!.AsArray()))
+            Assert.StartsWith("Zqxv", (string)item!["name"]!);
+
+        // B never sees any of it: not in suggestions, not in swaps or ideas, not in any mode.
+        foreach (var mode in new[] { "BestMatch", "Pantry", "QuickSnack", "Meal", "SavedRecipes" })
+        {
+            var theirs = await Json(await b.GetAsync($"/api/plan/gaps?date={Day:yyyy-MM-dd}&mode={mode}"));
+            Assert.DoesNotContain("Zqxv", theirs.ToJsonString());
+        }
+    }
+
+    [PostgresFact]
     public async Task A_new_member_starts_with_default_targets_not_the_owners()
     {
         (await Owner().PutAsJsonAsync("/api/targets", new { calories = 1666.0 })).EnsureSuccessStatusCode();

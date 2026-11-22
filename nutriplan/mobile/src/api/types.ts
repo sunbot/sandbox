@@ -89,12 +89,30 @@ export type Week = {
 
 export type RebalanceProposal = { date: string; adjustedTarget: number; plannedCalories: number; suggestedScale: number; affectedEntries: PlanEntry[] };
 
-export type GapItem = { kind: 'Food' | 'Recipe'; foodId?: string | null; recipeId?: string | null; name: string; amount: number; unit: string; nutrition: Nutrition };
+export type GapItem = { kind: 'Food' | 'Recipe'; foodId?: string | null; recipeId?: string | null; name: string; amount: number; unit: string; nutrition: Nutrition; portion: string };
+export type GapMode = 'BestMatch' | 'Meal' | 'QuickSnack' | 'Pantry' | 'SavedRecipes';
+export type GapSituation = 'Open' | 'Near' | 'AtTarget' | 'Over';
+export type GapReason = { code: string; text: string; nutrientId?: number | null };
+export type GapEffect = { nutrientId: number; name: string; unit: string; kind: 'Goal' | 'Limit'; before: number; after: number };
+export type GapSuggestion = { items: GapItem[]; adds: Nutrition; remainingAfter: Nutrition; summary: string; category: 'Meal' | 'Snack' | 'Side'; reasons: GapReason[]; effects: GapEffect[] };
+export type GapSwap = { planEntryId: string; fromName: string; fromCalories: number; to: GapItem; savesCalories: number; reasons: GapReason[] };
+export type GapTipItem = { kind: 'Food' | 'Recipe'; foodId?: string | null; recipeId?: string | null; name: string; portion: string; amount: number; unit: string; nutrientAmount: number; dailySharePercent: number };
+export type GapTip = { nutrientId: number; name: string; unit: string; items: GapTipItem[] };
 export type GapReport = {
   date: string;
+  /** Signed: negative means over (calories, protein…). */
   remaining: Nutrition;
-  gaps: { nutrientId: number; name: string; unit: string; remaining: number; target: number; kind: string }[];
-  suggestions: { items: GapItem[]; adds: Nutrition; remainingAfter: Nutrition; summary: string }[];
+  gaps: { nutrientId: number; name: string; unit: string; remaining: number; target: number; kind: string; dataComplete: boolean }[];
+  suggestions: GapSuggestion[];
+  situation: GapSituation;
+  message: string;
+  mode: GapMode;
+  availableModes: { mode: GapMode; count: number }[];
+  emptyReason?: string | null;
+  emptyMessage?: string | null;
+  swaps: GapSwap[];
+  nextDay: GapTip[];
+  dataNotes: string[];
 };
 
 export type GroceryItem = { name: string; foodId?: string | null; totalGrams?: number | null; display: string; inPantry: boolean; usedIn: string[]; unconvertedAmounts: string[] };

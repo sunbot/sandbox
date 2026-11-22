@@ -20,6 +20,7 @@ Build a trustworthy, fast, intuitive nutrition and recipe-planning experience. P
 - `backend/src/NutriPlan.Infrastructure`: EF Core/PostgreSQL, USDA import, external providers, Claude client.
 - `backend/src/NutriPlan.Api`: thin minimal API endpoints, validation and composition.
 - `backend/tests`: xUnit domain, application and Postgres integration tests.
+- Fill the Gaps (`GapRecommender` in Domain, `GapFillService`, `docs/FILL_THE_GAPS.md`): deterministic, real portions only, hard constraints, nothing added when at/over target. Thresholds live in `GapFillPolicy`; don't reintroduce a global optimizer or invented serving sizes.
 - `mobile`: Expo SDK 58, React Native/TypeScript, Expo Router, TanStack Query; keep reusable logic outside route components.
 
 Dependencies point inward. Don't put business rules in endpoints or nutrition calculation in UI. Reuse existing patterns rather than creating unnecessary services or frameworks.

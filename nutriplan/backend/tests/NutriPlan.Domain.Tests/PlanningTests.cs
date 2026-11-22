@@ -81,38 +81,6 @@ public class PlanningTests
         Assert.Single(result.Warnings);
     }
 
-    [Fact]
-    public void Gap_filler_closes_a_protein_and_calorie_gap_without_overshooting()
-    {
-        var targets = new List<GapTarget>
-        {
-            new(NutrientIds.Energy, 300, 2000, TargetKind.Goal, 4),
-            new(NutrientIds.Protein, 35, 120, TargetKind.Goal, 3),
-        };
-        var yogurt = Candidate("yogurt", Profile(59 * 0.5, 10.2 * 0.5, 3.6 * 0.5, 0.4 * 0.5), 50, maxSteps: 8); // 50 g steps
-        var almonds = Candidate("almonds", Profile(579 * 0.1, 21 * 0.1, 22 * 0.1, 50 * 0.1), 10, maxSteps: 6); // 10 g steps
-        var candy = Candidate("candy", Profile(400 * 0.25, 0, 100 * 0.25, 0), 25, maxSteps: 8);
-
-        var suggestions = GapFiller.Suggest(targets, [yogurt, almonds, candy]);
-
-        Assert.NotEmpty(suggestions);
-        var best = suggestions[0];
-        Assert.DoesNotContain(best.Items, i => i.Candidate.Key == "candy");
-        Assert.InRange(best.Added.Calories, 200, 330);
-        Assert.True(best.Added.Protein >= 25, $"protein {best.Added.Protein}");
-    }
-
-    [Fact]
-    public void Gap_filler_returns_nothing_when_targets_are_met()
-    {
-        var targets = new List<GapTarget> { new(NutrientIds.Energy, 10, 2000, TargetKind.Goal, 4) };
-        var suggestions = GapFiller.Suggest(targets, [Candidate("x", Profile(100, 1, 1, 1), 1)]);
-        Assert.Empty(suggestions);
-    }
-
-    private static GapCandidate Candidate(string key, NutrientProfile perStep, double step, int maxSteps = 10) =>
-        new(key, ItemKind.Food, Guid.NewGuid(), null, key, perStep, step, "g", 1, maxSteps);
-
     private static NutrientProfile Profile(double kcal, double p, double c, double f) => new(new Dictionary<int, double>
     {
         [NutrientIds.Energy] = kcal, [NutrientIds.Protein] = p, [NutrientIds.Carbohydrate] = c, [NutrientIds.Fat] = f,

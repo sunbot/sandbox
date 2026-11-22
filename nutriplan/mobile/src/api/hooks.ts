@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, patch, post, put, q, api } from './client';
 import { NUTRITION_KEYS } from './invalidation';
 import type * as T from './types';
@@ -13,7 +13,7 @@ export const keys = {
   food: (id: string) => ['food', id] as const,
   recipes: (search: string) => ['recipes', search] as const,
   recipe: (id: string) => ['recipe', id] as const,
-  gaps: (date: string, recipesOnly: boolean) => ['gaps', date, recipesOnly] as const,
+  gaps: (date: string, mode: T.GapMode, meal?: Meal) => ['gaps', date, mode, meal ?? 'any'] as const,
   grocery: (from: string, to: string) => ['grocery', from, to] as const,
   pantry: ['pantry'] as const,
   cookable: ['cookable'] as const,
@@ -157,6 +157,10 @@ export function usePlanMutations() {
     applyRebalance: useMutation({ mutationFn: (r: { date: string; scale: number }) => post<T.PlanEntry[]>('/plan/rebalance', r), ...opts }),
     reopen: useMutation({ mutationFn: (id: string) => post<T.PlanEntry>(`/plan/${id}/reopen`), ...opts }),
     copy: useMutation({ mutationFn: (r: { from: string; to: string; meal?: Meal }) => post<T.PlanEntry[]>('/plan/copy', r), ...opts }),
+    swapFood: useMutation({
+      mutationFn: ({ id, foodId, grams }: { id: string; foodId: string; grams: number }) => post<T.PlanEntry>(`/plan/${id}/swap-food`, { foodId, grams }),
+      ...opts,
+    }),
     swapRecipe: useMutation({
       mutationFn: ({ id, recipeId, servings }: { id: string; recipeId: string; servings: number }) => post<T.PlanEntry>(`/plan/${id}/swap-recipe`, { recipeId, servings }),
       ...opts,
@@ -164,8 +168,9 @@ export function usePlanMutations() {
   };
 }
 
-export const useGaps = (date: string, recipesOnly = false) =>
-  useQuery({ queryKey: keys.gaps(date, recipesOnly), queryFn: () => get<T.GapReport>(`/plan/gaps?${q({ date, recipesOnly })}`) });
+/** Keeps the previous answer on screen while a different mode or meal loads, so the chips and scroll position don't reset. */
+export const useGaps = (date: string, mode: T.GapMode = 'BestMatch', meal?: Meal) =>
+  useQuery({ queryKey: keys.gaps(date, mode, meal), queryFn: () => get<T.GapReport>(`/plan/gaps?${q({ date, mode, meal })}`), placeholderData: keepPreviousData });
 
 export const useGrocery = (from: string, to: string) =>
   useQuery({ queryKey: keys.grocery(from, to), queryFn: () => get<T.GroceryList>(`/plan/grocery?${q({ from, to })}`) });
