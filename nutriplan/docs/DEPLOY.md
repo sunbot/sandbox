@@ -78,6 +78,10 @@ Future JavaScript-only changes can be pushed without reinstalling (`eas update`)
 Push to the branch Render deploys from. Render rebuilds automatically, and database migrations run on startup.
 Your data stays in Neon.
 
+One-time data steps that a deploy doesn't do on its own are listed in the docs that introduce them, e.g. giving USDA
+Foundation foods the measures of their linked SR Legacy food (`enrich-usda-portions`, see `docs/LOGGING.md`). Run them with a
+dry run first, and only with a recent backup.
+
 ## Backups
 
 Neon keeps point-in-time history on its free tier. For your own copy:

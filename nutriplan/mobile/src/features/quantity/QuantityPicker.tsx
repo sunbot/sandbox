@@ -4,7 +4,7 @@ import type { Measure } from '@/api/types';
 import { AppText } from '@/components/ds';
 import { Check, ChevronDown, ChevronUp } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
-import { formatQuantity, matchMeasure, parseQuantity, switchMeasure, volumeNote, type ExactAmount } from './quantity';
+import { capitalize, formatQuantity, matchMeasure, parseQuantity, sourceText, switchMeasure, volumeNote, type ExactAmount } from './quantity';
 
 export type QuantityValue = { text: string; unit: string };
 
@@ -82,8 +82,8 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
                 style={({ pressed }) => ({ minHeight: t.sizes.touch, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingHorizontal: t.space.md, paddingVertical: t.space.xs,
                   borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.colors.border, backgroundColor: pressed ? t.colors.surfaceMuted : selected ? t.colors.primaryLight : t.colors.surface })}>
                 <View style={{ flex: 1, gap: 1 }}>
-                  <AppText variant="body">{m.label}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${formatQuantity(m.base)} ${baseUnit}`}</AppText> : null}</AppText>
-                  {m.source ? <AppText variant="caption" tone="muted" numberOfLines={2}>From USDA: {m.source}</AppText> : null}
+                  <AppText variant="body">{capitalize(m.label)}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${formatQuantity(m.base)} ${baseUnit}`}</AppText> : null}</AppText>
+                  {m.source ? <AppText variant="caption" tone="muted" numberOfLines={3}>{sourceText(m)}</AppText> : null}
                 </View>
                 {selected ? <Check size={18} color={t.colors.primary} /> : null}
               </Pressable>

@@ -25,10 +25,10 @@ public sealed record NutritionDto(
     public static readonly NutritionDto Empty = From(NutrientProfile.Empty);
 }
 
-public sealed record PortionDto(string Description, double Grams);
+public sealed record PortionDto(string Description, double Grams, string? Origin = null);
 
 /// <summary>A measure a food can be logged in: send <c>Unit</c> back with an amount. <c>Base</c> is grams (ml for a drink) in one.</summary>
-public sealed record MeasureDto(string Unit, string Label, string Plural, double Base, string Kind, string? Source, bool Countable);
+public sealed record MeasureDto(string Unit, string Label, string Plural, double Base, string Kind, string? Source, bool Countable, string? Origin = null);
 
 public sealed record FoodSummaryDto(
     Guid Id,
@@ -47,9 +47,9 @@ public sealed record FoodSummaryDto(
     public static FoodSummaryDto From(Food f) => new(
         f.Id, f.Name, f.Brand, f.Source.ToString(), f.Quality.ToString(), f.QualityNote, f.Barcode,
         NutritionDto.From(f.NutrientsPer100g),
-        f.Portions.Select(p => new PortionDto(p.Description, Math.Round(p.GramsPerUnit, 2))).ToList(),
+        f.Portions.Select(p => new PortionDto(p.Description, Math.Round(p.GramsPerUnit, 2), p.Origin)).ToList(),
         f.BaseUnit,
-        FoodMeasures.For(f).Select(m => new MeasureDto(m.Unit, m.Label, m.Plural, m.BasePerUnit, m.Kind.ToString(), m.Source, m.Countable)).ToList());
+        FoodMeasures.For(f).Select(m => new MeasureDto(m.Unit, m.Label, m.Plural, m.BasePerUnit, m.Kind.ToString(), m.Source, m.Countable, m.Origin)).ToList());
 }
 
 public sealed record ItemDto(

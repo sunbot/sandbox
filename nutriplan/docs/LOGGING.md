@@ -15,6 +15,55 @@ resolves to the same weight on the server. Labels are natural ("almond", "contai
 shown under each measure ("From USDA: cup, whole"). A solid food without a measured volume says so instead of offering cups.
 Measures are sent with every food (`measures` on `GET /api/foods/{id}`, search and match results).
 
+### Names of USDA portions
+
+- A portion is named by its first word ("slice", "large", "container"), which must resolve back to that same portion.
+- A description led by a number that qualifies the noun is named by the whole phrase: "100 calorie package" →
+  **100-calorie package** (plural "100-calorie packages"), "1-3 ring thin pretzel" and "…thick pretzel" stay two measures.
+  The phrase is also the unit that's sent and stored, and `QuantityResolver` matches it exactly (description, label or plural);
+  if several portions share that name with different weights, it isn't offered. A number followed by a unit keeps the noun
+  ("6 oz container" → container). Entries logged earlier as "calorie" still resolve to the same 18 g.
+- "calorie", "kcal" and "NFS" are never a measure, and a portion that starts with a weight ("oz, NFS", "oz, without shell",
+  "oz grilled patties", "lb, boneless") is a weight (offered as g/oz), not an item called "nfs", "shell" or "patty".
+- The original USDA description is always kept (`source`) and shown under the measure.
+
+### Foundation foods with no USDA measures
+
+Many USDA Foundation foods have no portions in USDA's own download (e.g. "Nuts, almonds, whole, raw": none in
+`food_portion.csv`), so only g/oz can be offered. Most continue an SR Legacy food and carry its NDB number (here 12061, SR
+Legacy "Nuts, almonds", which has almond 1.2 g and cup, whole 143 g). `enrich-usda-portions` (below) copies the SR food's
+portions onto the Foundation food only when `EquivalentPortions` shows they're the same physical food:
+
+- the shared NDB number (USDA's link), **and** every word of the SR name appears in the Foundation name, which adds only
+  "raw", "whole", "halves" or "kernels" (so no other variety, state, cut, salt level or form: Honeycrisp ≠ Golden Delicious,
+  raw ≠ grilled/dried/roasted, ground flaxseed ≠ whole seeds);
+- if the Foundation name adds a cut ("whole", "halves"), only portions naming that cut, and items, are taken: whole almonds
+  get "cup, whole", never "cup, sliced/slivered/ground", and no plain cup;
+- weights are copied unchanged, each borrowed portion records `origin` ("USDA SR Legacy “Nuts, almonds” (FDC 170567, same
+  NDB 12061)"), and the app shows it under the measure. Nutrition, names and ids are never changed.
+
+Anything that can't be shown to be the same food stays without household measures (the command lists each one and why).
+Against the 2026-04 Foundation and 2018-04 SR Legacy downloads it fills 49 of 115 linked foods; 66 are left as they are.
+
+```bash
+# From backend/src/NutriPlan.Api, with DATABASE_URL pointing at the database to change:
+dotnet run -- enrich-usda-portions <foundation folder> <sr legacy folder>           # dry run: lists what would change
+dotnet run -- enrich-usda-portions <foundation folder> <sr legacy folder> --apply   # saves; safe to re-run
+# In the Docker image the folders are under /data/usda:
+#   dotnet NutriPlan.Api.dll enrich-usda-portions /data/usda/<foundation>/<…> /data/usda/<sr legacy>/<…> [--apply]
+```
+
+It only touches Foundation foods with **no** portions, so re-running changes nothing. A fresh database gets this automatically
+after the first-start USDA import; an existing one only when someone runs the command. Undo:
+`update foods set portions = '[]' where source = 'UsdaFoundation' and portions @> '[{}]' and not exists (select 1 from jsonb_array_elements(portions) p where p->>'origin' is null);`
+Diary and plan entries keep their snapshots; recipe ingredients keep their stored grams until edited or re-matched.
+
+### Search
+
+`FoodRanker` adds a small +2 to a food with a count or household-volume measure from USDA data (its own, or borrowed as above)
+(`FoodRanker.HasMeasuredPortion`). That only separates otherwise-equal matches: what you asked for (raw/cooked, the food
+itself), the source's trust and your own history all count for more.
+
 ## Editing an amount
 
 - `PATCH /api/diary/{id}` accepts `{ amount, unit }` (and still `scale` / `meal` / `date`); `POST /api/plan/{id}/amount`

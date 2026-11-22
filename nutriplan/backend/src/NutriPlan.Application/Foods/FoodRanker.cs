@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using NutriPlan.Application.Abstractions;
 using NutriPlan.Domain.Foods;
+using NutriPlan.Domain.Units;
 
 namespace NutriPlan.Application.Foods;
 
@@ -157,6 +158,10 @@ public static partial class FoodRanker
             _ => 0,
         };
 
+        // A food you can log in items or cups (from USDA measures: its own, or ones borrowed from the same food's linked SR
+        // Legacy record) is a little easier to use than one that only takes grams. Small on purpose: it only separates otherwise-equal matches, never state, wording or history.
+        if (HasMeasuredPortion(food)) score += MeasuredPortionBoost;
+
         // Personal history.
         if (useHistory) score += Math.Min(20, Math.Log2(1 + row.TimesLogged) * 5);
 
@@ -165,6 +170,12 @@ public static partial class FoodRanker
 
         return score;
     }
+
+    public const double MeasuredPortionBoost = 2;
+
+    /// <summary>The food has a count or household-volume measure from USDA or label data (not just g/oz or a drink's ml).</summary>
+    public static bool HasMeasuredPortion(Food food) =>
+        food.Portions.Count > 0 && FoodMeasures.For(food).Any(m => m.Kind != MeasureKind.Mass && m.Source is not null);
 
     public static IEnumerable<string> Tokens(string text) =>
         TokenSplit().Split(text.ToLowerInvariant())

@@ -10,9 +10,10 @@ export type Nutrition = {
   nutrients: Record<string, number>;
 };
 
-export type Portion = { description: string; grams: number };
+/** `origin` names the USDA record a portion was borrowed from (same USDA NDB number); absent for the food's own portions. */
+export type Portion = { description: string; grams: number; origin?: string | null };
 /** A measure the food can be logged in (from the server): send `unit` back with an amount; `base` is grams (ml for a drink) in one. */
-export type Measure = { unit: string; label: string; plural: string; base: number; kind: 'Count' | 'Volume' | 'Mass'; source?: string | null; countable: boolean };
+export type Measure = { unit: string; label: string; plural: string; base: number; kind: 'Count' | 'Volume' | 'Mass'; source?: string | null; countable: boolean; origin?: string | null };
 
 export type Food = {
   id: string;
