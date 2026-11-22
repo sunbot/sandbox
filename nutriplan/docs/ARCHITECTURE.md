@@ -79,8 +79,7 @@ tuning over whole-step portions (≤1.5 × a normal serving). Swap in OR-Tools b
 
 ## Next steps (when it becomes a product)
 
-1. **Accounts:** add `OwnerId` to foods (user-created only), recipes, diary, plan, pantry, targets; JWT auth
-   (e.g. Supabase Auth, Entra External ID) replacing `ApiKeyMiddleware`.
+1. **Accounts:** done: Google sign-in via Firebase, invite-only, per-user `owner_id` on private data ([AUTH.md](AUTH.md)).
 2. **Offline:** persist TanStack Query cache; queue mutations.
 3. **Paid data tier:** Nutritionix / FatSecret as extra `IBarcodeProvider`s + natural-language endpoints, gated by plan.
 4. **iOS release:** same codebase; `eas build -p ios`.

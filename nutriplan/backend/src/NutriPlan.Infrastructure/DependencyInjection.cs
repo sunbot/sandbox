@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<IPantryRepository, PantryRepository>();
         services.AddScoped<ITargetsRepository, TargetsRepository>();
+        services.AddScoped<IUserDirectory, UserDirectory>();
         services.AddScoped<UsdaImporter>();
         services.AddHostedService<UsdaSeeder>();
 

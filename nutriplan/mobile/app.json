@@ -48,7 +48,8 @@
           "microphonePermission": "Speak what you ate",
           "speechRecognitionPermission": "Turn your voice into food entries"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "scheme": "nutriplan",
     "experiments": {

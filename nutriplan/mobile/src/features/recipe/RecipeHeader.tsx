@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import type { RecipeDetail } from '@/api/types';
 import { AppText, IconButton } from '@/components/ds';
 import { Clock, Pencil, Star } from '@/components/ds/icons';
 import { RecipeThumb } from './RecipeThumb';
-import { loadSettings } from '@/lib/settings';
+import { useServerAuth } from '@/lib/authImage';
 import { useTheme } from '@/theme/ThemeProvider';
 
 /**
@@ -14,8 +13,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 export function RecipeHeader({ recipe, onFavorite, onEdit }: { recipe: RecipeDetail; onFavorite: () => void; onEdit: () => void }) {
   const t = useTheme();
   const s = recipe.summary;
-  const [server, setServer] = useState({ apiUrl: '', apiKey: '' });
-  useEffect(() => { loadSettings().then(setServer); }, []);
+  const server = useServerAuth();
   const time = s.totalTime || [recipe.prepTime && `Prep ${recipe.prepTime}`, recipe.cookTime && `Cook ${recipe.cookTime}`].filter(Boolean).join(' · ');
 
   return (

@@ -85,8 +85,7 @@ Check current version-specific Expo SDK 58 documentation for native APIs and use
 ## Security and operational safety
 
 - Never check in credentials, actual user diaries, API keys, secrets, or personal data. Never put backend secrets in `EXPO_PUBLIC_*` variables.
-- Treat the optional shared API key as **local/single-user only**; publicly exposed deployments must fail closed without configured protection. Implement true authentication and per-user authorization/isolation before serving multiple users.
-- The current app stores the API key in AsyncStorage; move sensitive native credentials to appropriate secure storage before public release.
+- Accounts: Google sign-in via Firebase, invite-only (`docs/AUTH.md`). The API fails closed (fallback policy requires an active app user; production won't start without `Auth:FirebaseProjectId`). Every user-owned read/write is scoped by `owner_id` in repositories **and** EF query filters; raw SQL must name the owner. Never take a user id from request data. Native session tokens live in SecureStore, never AsyncStorage.
 - Hosted API access should use HTTPS, bounded inputs, sensible rate limits and safe errors. Preserve anti-SSRF controls in `HttpWebPageFetcher`.
 - Preserve/verify backups and use controlled, reversible database migrations. Avoid destructive operations and do not alter production data without explicit approval.
 - Use feature branches/PRs where possible. Do not publish a release APK until required CI checks pass; use versioned immutable artifacts and protected signing keys.
@@ -108,15 +107,14 @@ Current providers:
 
 ## Known gaps against these rules (keep this list current)
 
-- `ApiKeyMiddleware` allows all requests when `Api:Key` is unset (fails open). Requiring a key needs coordinating with the Render config and the app's Settings first.
 - The APK workflow doesn't wait for CI, overwrites the mutable `android-latest` release, and signs with the Expo template debug key. Moving to a protected key forces a one-time reinstall.
 - Daily nutrient totals still add known values only; entries missing a nutrient are counted per nutrient (`missingFrom`) and the app marks those totals as minimums (≥). The weekly heatmap now flags this per cell and per row (`missingFrom`, `incompleteDays`), and its averages cover finished days only.
-- The API key is stored in AsyncStorage (not secure storage).
 - Branded search: no restaurant provider yet; Ask doesn't search USDA Branded (only saved foods); USDA's own search order is weak, so
   some brand queries (e.g. "Fairlife protein shake" → fairlife's shakes are listed under "Core Power") need the exact USDA brand name.
 - Ask quantity/state limits: a unitless amount of a food whose only USDA portion is a size ("a coffee" → "1 medium", 480 g) is
   labelled Given; "Understood by" in Ask and `/api/status` show whether Claude or the built-in rules handled a request.
-  `IdempotencyStore` is in-memory (single instance); the unique index on `diary_entries.plan_entry_id` is the durable guard.
+  `IdempotencyStore` is in-memory (single instance, keys per user); the unique index on `diary_entries.plan_entry_id` is the durable guard.
+- Sign-in: Android Google sign-in needs the APK signing key's SHA-1 registered in Firebase (currently the template debug key).
 
 ## Definition of done
 

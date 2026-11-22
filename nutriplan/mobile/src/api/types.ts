@@ -210,3 +210,9 @@ export type AssistantResponse = {
 
 /** One food for a multi-food log/plan request. */
 export type FoodAmount = { foodId: string; grams?: number; amount?: number; unit?: string };
+
+// ── Accounts ─────────────────────────────────────────────────────────────────────────────────────
+export type AccessState = 'Active' | 'NotInvited' | 'Revoked' | 'EmailNotVerified';
+export type Account = { id: string; displayName: string; email: string | null; role: 'Owner' | 'Member'; isActive: boolean; createdAt: string; lastLoginAt: string | null };
+export type Session = { state: AccessState; message: string; user: Account | null; subject: string };
+export type Invitation = { id: string; createdAt: string; expiresAt: string; accepted: boolean; revoked: boolean };

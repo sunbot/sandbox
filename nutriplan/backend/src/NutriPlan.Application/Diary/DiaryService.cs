@@ -78,6 +78,7 @@ public sealed class DiaryService(
 
     public async Task<DiaryEntryDto> LogFoodAsync(LogFoodRequest r, CancellationToken ct = default)
     {
+        await RequireOwnPlanEntryAsync(r.PlanEntryId, ct);
         var item = await BuildFoodItemAsync(r.FoodId, r.Grams, r.Amount, r.Unit, ct);
         return await AddAsync(new DiaryEntry(r.Date, r.Meal, item, r.PlanEntryId), ct);
     }
@@ -114,8 +115,15 @@ public sealed class DiaryService(
 
     public async Task<DiaryEntryDto> LogRecipeAsync(LogRecipeRequest r, CancellationToken ct = default)
     {
+        await RequireOwnPlanEntryAsync(r.PlanEntryId, ct);
         var item = await BuildRecipeItemAsync(r.RecipeId, r.Servings, ct);
         return await AddAsync(new DiaryEntry(r.Date, r.Meal, item, r.PlanEntryId), ct);
+    }
+
+    /// <summary>A log may point at a planned meal only if it's one of yours (the plan repository is scoped to you).</summary>
+    private async Task RequireOwnPlanEntryAsync(Guid? planEntryId, CancellationToken ct)
+    {
+        if (planEntryId is { } id && await plans.GetAsync(id, ct) is null) throw new NotFoundException($"Planned meal {id} not found.");
     }
 
     public Task<DiaryEntryDto> LogQuickAsync(LogQuickRequest r, CancellationToken ct = default) =>

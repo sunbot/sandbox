@@ -13,6 +13,7 @@ namespace NutriPlan.Application.Tests;
 /// <summary>Regression tests for the reliability review: Ask parsing, quantity resolution, raw/cooked, plan/diary integrity.</summary>
 public class ReliabilityTests
 {
+    private static readonly Guid Me = Guid.NewGuid();
     private static readonly DateOnly Sat = new(2026, 11, 21);
     private readonly InMemoryStore _store = new();
     private DiaryService Diary() => new(_store, _store, _store, _store, _store, _store);
@@ -462,8 +463,8 @@ public class ReliabilityTests
         var egg = _store.AddFood("Egg, whole, raw", 143, 12.6, 0.7, 9.5);
         var once = new IdempotencyStore();
         var request = new LogFoodsRequest(_store.Today, MealSlot.Breakfast, [new FoodAmount(egg.Id, 100, null, null)]);
-        var a = await once.RunAsync("k1", request, () => Diary().LogFoodsAsync(request));
-        var b = await once.RunAsync("k1", request, () => Diary().LogFoodsAsync(request));
+        var a = await once.RunAsync(Me, "k1", request, () => Diary().LogFoodsAsync(request));
+        var b = await once.RunAsync(Me, "k1", request, () => Diary().LogFoodsAsync(request));
         Assert.Same(a, b);
         Assert.Single(_store.Diary);
     }
@@ -475,15 +476,27 @@ public class ReliabilityTests
         var once = new IdempotencyStore();
         var one = new LogFoodsRequest(_store.Today, MealSlot.Breakfast, [new FoodAmount(egg.Id, 100, null, null)]);
         var two = one with { Items = [new FoodAmount(egg.Id, 50, null, null)] };
-        await once.RunAsync("k", one, () => Diary().LogFoodsAsync(one));
-        await once.RunAsync("k", two, () => Diary().LogFoodsAsync(two));
-        await once.RunAsync("other", one, () => Diary().LogFoodsAsync(one));
+        await once.RunAsync(Me, "k", one, () => Diary().LogFoodsAsync(one));
+        await once.RunAsync(Me, "k", two, () => Diary().LogFoodsAsync(two));
+        await once.RunAsync(Me, "other", one, () => Diary().LogFoodsAsync(one));
         Assert.Equal(3, _store.Diary.Count);
 
         var attempts = 0;
         Task<List<int>> Flaky() => ++attempts == 1 ? throw new InvalidOperationException() : Task.FromResult(new List<int> { 1 });
-        await Assert.ThrowsAsync<InvalidOperationException>(() => once.RunAsync("f", new { }, Flaky));
-        Assert.Single(await once.RunAsync("f", new { }, Flaky));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => once.RunAsync(Me, "f", new { }, Flaky));
+        Assert.Single(await once.RunAsync(Me, "f", new { }, Flaky));
+    }
+
+    [Fact]
+    public async Task Idempotency_keys_are_per_user()
+    {
+        var once = new IdempotencyStore();
+        var runs = 0;
+        Task<List<int>> Run() { runs++; return Task.FromResult(new List<int> { runs }); }
+        var mine = await once.RunAsync(Me, "same", new { a = 1 }, Run);
+        var theirs = await once.RunAsync(Guid.NewGuid(), "same", new { a = 1 }, Run);
+        Assert.Equal(2, runs);
+        Assert.NotSame(mine, theirs);
     }
 
     [Fact]
@@ -491,8 +504,8 @@ public class ReliabilityTests
     {
         var once = new IdempotencyStore();
         var n = 0;
-        await once.RunAsync<object>(null, new { }, () => Task.FromResult<object>(++n));
-        await once.RunAsync<object>(null, new { }, () => Task.FromResult<object>(++n));
+        await once.RunAsync<object>(Me, null, new { }, () => Task.FromResult<object>(++n));
+        await once.RunAsync<object>(Me, null, new { }, () => Task.FromResult<object>(++n));
         Assert.Equal(2, n);
     }
 }

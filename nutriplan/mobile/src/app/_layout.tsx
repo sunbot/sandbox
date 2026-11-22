@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/lib/theme';
 import { SnackbarProvider } from '@/components/ds';
 import { ThemeProvider } from '@/theme/ThemeProvider';
+import { AuthProvider } from '@/auth/AuthProvider';
+import { AuthGate } from '@/auth/AuthGate';
 
 /** Navigation chrome in the same warm charcoal, so screen changes never flash white. */
 const navigationTheme = {
@@ -20,10 +22,12 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
+        <AuthProvider>
         <ThemeProvider>
           <NavigationThemeProvider value={navigationTheme}>
           <SnackbarProvider>
             <StatusBar style="light" />
+            <AuthGate>
             <Stack
               screenOptions={{
                 headerStyle: { backgroundColor: colors.background },
@@ -48,9 +52,11 @@ export default function RootLayout() {
               <Stack.Screen name="targets" options={{ title: 'Targets' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings' }} />
             </Stack>
+            </AuthGate>
           </SnackbarProvider>
           </NavigationThemeProvider>
         </ThemeProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

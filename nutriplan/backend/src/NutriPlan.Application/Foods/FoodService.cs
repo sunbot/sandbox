@@ -145,6 +145,8 @@ public sealed class FoodService(
     public async Task<FoodSummaryDto> VerifyAsync(Guid id, CancellationToken ct = default)
     {
         var food = await foods.GetAsync(id, ct) ?? throw new NotFoundException($"Food {id} not found.");
+        // Catalog and cached public products are shared by everyone; only your own label foods can be marked verified.
+        if (food.IsShared) throw new ValidationException("Shared catalog foods can't be marked verified.");
         food.MarkVerified();
         await uow.SaveChangesAsync(ct);
         return FoodSummaryDto.From(food);

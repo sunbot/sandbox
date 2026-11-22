@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using NutriPlan.Api;
+using NutriPlan.Api.Auth;
 using NutriPlan.Api.Endpoints;
 using NutriPlan.Application;
 using NutriPlan.Application.Common;
@@ -29,6 +29,7 @@ if (Environment.GetEnvironmentVariable("PORT") is { Length: > 0 } port)
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
+builder.AddIntakeGridAuth();
 builder.Services.AddSingleton<NutriPlan.Application.Common.IdempotencyStore>();
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o =>
@@ -43,7 +44,10 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAn
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    o.AddFixedWindowLimiter("external-food", w => { w.PermitLimit = 60; w.Window = TimeSpan.FromMinutes(1); w.QueueLimit = 0; });
+    // Per signed-in user, so one person's searching can't use up everyone else's allowance.
+    o.AddPolicy("external-food", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirst("sub")?.Value ?? "anonymous",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.OnRejected = async (ctx, ct) => await ctx.HttpContext.Response.WriteAsJsonAsync(new { title = "Too many searches in a short time. Wait a moment and try again.", reason = "RateLimited" }, ct);
 });
 
@@ -64,7 +68,7 @@ if (args.Length > 0 && args[0] == "import-usda")
     return;
 }
 
-// Apply database migrations on startup (single-user app; keeps setup to "run it").
+// Apply database migrations on startup, before any request is served: data never sits in a new schema behind old endpoints.
 using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<NutriPlanDbContext>().Database.MigrateAsync();
 
@@ -74,6 +78,8 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     var (status, title) = error switch
     {
         NotFoundException => (StatusCodes.Status404NotFound, "Not found"),
+        NotAuthenticatedException => (StatusCodes.Status401Unauthorized, "Sign in to continue."),
+        ForbiddenException => (StatusCodes.Status403Forbidden, "You don't have access to that."),
         NutriPlan.Application.Foods.ProviderUnavailableException => (StatusCodes.Status503ServiceUnavailable, "The food database didn't answer. Try again in a moment."),
         ValidationException or ArgumentException => (StatusCodes.Status400BadRequest, "Invalid request"),
         // The unique index that allows a planned meal to be logged only once.
@@ -89,21 +95,30 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 }));
 
 app.UseCors();
-app.UseMiddleware<ApiKeyMiddleware>();
-app.UseRateLimiter();
-if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
-
-// Serve the web build of the app (mobile/dist, copied to wwwroot in the Docker image) from the same origin.
-// Any non-API path falls back to index.html so the app's own router handles it.
-if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))
+// Serve the web build of the app (mobile/dist, copied to wwwroot in the Docker image) from the same origin. Static files
+// are public (the app's own code, no data) and are served before authentication; any non-API path falls back to
+// index.html so the app's own router handles it.
+var webApp = Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot"));
+if (webApp)
 {
     app.UseDefaultFiles();
     app.UseStaticFiles();
-    app.MapFallback("/api/{**rest}", () => Results.NotFound(new { title = "Unknown API route" }));
-    app.MapFallbackToFile("index.html");
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
+if (app.Environment.IsDevelopment()) app.MapOpenApi().AllowAnonymous();
+
+// Public: liveness only. Everything else requires a signed-in, invited, active user (the fallback policy).
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+if (webApp)
+{
+    app.MapFallback("/api/{**rest}", () => Results.NotFound(new { title = "Unknown API route" }));
+    app.MapFallbackToFile("index.html").AllowAnonymous();
+}
+app.MapAccountEndpoints();
 var api = app.MapGroup("/api");
 api.MapFoodEndpoints();
 api.MapDiaryEndpoints();

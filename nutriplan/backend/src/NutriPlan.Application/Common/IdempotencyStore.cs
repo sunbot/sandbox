@@ -18,10 +18,11 @@ public sealed class IdempotencyStore(TimeProvider? time = null)
     private readonly SemaphoreSlim _gate = new(1, 1);
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
 
-    public async Task<T> RunAsync<T>(string? key, object request, Func<Task<T>> action) where T : class
+    /// <summary>Keys are per user: the same key from two people is two requests, and nobody can read another's result.</summary>
+    public async Task<T> RunAsync<T>(Guid owner, string? key, object request, Func<Task<T>> action) where T : class
     {
         if (string.IsNullOrWhiteSpace(key) || key.Length > 100) return await action();
-        var id = key + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
+        var id = owner.ToString("N") + ":" + key + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
         await _gate.WaitAsync();
         try
         {
