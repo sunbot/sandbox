@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FoodMatch, FoodMatchGroup } from '../../api/types';
-import { amountOptions, blockers, draftFrom, needsLook, otherPreparationIndex, preview, replaceItem, selectMatch, setAmount, setRemoved, toRequest, totals, withPickedFood } from './draft.ts';
+import { addFood, amountOptions, blockers, draftFrom, needsLook, otherPreparationIndex, preview, replaceItem, selectMatch, setAmount, setIncluded, toRequest, totals, withPickedFood } from './draft.ts';
 
 const per100 = (calories: number, protein = 0, carbs = 0, fat = 0) => ({ calories, protein, carbs, fat, fiber: 0, nutrients: {} });
 
@@ -46,7 +46,7 @@ test('combined totals add every included food', () => {
 
 test('removing a food drops it from totals and from the request', () => {
   let items = draftFrom([eggs, toast]);
-  items = replaceItem(items, setRemoved(items[1], true));
+  items = replaceItem(items, setIncluded(items[1], false));
   assert.equal(Math.round(totals(items).calories), 143);
   assert.deepEqual(toRequest(items), [{ foodId: 'egg', grams: 100 }]);
 });
@@ -80,9 +80,19 @@ test('a food without an amount, or without a match, blocks Log all', () => {
 test('blocked foods can be fixed or removed', () => {
   let items = draftFrom([eggs, granola, nothing]);
   items = replaceItem(items, setAmount(items[1], 0.5, { label: 'cup', grams: 122 }));
-  items = replaceItem(items, setRemoved(items[2], true));
+  items = replaceItem(items, setIncluded(items[2], false));
   assert.deepEqual(blockers(items), []);
   assert.deepEqual(toRequest(items), [{ foodId: 'egg', grams: 100 }, { foodId: 'granola', grams: 61 }]);
+});
+
+test('excluded invalid foods do not block, but selected invalid foods still do', () => {
+  const [unmatched] = draftFrom([nothing]);
+  const excluded = setIncluded(unmatched, false);
+  assert.notEqual(excluded, unmatched);
+  assert.equal(unmatched.included, true);
+  assert.equal(blockers([excluded]).length, 0);
+  assert.deepEqual(toRequest([excluded]), []);
+  assert.deepEqual(blockers([setIncluded(excluded, true)]), [unmatched]);
 });
 
 test('uncertain matches and assumed amounts are flagged for a look', () => {
@@ -133,6 +143,25 @@ test('a food picked from search needs an amount, and keeps grams you already cho
   assert.equal(mine.grams, 80);
   assert.deepEqual(toRequest([mine]), [{ foodId: 'oats', grams: 80 }]);
   assert.equal(withPickedFood(egg, egg.group.matches[1].food).matchIndex, 1); // already a choice → just select it
+});
+
+test('adding a searched food appends a separately selected item with a stable unique key', () => {
+  const items = draftFrom([eggs, nothing]);
+  const food = { id: 'oats', name: 'Oats', source: 'UsdaSrLegacy', quality: 'Standard' as const, per100g: per100(379, 13, 68, 6.5), portions: [{ description: 'cup', grams: 81 }] };
+  const next = addFood(items, food);
+  const added = next[2];
+
+  assert.equal(next.length, 3);
+  assert.equal(added.included, true);
+  assert.equal(added.group.matches[0].food.id, 'oats');
+  assert.equal(added.grams, null);
+  assert.equal(blockers(next).length, 2);
+  assert.equal(items.length, 2);
+
+  const addedAgain = addFood(next, food);
+  assert.equal(addedAgain[2].key, added.key);
+  assert.notEqual(addedAgain[3].key, added.key);
+  assert.deepEqual(toRequest([setAmount(added, 1, { label: 'cup', grams: 81 })]), [{ foodId: 'oats', grams: 81 }]);
 });
 
 const chicken: FoodMatchGroup = {
