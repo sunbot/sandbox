@@ -103,6 +103,29 @@ public class UsdaMeasureLabelTests
         Assert.DoesNotContain(FoodMeasures.For(patties), x => x.Kind == MeasureKind.Count);
     }
 
+    [Fact]
+    public void Exact_matching_is_only_for_phrase_measures_so_other_unit_texts_resolve_as_before()
+    {
+        // USDA lists both "slice" and "slices" with different weights: "2 slices" is still two of the plain slice.
+        var loaf = F("Pickle and pimiento loaf", FoodSource.UsdaSrLegacy, new FoodPortion("slice", 38), new FoodPortion("slices", 28.5));
+        Assert.Equal(76, QuantityResolver.Resolve(loaf, 2, "slices").Grams!.Value, 6);
+        Assert.Equal(38, FoodMeasures.For(loaf).Single(m => m.Unit == "slice").BasePerUnit, 3);
+        // A full description typed as a unit isn't newly reachable: "container (4 oz)" stays unresolved, as before.
+        var yogurt = F("Yogurt, plain, whole milk", FoodSource.UsdaSrLegacy, new FoodPortion("container (6 oz)", 170), new FoodPortion("container (4 oz)", 113, 0.5));
+        Assert.False(QuantityResolver.Resolve(yogurt, 1, "container (4 oz)").IsResolved);
+        Assert.Equal(170, QuantityResolver.Resolve(yogurt, 1, "container").Grams!.Value, 6);
+        // A hyphenated single-word portion that never resolved isn't newly offered.
+        var gourd = F("Balsam-pear (bitter gourd), raw", FoodSource.UsdaSrLegacy, new FoodPortion("balsam-pear", 200));
+        Assert.DoesNotContain(FoodMeasures.For(gourd), m => m.Unit == "balsam-pear");
+    }
+
+    [Fact]
+    public void Names_that_differ_only_in_numbers_are_different_foods()
+    {
+        Assert.False(EquivalentPortions.SameFood("Beef, ground, 90% lean meat / 10% fat, raw", "Beef, ground, 80% lean meat / 20% fat, raw"));
+        Assert.True(EquivalentPortions.SameFood("Beef, ground, 90% lean meat / 10% fat, raw", "Beef, ground, 90% lean meat / 10% fat, raw"));
+    }
+
     [Theory]
     [InlineData("100-calorie package", "100-calorie packages")]
     [InlineData("1-3 ring thin pretzel", "1-3 ring thin pretzels")]

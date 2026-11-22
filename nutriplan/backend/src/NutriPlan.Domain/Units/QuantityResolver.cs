@@ -127,13 +127,18 @@ public static partial class QuantityResolver
         return new(null, ResolutionMethod.Unresolved, "Amount has no unit and this food has no standard portion. Enter grams.");
     }
 
+    /// <summary>
+    /// Only number-led portions that FoodMeasures names by their phrase ("100 calorie package" → "100-calorie package"):
+    /// any other unit text resolves exactly as before (word matching), so "slices" still means the plain "slice" portion.
+    /// </summary>
     private static FoodPortion? ExactPortion(IReadOnlyList<FoodPortion> portions, string unitText)
     {
         var u = unitText.Trim();
         var hits = portions.Where(p => p.GramsPerUnit > 0 && LeadingVolumeUnit(p.Description) is null
+            && FoodMeasures.PhraseLabel(p.Description) is { } label
             && (string.Equals(p.Description.Trim(), u, StringComparison.OrdinalIgnoreCase)
-                || FoodMeasures.PhraseLabel(p.Description) is { } label
-                   && (string.Equals(label, u, StringComparison.OrdinalIgnoreCase) || string.Equals(FoodMeasures.PluralOfPhrase(label), u, StringComparison.OrdinalIgnoreCase))))
+                || string.Equals(label, u, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(FoodMeasures.PluralOfPhrase(label), u, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         return hits.Count > 0 && hits.All(h => Math.Abs(h.GramsPerUnit - hits[0].GramsPerUnit) < 1e-9) ? hits[0] : null;
     }

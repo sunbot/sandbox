@@ -68,6 +68,7 @@ public static partial class EquivalentPortions
     private static IEnumerable<string> Tokens(string text, bool keepParentheses = false)
     {
         var t = (keepParentheses ? text : Paren().Replace(text, " ")).ToLowerInvariant();
+        // Numbers count too: "90% lean / 10% fat" isn't "80% lean / 20% fat".
         return WordSplit().Split(t).Where(w => w.Length > 0 && !Ignored.Contains(w)).Select(Singular);
     }
 
@@ -78,5 +79,5 @@ public static partial class EquivalentPortions
         w.EndsWith('s') && !w.EndsWith("ss") && w.Length > 3 ? w[..^1] : w;
 
     [GeneratedRegex(@"\([^)]*\)")] private static partial Regex Paren();
-    [GeneratedRegex(@"[^a-z]+")] private static partial Regex WordSplit();
+    [GeneratedRegex(@"[^a-z0-9]+")] private static partial Regex WordSplit();
 }

@@ -60,7 +60,7 @@ Diary and plan entries keep their snapshots; recipe ingredients keep their store
 
 ### Search
 
-`FoodRanker` adds a small +2 to a food with a count or household-volume measure from its own data
+`FoodRanker` adds a small +2 to a food with a count or household-volume measure from USDA data (its own, or borrowed as above)
 (`FoodRanker.HasMeasuredPortion`). That only separates otherwise-equal matches: what you asked for (raw/cooked, the food
 itself), the source's trust and your own history all count for more.
 

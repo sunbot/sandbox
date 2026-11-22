@@ -158,8 +158,8 @@ public static partial class FoodRanker
             _ => 0,
         };
 
-        // A food you can log in items or cups (from its own USDA measures) is a little easier to use than one that only
-        // takes grams. Small on purpose: it only separates otherwise-equal matches, never state, wording or history.
+        // A food you can log in items or cups (from USDA measures: its own, or ones borrowed from the same food's linked SR
+        // Legacy record) is a little easier to use than one that only takes grams. Small on purpose: it only separates otherwise-equal matches, never state, wording or history.
         if (HasMeasuredPortion(food)) score += MeasuredPortionBoost;
 
         // Personal history.
@@ -173,7 +173,7 @@ public static partial class FoodRanker
 
     public const double MeasuredPortionBoost = 2;
 
-    /// <summary>The food has a count or household-volume measure that comes from its data (not just g/oz or a drink's ml).</summary>
+    /// <summary>The food has a count or household-volume measure from USDA or label data (not just g/oz or a drink's ml).</summary>
     public static bool HasMeasuredPortion(Food food) =>
         food.Portions.Count > 0 && FoodMeasures.For(food).Any(m => m.Kind != MeasureKind.Mass && m.Source is not null);
 
