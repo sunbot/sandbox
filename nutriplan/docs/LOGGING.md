@@ -91,15 +91,16 @@ itself), the source's trust and your own history all count for more.
 
 ## Deleting
 
-Swipe a logged diary row left (Today and Week) past the threshold to delete it: the row disappears at once and Undo shows; the
-server delete happens when the Undo window closes (about 5 s), so Undo restores it exactly. A lighter drag only reveals **Delete**,
-and tapping that button does the same. (The swipe itself deletes because on some Android phones a tap on the button inside the
-swipe panel didn't arrive.) Tapping a row or starting to scroll closes a half-open row (that tap doesn't open the editor). Screen readers get a "Delete" action on the row, and Delete is also in
+Swipe a logged diary row left (Today and Week) to reveal **Delete**; it never deletes by itself. Tapping Delete hides the row
+and shows Undo; the server delete happens when the Undo window closes (about 5 s). One row is open at a time; tapping a row or
+starting to scroll closes it (that tap doesn't open the editor). A drag has to be clearly sideways to take the touch, so taps and
+vertical scrolling are untouched. Screen readers get a "Delete" action on the row, and Delete is also in
 the editor. Long press is reserved (not used).
 
-- Implementation: `features/diary/SwipeableDiaryRow.tsx` (react-native-gesture-handler `ReanimatedSwipeable`, with
-  `GestureHandlerRootView` at the app root and gesture-handler's `ScrollView` on Today/Week). Reanimated follows the system
-  reduced-motion setting.
+- Implementation: `features/diary/SwipeableDiaryRow.tsx`: React Native's own `PanResponder` + `Pressable` (not a gesture-handler
+  swipe component: inside `ReanimatedSwipeable` taps on the row and on the revealed Delete button never arrived on an Android phone,
+  so editing and deleting didn't work). `GestureHandlerRootView` and gesture-handler's `ScrollView` on Today/Week stay from the
+  earlier version and still work. With reduced motion on, the row jumps instead of sliding.
 - Web: works with touch (phone browsers). A desktop mouse drag does not open the swipe; use Delete in the editor there.
 
 ## Barcode scanner
@@ -139,9 +140,9 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
 
 ## Needs checking on a physical Android phone (not verifiable in CI)
 
-1. Swipe left on a logged food on Today and Week: it disappears with Undo (Undo brings it back; after ~5 s it's gone on the server
-   and stays gone after a refresh); a light drag shows Delete, which also works; tapping a food opens the editor, where Save and Delete
-   work; vertical scrolling doesn't open swipes; TalkBack offers "Delete".
+1. Tap a logged food on Today and Week: the editor opens; Save and Delete there work. Swipe left on a logged food: Delete appears;
+   tap it: the food disappears with Undo (Undo brings it back; after ~5 s it's gone on the server and stays gone after a refresh);
+   a short drag or vertical scrolling doesn't open it; TalkBack offers "Delete".
 2. Editor: decimal keypad appears, the field isn't hidden by the keyboard, switching measure keeps the amount, Save/Undo work.
 3. Scanner: sharpness at 15–20 cm, with and without zoom; torch on/off; a small barcode; dim light; denied permission;
    typing a barcode.
