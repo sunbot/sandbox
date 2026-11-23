@@ -187,6 +187,14 @@ export default function RecipeScreen() {
         </View>
       </AppCard>
 
+      {r.usedIn?.length ? (
+        <AppCard style={{ gap: t.space.xs }}>
+          <SectionHeader title="Used in" />
+          <AppText variant="caption" tone="muted">Changes here update these recipes too. Meals already logged keep their numbers.</AppText>
+          {r.usedIn.map((u) => <TextButton key={u.id} label={u.name} icon={ChefHat} onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: u.id } })} />)}
+        </AppCard>
+      ) : null}
+
       {r.directions ? (
         <AppCard style={{ gap: t.space.sm }}>
           <SectionHeader title="Directions" />
@@ -203,6 +211,8 @@ export default function RecipeScreen() {
       <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => setOpenPos(null)} busy={m.updateIngredient.isPending}
         onChooseFood={(ing) => { setOpenPos(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
         onLeaveOut={(ing) => { m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); setOpenPos(null); }}
+        onRecipeAmount={(ing) => { setOpenPos(null); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position) } }); }}
+        onOpenRecipe={(rid) => { setOpenPos(null); router.push({ pathname: '/recipe/[id]', params: { id: rid } }); }}
         onSetGrams={(ing, grams) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, grams }); setOpenPos(null); })} />
 
       <ConfirmationSheet visible={confirmDelete} title={`Delete ${s.name}?`} message="This can’t be undone. Meals you already logged or planned from it keep their nutrition."

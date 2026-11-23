@@ -150,6 +150,15 @@ public sealed class RecipeRepository(NutriPlanDbContext db) : IRecipeRepository
         return db.Recipes.FirstOrDefaultAsync(r => r.OwnerId == me && r.Origin == origin && r.ExternalId == externalId, ct);
     }
 
+    public async Task<IReadOnlyList<RecipeLink>> LinksAsync(CancellationToken ct = default)
+    {
+        var me = Owner.Of(db);
+        var rows = await db.Recipes.AsNoTracking().Where(r => r.OwnerId == me)
+            .Select(r => new { r.Id, r.Name, Ingredients = EF.Property<List<RecipeIngredient>>(r, "_ingredients") })
+            .ToListAsync(ct);
+        return rows.Select(r => new RecipeLink(r.Id, r.Name, Recipe.UsesOf(r.Ingredients))).ToList();
+    }
+
     public async Task<IReadOnlyList<Recipe>> ListAsync(string? search = null, string? category = null, CancellationToken ct = default)
     {
         var me = Owner.Of(db);

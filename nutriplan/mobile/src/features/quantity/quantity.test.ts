@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Item, Measure } from '../../api/types.ts';
-import { checkQuantity, convert, formatQuantity, initialSelection, matchMeasure, measureText, measuresForItem, parseQuantity, scaleFactor, SERVING, volumeNote } from './quantity.ts';
+import { measureWorth, checkQuantity, convert, formatQuantity, initialSelection, matchMeasure, measureText, measuresForItem, parseQuantity, scaleFactor, SERVING, volumeNote } from './quantity.ts';
 
 const m = (unit: string, base: number, kind: Measure['kind'] = 'Count', plural = unit + 's'): Measure => ({ unit, label: unit, plural, base, kind, source: null, countable: kind === 'Count' });
 const almond = m('almond', 1.2);
@@ -167,4 +167,34 @@ test('USDA phrase measures: one label everywhere, natural plurals, and where a b
   const borrowed: Measure = { ...almond, source: 'almond', origin: 'USDA SR Legacy “Nuts, almonds” (FDC 170567, same NDB 12061)' };
   assert.equal(sourceText(borrowed), 'From USDA SR Legacy “Nuts, almonds” (FDC 170567, same NDB 12061): almond');
   assert.equal(sourceText(g), null);
+});
+
+test('recipe items edit in the recipe\'s own measures, compared in servings (never grams)', () => {
+  const soup: Measure[] = [SERVING, { unit: 'cup', label: 'cup', plural: 'cups', base: 0.5, kind: 'Volume', source: 'finished volume', countable: false },
+    { unit: 'g', label: 'g', plural: 'g', base: 0.002, kind: 'Mass', source: 'finished weight', countable: false }];
+  const byCup = item({ kind: 'Recipe', unit: 'cup', quantity: 1, grams: 250 });
+  assert.equal(measuresForItem(byCup, undefined, soup), soup);
+  assert.deepEqual(initialSelection(byCup, soup), { text: '1', unit: 'cup' });
+  // 1 cup (0.5 serving) → 2 servings: ×4, from servings, not from the 250 g it weighed.
+  assert.equal(scaleFactor(byCup, 2, SERVING, soup), 4);
+  assert.equal(scaleFactor(byCup, 3, soup[1], soup), 3);
+  // A recipe whose finished volume was removed: its own unit is still offered (same-unit changes only).
+  const own = measuresForItem(byCup, undefined, [SERVING]);
+  assert.equal(own[0].unit, 'cup');
+  assert.equal(own[0].base, 0);
+  assert.equal(scaleFactor(byCup, 1, SERVING, own), null);
+  // Servings limit applies to the servings, whatever the measure: 200 g is 0.4 servings, fine; 30 cups is 15, fine; 120 cups is 60, too many.
+  assert.ok(checkQuantity(200, soup[2], true).ok);
+  assert.ok(checkQuantity(30, soup[1], true).ok);
+  assert.equal(checkQuantity(120, soup[1], true).ok, false);
+});
+
+test('a recipe measure reads as servings, or per serving when one unit is a tiny fraction', () => {
+  const cup: Measure = { unit: 'cup', label: 'cup', plural: 'cups', base: 0.5, kind: 'Volume', source: null, countable: false };
+  const gram: Measure = { unit: 'g', label: 'g', plural: 'g', base: 0.002, kind: 'Mass', source: null, countable: false };
+  const oz: Measure = { unit: 'oz', label: 'oz', plural: 'oz', base: 28.349523 * 0.002, kind: 'Mass', source: null, countable: false };
+  assert.equal(measureWorth(cup, 'serving'), '0.5 servings');
+  assert.equal(measureWorth(gram, 'serving'), '500 g per serving');
+  assert.equal(measureWorth(oz, 'serving'), '17.6 oz per serving');
+  assert.equal(measureWorth({ ...cup, base: 143 }, 'g'), '143 g');
 });

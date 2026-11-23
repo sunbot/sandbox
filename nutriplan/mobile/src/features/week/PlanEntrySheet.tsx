@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useFood, useRecipes } from '@/api/hooks';
+import { useFood, useRecipe, useRecipes } from '@/api/hooks';
 import type { DiaryEntry, PlanDay, PlanEntry } from '@/api/types';
 import { AppText, BottomSheet, FilterChip, PrimaryButton, SecondaryButton, TextButton } from '@/components/ds';
 import { ArrowLeftRight, CalendarArrowDown, Check, Pencil, Trash2, Undo2 } from '@/components/ds/icons';
@@ -45,6 +45,8 @@ export function PlanEntrySheet({ entry, days, busy, onAction, onClose, loggedEnt
   const [qty, setQty] = useState<QuantityValue | null>(null);
   const foodId = e?.item.kind === 'Food' ? e.item.foodId ?? '' : '';
   const food = useFood(foodId, !!foodId && panel === 'amount');
+  const recipeId = e?.item.kind === 'Recipe' ? e.item.recipeId ?? '' : '';
+  const recipe = useRecipe(recipeId, !!recipeId && panel === 'amount');
   const [moveDate, setMoveDate] = useState<string | null>(null);
   const [moveMeal, setMoveMeal] = useState<Meal | null>(null);
   const recipes = useRecipes('');
@@ -115,7 +117,7 @@ export function PlanEntrySheet({ entry, days, busy, onAction, onClose, loggedEnt
           </View>
         ) : null}
 
-        {panel === 'amount' ? <AmountPanel entry={e} measures={measuresForItem(e.item, food.data?.measures)} baseUnit={food.data?.baseUnit ?? 'g'}
+        {panel === 'amount' ? <AmountPanel entry={e} measures={measuresForItem(e.item, food.data?.measures, recipe.data?.measures)} baseUnit={e.item.kind === 'Recipe' ? 'serving' : food.data?.baseUnit ?? 'g'}
           value={qty} onChange={setQty} busy={busy} onSave={(amount, unit) => onAction(e, { kind: 'amount', amount, unit })} onBack={() => setPanel('main')} /> : null}
 
         {panel === 'swap' ? (
@@ -136,7 +138,7 @@ export function PlanEntrySheet({ entry, days, busy, onAction, onClose, loggedEnt
 
 /** Change a planned item's amount in any measure its food supports (the same picker as everywhere else). */
 function AmountPanel({ entry, measures, baseUnit, value, onChange, busy, onSave, onBack }: {
-  entry: PlanEntry; measures: import('@/api/types').Measure[]; baseUnit: 'g' | 'ml'; value: QuantityValue | null; onChange: (v: QuantityValue) => void;
+  entry: PlanEntry; measures: import('@/api/types').Measure[]; baseUnit: 'g' | 'ml' | 'serving'; value: QuantityValue | null; onChange: (v: QuantityValue) => void;
   busy?: boolean; onSave: (amount: number, unit: string) => void; onBack: () => void;
 }) {
   const t = useTheme();

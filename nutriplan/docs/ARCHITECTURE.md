@@ -29,6 +29,7 @@ rule testable without a database and every provider swappable.
 | Search ranking | `Application/Foods/FoodRanker.cs` (pure; unit-tested) + `Infrastructure/Persistence/Repositories.cs` (candidate SQL) |
 | Everyday-word synonyms ("toast", "oj") | `FoodService.Synonyms` |
 | Recipe ingredient matching | `Application/Recipes/RecipeService.MatchIngredientsAsync`, `IngredientQuery.cs` |
+| Nested recipes, loops, propagation, recipe measures | `Domain/Recipes/RecipeGraph.cs`, `RecipeMeasures.cs`, `RecipeService.PropagateAsync` (see `docs/RECIPES.md`) |
 | Paprika / web-page import | `Application/Recipes/Import/` |
 | Grocery aisles | `Application/Planning/GroceryService.cs` (`Aisles`) |
 | Chat intents without AI | `Application/Assistant/RuleBasedInterpreter.cs` |

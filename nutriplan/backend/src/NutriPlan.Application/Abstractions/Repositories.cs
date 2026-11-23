@@ -20,12 +20,17 @@ public interface IFoodRepository
     void Add(Food food);
 }
 
+/// <summary>How one recipe uses others (for loops, "Used in" and passing edits up).</summary>
+public sealed record RecipeLink(Guid Id, string Name, IReadOnlyList<Guid> Uses);
+
 public interface IRecipeRepository
 {
     Task<Recipe?> GetAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyDictionary<Guid, Recipe>> GetManyAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
     Task<Recipe?> FindByExternalIdAsync(RecipeOrigin origin, string externalId, CancellationToken ct = default);
     Task<IReadOnlyList<Recipe>> ListAsync(string? search = null, string? category = null, CancellationToken ct = default);
+    /// <summary>Every recipe's id, name and the recipes it uses as ingredients, without loading photos or details.</summary>
+    Task<IReadOnlyList<RecipeLink>> LinksAsync(CancellationToken ct = default);
     void Add(Recipe recipe);
     void Remove(Recipe recipe);
 }

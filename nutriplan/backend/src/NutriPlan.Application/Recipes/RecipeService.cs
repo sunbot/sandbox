@@ -107,7 +107,7 @@ public sealed partial class RecipeService(
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var recipe = await Get(id, ct);
-        var users = (await recipes.ListAsync(ct: ct)).Where(r => r.Id != id && r.SubRecipeIds.Contains(id)).Select(r => $"“{r.Name}”").ToList();
+        var users = (await recipes.LinksAsync(ct)).Where(r => r.Id != id && r.Uses.Contains(id)).Select(r => $"“{r.Name}”").ToList();
         if (users.Count > 0)
             throw new ValidationException($"“{recipe.Name}” is an ingredient of {string.Join(", ", users)}. Remove it there first.");
         recipes.Remove(recipe);
@@ -136,10 +136,10 @@ public sealed partial class RecipeService(
         {
             var sub = await recipes.GetAsync(subId, ct) ?? throw new NotFoundException($"Recipe {subId} not found.");
             if (subId == recipe.Id) throw new ValidationException("A recipe can't be an ingredient of itself.");
-            var all = (await recipes.ListAsync(ct: ct)).ToDictionary(x => x.Id);
-            all[recipe.Id] = recipe;
-            if (RecipeGraph.PathTo(subId, recipe.Id, x => all.TryGetValue(x, out var rr) ? rr.SubRecipeIds : []) is { } loop)
-                throw new ValidationException($"“{sub.Name}” already uses “{recipe.Name}” ({string.Join(" → ", loop.Select(x => $"“{all[x].Name}”"))}), so it can't also be an ingredient of it.");
+            var links = (await recipes.LinksAsync(ct)).ToDictionary(x => x.Id);
+            links[recipe.Id] = new RecipeLink(recipe.Id, recipe.Name, recipe.SubRecipeIds.ToList());
+            if (RecipeGraph.PathTo(subId, recipe.Id, x => links.TryGetValue(x, out var l) ? l.Uses : []) is { } loop)
+                throw new ValidationException($"“{sub.Name}” already uses “{recipe.Name}” ({string.Join(" → ", loop.Select(x => $"“{links[x].Name}”"))}), so it can't also be an ingredient of it.");
             RecipeAmount amount;
             if (r.Servings is { } sv) amount = sv > 0 ? new RecipeAmount(sv, sub.GramsPerServing is { } gps ? sv * gps : null, $"{sv:0.##} servings of {sub.Servings:0.##}") : new RecipeAmount(null, null, "Enter an amount greater than zero.");
             else amount = RecipeMeasures.Resolve(sub, r.Amount ?? (ing.IsRecipe || ing.Amount is null ? ing.Servings ?? ing.Amount ?? 1 : ing.Amount.Value),
@@ -446,13 +446,17 @@ public sealed partial class RecipeService(
     private async Task PropagateAsync(IReadOnlyCollection<Recipe> changed, CancellationToken ct)
     {
         if (changed.Count == 0) return;
-        var byId = (await recipes.ListAsync(ct: ct)).ToDictionary(r => r.Id);
+        // The graph from links (no photos or details); only the recipes that need recalculating are loaded in full.
+        var uses = (await recipes.LinksAsync(ct)).ToDictionary(l => l.Id, l => (IReadOnlyCollection<Guid>)l.Uses);
+        foreach (var c in changed) uses[c.Id] = c.SubRecipeIds.ToList();
+        var order = RecipeGraph.DependentsInOrder(changed.Select(c => c.Id), uses);
+        if (order.Count == 0) return;
+        var needed = order.Concat(order.SelectMany(id => uses.GetValueOrDefault(id) ?? [])).Distinct().ToList();
+        var byId = (await recipes.GetManyAsync(needed, ct)).ToDictionary(kv => kv.Key, kv => kv.Value);
         foreach (var c in changed) byId[c.Id] = c;
-        var uses = byId.ToDictionary(kv => kv.Key, kv => (IReadOnlyCollection<Guid>)kv.Value.SubRecipeIds.ToList());
-        if (uses.Values.All(u => u.Count == 0)) return;
-        foreach (var id in RecipeGraph.DependentsInOrder(changed.Select(c => c.Id), uses))
+        foreach (var id in order)
         {
-            var parent = byId[id];
+            if (!byId.TryGetValue(id, out var parent)) continue;
             foreach (var ing in parent.Ingredients.Where(i => i.IsRecipe && i.Status != IngredientMatchStatus.Ignored))
             {
                 if (!byId.TryGetValue(ing.RecipeId!.Value, out var sub)) continue;
@@ -492,8 +496,7 @@ public sealed partial class RecipeService(
     private async Task<RecipeDetailDto> ToDetailAsync(Recipe r, CancellationToken ct)
     {
         var foodMap = await foods.GetManyAsync(r.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
-        var all = await recipes.ListAsync(ct: ct);
-        var subs = all.Where(x => r.SubRecipeIds.Contains(x.Id)).ToDictionary(x => x.Id);
+        var subs = await recipes.GetManyAsync(r.SubRecipeIds, ct);
         var nutrition = RecipeNutritionCalculator.Calculate(r, foodMap, subs);
         var ingredients = r.Ingredients.Select(i =>
         {
@@ -507,7 +510,7 @@ public sealed partial class RecipeService(
                 i.Status.ToString(), i.MatchConfidence, i.ResolutionNote, n,
                 i.RecipeId, sub?.Name ?? i.RecipeName, i.Servings, f?.Source.ToString(), f?.Quality.ToString());
         }).ToList();
-        var usedIn = all.Where(x => x.Id != r.Id && x.SubRecipeIds.Contains(r.Id)).Select(x => new RecipeUseDto(x.Id, x.Name)).ToList();
+        var usedIn = (await recipes.LinksAsync(ct)).Where(x => x.Id != r.Id && x.Uses.Contains(r.Id)).Select(x => new RecipeUseDto(x.Id, x.Name)).ToList();
 
         return new RecipeDetailDto(RecipeSummaryDto.From(r), r.Description, r.Directions, r.Notes, r.PrepTime, r.CookTime,
             r.SourceName, r.SourceUrl, r.ServingDescription, r.CookedWeightGrams, r.SourceNutritionText, ingredients, nutrition.Warnings,
@@ -515,5 +518,5 @@ public sealed partial class RecipeService(
     }
 
     public static IReadOnlyList<MeasureDto> RecipeMeasuresDto(Recipe r) =>
-        RecipeMeasures.For(r).Select(m => new MeasureDto(m.Unit, m.Label, m.Plural, m.BasePerUnit, m.Kind.ToString(), m.Source, m.Countable)).ToList();
+        RecipeMeasures.For(r).Select(m => new MeasureDto(m.Unit, m.Label, m.Plural, m.BasePerUnit, m.Kind.ToString(), m.Source, m.Countable, "your recipe")).ToList();
 }

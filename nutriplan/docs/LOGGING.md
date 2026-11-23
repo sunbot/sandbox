@@ -161,4 +161,7 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    light goes off. Use `chrome://inspect` → the page's console in a dev build to see the chosen camera's size and focus modes.
 4. Ask review: tap a row's checkbox to leave a food out (name struck through, totals and "Log N selected" update); TalkBack
    reads it as a checkbox "Include <food>".
-5. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
+5. Recipes: search a recipe's name in Add food: it's listed under "Your recipes" with a "Your recipe" badge; log 1 serving
+   and, on a recipe with a finished volume, 1 cup; edit the logged entry between cups and servings. On a recipe, choose an
+   ingredient → pick another recipe → Use as this ingredient; the line reads "Your recipe: …".
+6. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.

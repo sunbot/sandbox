@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Keyboard, ScrollView, View } from 'react-native';
-import { useFood, useNutrientCatalog } from '@/api/hooks';
+import { useFood, useNutrientCatalog, useRecipe } from '@/api/hooks';
 import type { DiaryEntry } from '@/api/types';
 import { AppText, BottomSheet, FilterChip, PrimaryButton, SecondaryButton, TextButton } from '@/components/ds';
 import { Trash2 } from '@/components/ds/icons';
@@ -42,12 +42,14 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
   const e = entry ?? lastEntry; // keep content during the closing animation
   const foodId = e?.item.kind === 'Food' ? e.item.foodId ?? '' : '';
   const food = useFood(foodId, !!foodId);
+  const recipeId = e?.item.kind === 'Recipe' ? e.item.recipeId ?? '' : '';
+  const recipe = useRecipe(recipeId, !!entry && !!recipeId); // its measures (servings, and weight/volume when known)
   const catalog = useNutrientCatalog(!!entry && showNutrition);
   if (!e) return null;
 
   const item = e.item;
   const editableAmount = item.kind !== 'QuickCalories' && item.quantity > 0;
-  const measures = measuresForItem(item, food.data?.measures);
+  const measures = measuresForItem(item, food.data?.measures, recipe.data?.measures);
   const start = initialSelection(item, measures);
   const d = draft ?? { ...start, meal: e.meal };
   const measure = matchMeasure(measures, d.unit) ?? measures[0];
@@ -117,7 +119,7 @@ export function EntrySheet({ entry, draft, onDraft, onClose, onSave, onDelete, s
         </> : <>
         {showFull ? <AppText variant="caption" tone="muted" selectable>{item.name}</AppText> : null}
         {editableAmount ? (
-          <QuantityPicker measures={measures} value={{ text: d.text, unit: measure?.unit ?? d.unit }} baseUnit={food.data?.baseUnit ?? 'g'}
+          <QuantityPicker measures={measures} value={{ text: d.text, unit: measure?.unit ?? d.unit }} baseUnit={item.kind === 'Recipe' ? 'serving' : food.data?.baseUnit ?? 'g'}
             onChange={(v) => onDraft({ ...d, ...v })} error={error} onSubmit={save} />
         ) : (
           <AppText variant="secondary" tone="secondary">Quick entry: no amount to change.</AppText>

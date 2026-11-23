@@ -223,7 +223,11 @@ public sealed class Recipe : Users.IOwned
     public double? MlPerServing => FinishedVolumeMl is > 0 ? FinishedVolumeMl / Servings : null;
 
     /// <summary>The recipes this one uses as ingredients (directly).</summary>
-    public IEnumerable<Guid> SubRecipeIds => _ingredients.Where(i => i.RecipeId is not null && i.Status != IngredientMatchStatus.Ignored).Select(i => i.RecipeId!.Value).Distinct();
+    public IEnumerable<Guid> SubRecipeIds => UsesOf(_ingredients);
+
+    /// <summary>The recipes a list of ingredient lines uses (excluded lines don't count).</summary>
+    public static IReadOnlyList<Guid> UsesOf(IEnumerable<RecipeIngredient>? ingredients) =>
+        (ingredients ?? []).Where(i => i.RecipeId is not null && i.Status != IngredientMatchStatus.Ignored).Select(i => i.RecipeId!.Value).Distinct().ToList();
 
     private void Touch() => UpdatedAt = DateTimeOffset.UtcNow;
 }

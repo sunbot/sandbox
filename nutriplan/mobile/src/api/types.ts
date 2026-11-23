@@ -163,7 +163,17 @@ export type Ingredient = {
   matchConfidence: number;
   note?: string | null;
   nutrition?: Nutrition | null;
+  /** Set when this line is another of your recipes (then foodId is null): `servings` of it. */
+  recipeId?: string | null;
+  recipeName?: string | null;
+  servings?: number | null;
+  /** Where the matched food's data comes from (e.g. UsdaSrLegacy, User) and its quality. */
+  foodSource?: string | null;
+  foodQuality?: string | null;
 };
+
+/** A recipe that uses this one as an ingredient. */
+export type RecipeUse = { id: string; name: string };
 
 export type RecipeDetail = {
   summary: RecipeSummary;
@@ -178,8 +188,16 @@ export type RecipeDetail = {
   cookTime?: string | null;
   /** Weight of the finished dish in grams, only when entered or supplied; never estimated. Enables per-100 g. */
   cookedWeightGrams?: number | null;
+  /** Volume of the finished dish in ml, only when entered; enables cups/ml. */
+  finishedVolumeMl?: number | null;
   ingredients: Ingredient[];
   warnings: string[];
+  /** What the recipe can be logged, planned or used in: servings always; weight/volume only when entered. `base` is servings per unit. */
+  measures?: Measure[];
+  /** The whole recipe's nutrition. */
+  total?: Nutrition | null;
+  /** Recipes that use this one as an ingredient. */
+  usedIn?: RecipeUse[];
 };
 
 export type ImportResult = { imported: number; updated: number; recipes: RecipeSummary[]; errors: string[] };

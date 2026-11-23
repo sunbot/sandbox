@@ -50,6 +50,8 @@ public sealed class InMemoryStore : IFoodRepository, IRecipeRepository, IDiaryRe
         Task.FromResult(Recipes.FirstOrDefault(r => r.Origin == origin && r.ExternalId == externalId));
     public Task<IReadOnlyList<Recipe>> ListAsync(string? search = null, string? category = null, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Recipe>>(Recipes.Where(r => search is null || r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList());
+    public Task<IReadOnlyList<RecipeLink>> LinksAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<RecipeLink>>(Recipes.Select(r => new RecipeLink(r.Id, r.Name, r.SubRecipeIds.ToList())).ToList());
     void IRecipeRepository.Add(Recipe recipe) => Recipes.Add(recipe);
     void IRecipeRepository.Remove(Recipe recipe) => Recipes.Remove(recipe);
 

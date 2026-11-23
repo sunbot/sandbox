@@ -4,7 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useRecipe, useRecipeMutations } from '@/api/hooks';
 import type { RecipeDetail } from '@/api/types';
-import { AppText, PrimaryButton, Skeleton, useSnackbar } from '@/components/ds';
+import { AppText, FilterChip, PrimaryButton, Skeleton, useSnackbar } from '@/components/ds';
+import { volumeFromText, volumeText, type VolumeUnit } from '@/features/recipe/finishedVolume';
 import { Check } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -42,15 +43,19 @@ function Form({ recipe }: { recipe: RecipeDetail | null }) {
   const [directions, setDirections] = useState(recipe?.directions ?? '');
   const [description, setDescription] = useState(recipe?.description ?? '');
   const [cooked, setCooked] = useState(recipe?.cookedWeightGrams ? String(recipe.cookedWeightGrams) : '');
+  const [volUnit, setVolUnit] = useState<VolumeUnit>('cups');
+  const [volume, setVolume] = useState(volumeText(recipe?.finishedVolumeMl, 'cups'));
   const [error, setError] = useState<string | null>(null);
   const ingredients = lines.split('\n').map((l) => l.trim()).filter(Boolean);
   const cookedValue = cooked.trim() === '' ? null : Number(cooked.replace(',', '.'));
   const cookedOk = cookedValue === null || (Number.isFinite(cookedValue) && cookedValue > 0);
-  const valid = name.trim().length > 0 && Number(servings) > 0 && ingredients.length > 0 && cookedOk;
+  const volumeMl = volumeFromText(volume, volUnit);
+  const volumeOk = volumeMl !== undefined;
+  const valid = name.trim().length > 0 && Number(servings) > 0 && ingredients.length > 0 && cookedOk && volumeOk;
 
   const save = async () => {
     setError(null);
-    const body = { name: name.trim(), servings: Number(servings), ingredients, directions: directions.trim() || undefined, description: description.trim() || undefined, cookedWeightGrams: cookedValue };
+    const body = { name: name.trim(), servings: Number(servings), ingredients, directions: directions.trim() || undefined, description: description.trim() || undefined, cookedWeightGrams: cookedValue, finishedVolumeMl: volumeMl ?? null };
     try {
       const saved = recipe
         ? await m.edit.mutateAsync({ id: recipe.summary.id, ...body, categories: recipe.summary.categories, notes: recipe.notes ?? null })
@@ -72,6 +77,14 @@ function Form({ recipe }: { recipe: RecipeDetail | null }) {
         <Field label="Finished dish weight in grams (optional)" value={cooked} onChangeText={setCooked} keyboardType="decimal-pad" placeholder="e.g. 1200" />
         <AppText variant="caption" tone="muted">Weigh the cooked dish to see nutrition per 100 g. Leave it empty if you don’t know: it is never estimated from the ingredients.</AppText>
         {!cookedOk ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">Enter the weight as a positive number of grams, or leave it empty.</AppText> : null}
+        <Field label={`Finished volume in ${volUnit} (optional)`} value={volume} onChangeText={setVolume} keyboardType="decimal-pad" placeholder={volUnit === 'cups' ? 'e.g. 8' : 'e.g. 1900'} />
+        <View style={{ flexDirection: 'row', gap: t.space.sm }}>
+          {(['cups', 'ml'] as const).map((u) => (
+            <FilterChip key={u} label={u} selected={volUnit === u} onPress={() => { if (u !== volUnit) { setVolume(volumeText(volumeMl, u)); setVolUnit(u); } }} />
+          ))}
+        </View>
+        <AppText variant="caption" tone="muted">For soups, sauces and drinks: measure the finished amount to log it in cups or ml. Never estimated from the ingredients.</AppText>
+        {!volumeOk ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">Enter the volume as a positive number, or leave it empty.</AppText> : null}
         {error ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">{error}</AppText> : null}
         <PrimaryButton label={recipe ? 'Save recipe' : 'Create recipe'} icon={Check} disabled={!valid} loading={m.edit.isPending || m.create.isPending} onPress={save} fullWidth />
       </ScrollView>

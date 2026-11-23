@@ -92,7 +92,7 @@ export function useLogFood() {
 export function useLogRecipe() {
   const invalidate = useInvalidateNutrition();
   return useMutation({
-    mutationFn: (r: { date: string; meal: Meal; recipeId: string; servings: number }) => post<T.DiaryEntry>('/diary/recipe', r),
+    mutationFn: (r: { date: string; meal: Meal; recipeId: string; servings: number; amount?: number; unit?: string }) => post<T.DiaryEntry>('/diary/recipe', r),
     onSuccess: invalidate,
   });
 }
@@ -145,7 +145,7 @@ export function usePlanMutations() {
       ...opts,
     }),
     addRecipe: useMutation({
-      mutationFn: (r: { date: string; meal: Meal; recipeId: string; servings: number }) => post<T.PlanEntry>('/plan/recipe', r),
+      mutationFn: (r: { date: string; meal: Meal; recipeId: string; servings: number; amount?: number; unit?: string }) => post<T.PlanEntry>('/plan/recipe', r),
       ...opts,
     }),
     addBatch: useMutation({
@@ -191,7 +191,8 @@ export const useGrocery = (from: string, to: string) =>
 export const useRecipes = (search: string) =>
   useQuery({ queryKey: keys.recipes(search), queryFn: () => get<T.RecipeSummary[]>(`/recipes?${q({ search })}`) });
 
-export const useRecipe = (id: string) => useQuery({ queryKey: keys.recipe(id), queryFn: () => get<T.RecipeDetail>(`/recipes/${id}`) });
+export const useRecipe = (id: string, enabled = true) =>
+  useQuery({ queryKey: keys.recipe(id), queryFn: () => get<T.RecipeDetail>(`/recipes/${id}`), enabled: enabled && !!id });
 
 export function useRecipeMutations() {
   const qc = useQueryClient();
@@ -213,18 +214,18 @@ export function useRecipeMutations() {
       onSuccess: refresh,
     }),
     create: useMutation({
-      mutationFn: (r: { name: string; servings: number; ingredients: string[]; directions?: string; description?: string; categories?: string[]; cookedWeightGrams?: number | null }) =>
+      mutationFn: (r: { name: string; servings: number; ingredients: string[]; directions?: string; description?: string; categories?: string[]; cookedWeightGrams?: number | null; finishedVolumeMl?: number | null }) =>
         post<T.RecipeDetail>('/recipes', r),
       onSuccess: refresh,
     }),
     edit: useMutation({
-      mutationFn: ({ id, ...r }: { id: string; name: string; servings: number; ingredients: string[]; directions?: string | null; description?: string | null; categories?: string[]; notes?: string | null; cookedWeightGrams?: number | null }) =>
+      mutationFn: ({ id, ...r }: { id: string; name: string; servings: number; ingredients: string[]; directions?: string | null; description?: string | null; categories?: string[]; notes?: string | null; cookedWeightGrams?: number | null; finishedVolumeMl?: number | null }) =>
         put<T.RecipeDetail>(`/recipes/${id}`, r),
       onSuccess: refresh,
     }),
     favorite: useMutation({ mutationFn: ({ id, favorite }: { id: string; favorite: boolean }) => post(`/recipes/${id}/favorite`, { favorite }), onSuccess: refresh }),
     updateIngredient: useMutation({
-      mutationFn: ({ id, position, ...r }: { id: string; position: number; foodId?: string; grams?: number; amount?: number; unit?: string; ignore?: boolean }) =>
+      mutationFn: ({ id, position, ...r }: { id: string; position: number; foodId?: string; recipeId?: string; servings?: number; grams?: number; amount?: number; unit?: string; ignore?: boolean }) =>
         put<T.RecipeDetail>(`/recipes/${id}/ingredients/${position}`, r),
       onSuccess: refresh,
     }),

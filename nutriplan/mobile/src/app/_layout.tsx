@@ -48,6 +48,7 @@ export default function RootLayout() {
               <Stack.Screen name="custom-food" options={{ title: 'New food from label' }} />
               <Stack.Screen name="recipe/[id]" options={{ title: 'Recipe' }} />
               <Stack.Screen name="recipe/edit" options={{ title: 'Edit recipe' }} />
+              <Stack.Screen name="recipe/amount" options={{ title: 'Add recipe' }} />
               <Stack.Screen name="gaps" options={{ title: 'Fill the gaps' }} />
               <Stack.Screen name="grocery" options={{ title: 'Grocery list' }} />
               <Stack.Screen name="pantry" options={{ title: 'Pantry' }} />

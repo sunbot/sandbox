@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { BrandedFood, Food, Nutrition } from '../../api/types';
-import { brandedNotice, brandedRow, localRow, packagedFirst, rowLabel, withoutSaved } from './foodRows.ts';
+import type { BrandedFood, Food, Nutrition, RecipeSummary } from '../../api/types';
+import { brandedNotice, brandedRow, localRow, packagedFirst, recipeMatches, recipeRow, rowLabel, withoutSaved } from './foodRows.ts';
 
 const n = (calories: number, protein: number, carbs: number, fat: number, withKcal = true): Nutrition =>
   ({ calories, protein, carbs, fat, fiber: 0, nutrients: withKcal ? { '1008': calories, '1003': protein } : { '1003': protein } });
@@ -82,4 +82,26 @@ test('generic searches and brands already in your foods keep your foods first', 
   assert.equal(packagedFirst("Dave's Killer Bread", daves, [{ brand: "Dave's Killer Bread" }]), false);
   assert.equal(packagedFirst("daves killer bread", [{ name: 'Bread, whole wheat', brand: null }], [{ brand: "Dave's Killer Bread" }]), true);
   assert.equal(packagedFirst('anything', [], []), false);
+});
+
+const recipe = (over: Partial<RecipeSummary> = {}): RecipeSummary => ({
+  id: 'r1', name: 'Turkey chili', servings: 6, origin: 'Manual', categories: [], isFavorite: false, hasPhoto: false,
+  perServing: { calories: 412.4, protein: 31.2, carbs: 30, fat: 14.6, fiber: 9, nutrients: {} }, coverage: 1, ...over,
+});
+
+test('your recipes read per serving and are marked as recipes, not foods', () => {
+  const row = recipeRow(recipe());
+  assert.equal(row.source, 'Your recipe');
+  assert.equal(row.basis, 'per serving · makes 6');
+  assert.equal(row.calories, 412);
+  assert.equal(row.note, null);
+  assert.equal(recipeRow(recipe({ coverage: 0.75 })).note, '75% of ingredients counted');
+  assert.match(rowLabel(row), /Your recipe/);
+});
+
+test('recipe matches put names that start with the search first and never offer the recipe being edited', () => {
+  const list = [recipe({ id: 'a', name: 'Spicy turkey chili' }), recipe({ id: 'b', name: 'Turkey chili' }), recipe({ id: 'c', name: 'Turkey burgers' })];
+  assert.deepEqual(recipeMatches(list, 'turkey').map((r) => r.id), ['b', 'c', 'a']);
+  assert.deepEqual(recipeMatches(list, 'turkey', 'b').map((r) => r.id), ['c', 'a']);
+  assert.deepEqual(recipeMatches(list, 't'), []);
 });

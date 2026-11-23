@@ -5,7 +5,7 @@
  * Packaged products are shown per labelled serving when the label gives its size; generic foods per 100 g. A drink
  * labelled by volume is per 100 ml, never converted to grams.
  */
-import type { BrandedFood, Food, Nutrition } from '../../api/types';
+import type { BrandedFood, Food, Nutrition, RecipeSummary } from '../../api/types';
 
 export type FoodRow = {
   title: string;
@@ -99,4 +99,31 @@ export function packagedFirst(query: string, local: Pick<Food, 'name' | 'brand'>
   const localWords = new Set(local.slice(0, 3).flatMap((f) => words(`${f.name} ${f.brand ?? ''}`)));
   // "Dave's Killer Bread" isn't covered by plain breads: every word of the brand you typed must appear locally.
   return named.some((w) => !localWords.has(w));
+}
+
+/**
+ * One of your recipes in search: per serving (what you'd log), how many it makes, and "Your recipe" as its source so it
+ * never reads as a food. A recipe with ingredients that aren't counted is flagged: its numbers are a minimum.
+ */
+export function recipeRow(r: RecipeSummary): FoodRow {
+  return {
+    title: r.name,
+    brand: null,
+    basis: `per serving · makes ${fmt(r.servings)}`,
+    calories: r0(r.perServing.calories),
+    macros: macroText(r.perServing),
+    source: 'Your recipe',
+    note: r.coverage < 1 ? `${Math.round(r.coverage * 100)}% of ingredients counted` : null,
+  };
+}
+
+/** Your recipes matching a search, best first: names that start with the words, then the rest; never the recipe being edited. */
+export function recipeMatches(recipes: RecipeSummary[], text: string, exceptId?: string): RecipeSummary[] {
+  const q = text.trim().toLowerCase();
+  if (q.length < 2) return [];
+  return recipes
+    .filter((r) => r.id !== exceptId)
+    .map((r, i) => ({ r, i, starts: r.name.toLowerCase().startsWith(q) }))
+    .sort((a, b) => Number(b.starts) - Number(a.starts) || a.i - b.i)
+    .map((x) => x.r);
 }

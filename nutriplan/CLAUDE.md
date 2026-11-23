@@ -22,6 +22,10 @@ Build a trustworthy, fast, intuitive nutrition and recipe-planning experience. P
 - `backend/tests`: xUnit domain, application and Postgres integration tests.
 - Fill the Gaps (`GapRecommender` in Domain, `GapFillService`, `docs/FILL_THE_GAPS.md`): deterministic, real portions only, hard constraints, nothing added when at/over target. Thresholds live in `GapFillPolicy`; don't reintroduce a global optimizer or invented serving sizes. "Show different ideas" pages through the same qualifying list by excluding shown idea ids (`SuggestPage`); don't add a second recommender or randomness.
 - Logging and editing (`docs/LOGGING.md`): foods are logged/edited in the measures `FoodMeasures` derives (never invented weights or densities); amount edits go through `ItemAmounts`, which scales the entry's own snapshot. The app's `features/quantity` model and `QuantityPicker` are the only amount UI; don't add another. Number-led USDA portions are named by their phrase ("100-calorie package"); Foundation foods with no portions may borrow their NDB-linked SR Legacy portions only through `EquivalentPortions` / `enrich-usda-portions` (with `origin` recorded), never by guessing.
+- Recipes (`docs/RECIPES.md`): one model; an ingredient line is a food or another recipe (any depth). Loops are refused
+  (`RecipeGraph`), edits are pushed up to every recipe that uses the changed one (`RecipeService.PropagateAsync`), and a
+  recipe used elsewhere can't be deleted. Recipe measures (`RecipeMeasures`) are servings, plus weight/volume only from the
+  finished weight/volume you entered; don't estimate them from ingredients. Diary/plan snapshots never follow recipe edits.
 - `mobile`: Expo SDK 58, React Native/TypeScript, Expo Router, TanStack Query; keep reusable logic outside route components.
 
 Dependencies point inward. Don't put business rules in endpoints or nutrition calculation in UI. Reuse existing patterns rather than creating unnecessary services or frameworks.
@@ -94,7 +98,7 @@ Check current version-specific Expo SDK 58 documentation for native APIs and use
 - Accounts: Google sign-in via Firebase, invite-only (`docs/AUTH.md`). The API fails closed (fallback policy requires an active app user; production won't start without `Auth:FirebaseProjectId`). Every user-owned read/write is scoped by `owner_id` in repositories **and** EF query filters; raw SQL must name the owner. Never take a user id from request data. Native session tokens live in SecureStore, never AsyncStorage.
 - Hosted API access should use HTTPS, bounded inputs, sensible rate limits and safe errors. Preserve anti-SSRF controls in `HttpWebPageFetcher`.
 - Preserve/verify backups and use controlled, reversible database migrations. Avoid destructive operations and do not alter production data without explicit approval.
-- Use feature branches/PRs where possible. Do not publish a release APK until required CI checks pass; use versioned immutable artifacts and protected signing keys.
+- Workflow (owner's choice, 2026-11-23): commit directly to `master` once the relevant tests pass locally; no feature branches or PR approvals needed. Stop and ask before destructive migrations, irreversible changes or paid services. Do not publish a release APK until required CI checks pass; use versioned immutable artifacts and protected signing keys.
 - The repo's default branch is `master`: verify actual deployment and CI branch names rather than assuming `main`.
 
 ## Food database extensions

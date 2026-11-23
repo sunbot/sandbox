@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import type { Ingredient } from '@/api/types';
-import { AppText, Badge, BottomSheet, PrimaryButton, SecondaryButton } from '@/components/ds';
+import { AppText, Badge, BottomSheet, PrimaryButton, SecondaryButton, TextButton } from '@/components/ds';
+import { ChefHat } from '@/components/ds/icons';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
+import { recipeAmount } from './IngredientNutritionRow';
 import { closedEditor, ingredientState, syncGramsEditor, typeGrams, type IngredientState } from './nutritionView';
 
 const stateWords: Record<IngredientState, string> = {
@@ -15,12 +17,15 @@ const stateWords: Record<IngredientState, string> = {
  * Inspect one ingredient: what the recipe said, the food it is matched to, its amount and calories, with the existing
  * actions (choose a food, change the grams, leave it out). Nothing changes until you press an action.
  */
-export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetGrams, onLeaveOut, busy }: {
+export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetGrams, onLeaveOut, onRecipeAmount, onOpenRecipe, busy }: {
   ingredient: Ingredient | null;
   onClose: () => void;
   onChooseFood: (i: Ingredient) => void;
   onSetGrams: (i: Ingredient, grams: number) => void;
   onLeaveOut: (i: Ingredient) => void;
+  /** For a line that is one of your recipes: change how much of it (in its servings, or grams/cups when known). */
+  onRecipeAmount?: (i: Ingredient) => void;
+  onOpenRecipe?: (recipeId: string) => void;
   busy?: boolean;
 }) {
   const t = useTheme();
@@ -43,12 +48,25 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetGrams,
   return (
     <BottomSheet visible={!!ingredient} onClose={onClose} title="Ingredient"
       footer={<>
-        <PrimaryButton label={ing.foodName ? 'Choose a different food' : 'Choose food'} onPress={() => onChooseFood(ing)} fullWidth />
+        {ing.recipeId && state !== 'excluded' && onRecipeAmount ? <PrimaryButton label="Change amount" onPress={() => onRecipeAmount(ing)} fullWidth /> : null}
+        {ing.recipeId ? <SecondaryButton label="Choose a different food or recipe" onPress={() => onChooseFood(ing)} fullWidth />
+          : <PrimaryButton label={ing.foodName ? 'Choose a different food or recipe' : 'Choose a food or recipe'} onPress={() => onChooseFood(ing)} fullWidth />}
         {state !== 'excluded' ? <SecondaryButton label="Leave out" onPress={() => onLeaveOut(ing)} loading={busy} fullWidth /> : null}
       </>}>
       <View style={{ gap: t.space.md }}>
         <AppText variant="body">{ing.rawText}</AppText>
         <Badge label={stateWords[state]} tone={state === 'confirmed' ? 'success' : state === 'unmatched' || state === 'check' ? 'warning' : 'neutral'} />
+        {ing.recipeId ? (
+          <View style={{ gap: 2 }}>
+            <AppText variant="label" tone="secondary">Your recipe</AppText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
+              <ChefHat size={20} strokeWidth={1.8} color={t.colors.textMuted} />
+              <AppText variant="body" style={{ flexShrink: 1 }}>{ing.recipeName ?? 'Recipe'}</AppText>
+            </View>
+            <AppText variant="secondary" tone="secondary">{recipeAmount(ing)}{ing.nutrition ? ` · ${Math.round(ing.nutrition.calories)} kcal` : ''}</AppText>
+            {onOpenRecipe ? <View style={{ flexDirection: 'row' }}><TextButton label="Open this recipe" onPress={() => onOpenRecipe(ing.recipeId!)} /></View> : null}
+          </View>
+        ) : null}
         {ing.foodName ? (
           <View style={{ gap: 2 }}>
             <AppText variant="label" tone="secondary">Matched food</AppText>

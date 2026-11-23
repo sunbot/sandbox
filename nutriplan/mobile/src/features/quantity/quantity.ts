@@ -83,14 +83,15 @@ export function convert(qty: number, from: Measure, to: Measure): number {
 export type QuantityCheck = { ok: true; base: number } | { ok: false; message: string };
 
 /** Whether an amount can be saved, and its base amount (grams, ml or servings). */
-export function checkQuantity(qty: number | null, m: Measure | undefined, isRecipe = false, baseUnit: 'g' | 'ml' = 'g'): QuantityCheck {
+export function checkQuantity(qty: number | null, m: Measure | undefined, isRecipe = false, baseUnit: 'g' | 'ml' | 'serving' = 'g'): QuantityCheck {
   if (!m) return { ok: false, message: 'Choose a measure.' };
   if (qty === null) return { ok: false, message: 'Enter an amount, like 12, 0.5 or 1/2.' };
   if (!(qty > 0)) return { ok: false, message: 'Enter an amount greater than zero.' };
   const base = qty * m.base;
   // Mirrors the server: amounts that would round to nothing, and a misplaced zero, are refused.
   if (qty < MIN_QUANTITY || (m.base > 0 && base < MIN_BASE)) return { ok: false, message: 'That amount is too small to log.' };
-  if (isRecipe && qty > MAX_SERVINGS) return { ok: false, message: `That's more than ${MAX_SERVINGS} servings. Check the amount.` };
+  // A recipe's base amount is servings (whatever measure it's typed in: servings, grams or cups of the finished dish).
+  if (isRecipe && base > MAX_SERVINGS) return { ok: false, message: `That's more than ${MAX_SERVINGS} servings. Check the amount.` };
   if (!isRecipe && base > MAX_GRAMS) return { ok: false, message: baseUnit === 'ml' ? 'That’s more than 5 litres. Check the amount.' : 'That’s more than 5 kg. Check the amount.' };
   return { ok: true, base };
 }
@@ -99,12 +100,12 @@ export function checkQuantity(qty: number | null, m: Measure | undefined, isReci
 export const roundAmount = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
- * The measures to offer when editing an item: recipes in servings; foods in the server's list. If the item's own unit
- * isn't in the list (an old entry), it's offered as-is so the amount can still change in that unit (no conversion).
+ * The measures to offer when editing an item: a recipe in its own measures (servings, plus weight/volume when its finished
+ * weight/volume is known; `base` = servings); a food in the server's list. If the item's own unit isn't in the list (an old
+ * entry, or a recipe whose finished weight was since removed), it's offered as-is so the amount can still change in that unit.
  */
-export function measuresForItem(item: Item, foodMeasures: Measure[] | undefined): Measure[] {
-  if (item.kind === 'Recipe') return [SERVING];
-  const list = foodMeasures ?? [];
+export function measuresForItem(item: Item, foodMeasures: Measure[] | undefined, recipeMeasures?: Measure[]): Measure[] {
+  const list = item.kind === 'Recipe' ? (recipeMeasures?.length ? recipeMeasures : [SERVING]) : foodMeasures ?? [];
   if (matchMeasure(list, item.unit)) return list;
   const own: Measure = { unit: item.unit, label: item.unit, plural: item.unit, base: ownBase(item), kind: 'Count', source: null, countable: false };
   return [own, ...list.filter((m) => own.base > 0 || m.unit !== own.unit)];
@@ -112,6 +113,7 @@ export function measuresForItem(item: Item, foodMeasures: Measure[] | undefined)
 
 /** Base amount (grams/ml) of one of the item's own unit, from its recorded weight; 0 when it isn't known (then it can't convert). */
 function ownBase(item: Item) {
+  if (item.kind === 'Recipe') return 0; // a recipe's base is servings, which its weight alone doesn't give
   return item.grams && item.quantity > 0 ? item.grams / item.quantity : 0;
 }
 
@@ -132,19 +134,23 @@ export function scaleFactor(item: Item, qty: number, to: Measure, measures: Meas
   const same = sameUnit(to.unit, item.unit, measures);
   if (same) return qty / item.quantity;
   const from = matchMeasure(measures, item.unit);
-  const oldBase = item.grams && item.grams > 0 ? item.grams : from && from.base > 0 ? item.quantity * from.base : 0;
+  // Recipes compare servings (never grams: a recipe's weight is only known through its finished weight).
+  const oldBase = item.kind !== 'Recipe' && item.grams && item.grams > 0 ? item.grams : from && from.base > 0 ? item.quantity * from.base : 0;
   if (!(oldBase > 0) || !(to.base > 0)) return null;
   return (qty * to.base) / oldBase;
 }
 
 /** The unit (and amount) to show first for an item: its own measure if the food has it. */
 export function initialSelection(item: Item, measures: Measure[]): { text: string; unit: string } {
-  const own = item.kind === 'Recipe' ? SERVING : matchMeasure(measures, item.unit);
+  const own = matchMeasure(measures, item.unit) ?? (item.kind === 'Recipe' ? SERVING : undefined);
   return { text: formatQuantity(item.quantity), unit: own?.unit ?? item.unit };
 }
 
 /** Why a food can't be measured in cups or spoons (only shown for a solid food that has none). */
-export function volumeNote(measures: Measure[], baseUnit: 'g' | 'ml' | undefined): string | null {
+export function volumeNote(measures: Measure[], baseUnit: 'g' | 'ml' | 'serving' | undefined): string | null {
+  if (baseUnit === 'serving') {
+    return measures.some((m) => m.kind !== 'Count') ? null : 'Servings only: add the finished weight or volume in Edit recipe to use grams or cups.';
+  }
   if (baseUnit === 'ml' || measures.some((m) => m.kind === 'Volume')) return null;
   return 'No cup or spoon measures: USDA lists no volume weight for this food.';
 }
@@ -189,6 +195,18 @@ export function sourceText(m: Measure): string | null {
 }
 
 export const amountText = (qty: number, unit: string) => `${formatQuantity(qty)} ${unitFor(qty, unit)}`;
+
+/** How much of the base one amount is: "143 g", "330 ml", "0.5 serving", "2 servings". */
+export const baseText = (n: number, baseUnit: 'g' | 'ml' | 'serving') => (baseUnit === 'serving' ? amountText(n, 'serving') : `${formatQuantity(n)} ${baseUnit}`);
+
+/**
+ * What one of a measure is worth, for the measure list: "143 g" for a cup of a food; for a recipe, "0.5 serving" for a cup,
+ * but "500 g per serving" for a gram (a gram is a tiny, unreadable fraction of a serving).
+ */
+export function measureWorth(m: Measure, baseUnit: 'g' | 'ml' | 'serving'): string {
+  if (baseUnit === 'serving' && m.base > 0 && m.base < 0.1) return `${formatQuantity(Math.round(10 / m.base) / 10)} ${unitFor(1 / m.base, m.unit)} per serving`;
+  return baseText(m.base, baseUnit);
+}
 
 /** The exact amount behind a converted number, so browsing measures (almonds → oz → almonds) never drifts. */
 export type ExactAmount = { text: string; base: number } | null;

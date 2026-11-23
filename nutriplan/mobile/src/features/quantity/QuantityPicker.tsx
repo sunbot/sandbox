@@ -4,7 +4,7 @@ import type { Measure } from '@/api/types';
 import { AppText } from '@/components/ds';
 import { Check, ChevronDown, ChevronUp } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
-import { capitalize, formatQuantity, matchMeasure, parseQuantity, sourceText, switchMeasure, volumeNote, type ExactAmount } from './quantity';
+import { baseText, capitalize, measureWorth, matchMeasure, parseQuantity, sourceText, switchMeasure, volumeNote, type ExactAmount } from './quantity';
 
 export type QuantityValue = { text: string; unit: string };
 
@@ -17,7 +17,8 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
   measures: Measure[];
   value: QuantityValue;
   onChange: (v: QuantityValue) => void;
-  baseUnit?: 'g' | 'ml';
+  /** What a measure's `base` counts: grams, ml (a drink), or servings (a recipe). */
+  baseUnit?: 'g' | 'ml' | 'serving';
   error?: string | null;
   autoFocus?: boolean;
   onSubmit?: () => void;
@@ -29,7 +30,7 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
   const measure = matchMeasure(measures, value.unit) ?? measures[0];
   const qty = parseQuantity(value.text);
   const equivalent = measure && qty !== null && qty > 0 && measure.base > 0 && measure.unit !== baseUnit
-    ? `= ${formatQuantity(Math.round(qty * measure.base * 10) / 10)} ${baseUnit}` : null;
+    ? `= ${baseText(Math.round(qty * measure.base * (baseUnit === 'serving' ? 100 : 10)) / (baseUnit === 'serving' ? 100 : 10), baseUnit)}` : null;
   const note = volumeNote(measures, baseUnit);
 
   const pick = (m: Measure) => {
@@ -78,11 +79,11 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
             const selected = m.unit === measure?.unit;
             return (
               <Pressable key={m.unit} onPress={() => pick(m)} accessibilityRole="radio" accessibilityState={{ selected }}
-                accessibilityLabel={`${m.label}${m.base > 0 && m.unit !== baseUnit ? `, ${formatQuantity(m.base)} ${baseUnit}` : ''}`}
+                accessibilityLabel={`${m.label}${m.base > 0 && m.unit !== baseUnit ? `, ${measureWorth(m, baseUnit)}` : ''}`}
                 style={({ pressed }) => ({ minHeight: t.sizes.touch, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingHorizontal: t.space.md, paddingVertical: t.space.xs,
                   borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.colors.border, backgroundColor: pressed ? t.colors.surfaceMuted : selected ? t.colors.primaryLight : t.colors.surface })}>
                 <View style={{ flex: 1, gap: 1 }}>
-                  <AppText variant="body">{capitalize(m.label)}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${formatQuantity(m.base)} ${baseUnit}`}</AppText> : null}</AppText>
+                  <AppText variant="body">{capitalize(m.label)}{m.base > 0 && m.unit !== baseUnit ? <AppText variant="secondary" tone="secondary" numeric>{`  ${measureWorth(m, baseUnit)}`}</AppText> : null}</AppText>
                   {m.source ? <AppText variant="caption" tone="muted" numberOfLines={3}>{sourceText(m)}</AppText> : null}
                 </View>
                 {selected ? <Check size={18} color={t.colors.primary} /> : null}

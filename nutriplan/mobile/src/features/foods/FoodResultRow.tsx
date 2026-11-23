@@ -1,6 +1,6 @@
 import { Pressable, View } from 'react-native';
 import { AppText, Badge } from '@/components/ds';
-import { ChevronRight, CircleAlert } from '@/components/ds/icons';
+import { ChefHat, ChevronRight, CircleAlert } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import { rowLabel, type FoodRow } from './foodRows';
 
@@ -17,7 +17,7 @@ export function FoodResultRow({ row, onPress, busy }: { row: FoodRow; onPress: (
         <AppText variant="secondary" tone="secondary" numberOfLines={1}>{row.basis}</AppText>
         {row.macros ? <AppText variant="caption" tone="secondary" numeric numberOfLines={1}>{row.macros}</AppText> : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.space.xs, marginTop: 2 }}>
-          <Badge label={row.source} tone={row.source === 'USDA' ? 'primary' : 'neutral'} />
+          <Badge label={row.source} tone={row.source === 'USDA' ? 'primary' : 'neutral'} icon={row.source === 'Your recipe' ? ChefHat : undefined} />
           {row.note ? <Badge label={row.note} tone="warning" icon={CircleAlert} /> : null}
         </View>
       </View>
