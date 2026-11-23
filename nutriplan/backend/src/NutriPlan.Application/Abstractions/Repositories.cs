@@ -1,5 +1,6 @@
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
+using NutriPlan.Domain.Grocery;
 using NutriPlan.Domain.Pantry;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
@@ -64,6 +65,13 @@ public interface IPantryRepository
     Task<IReadOnlyList<PantryItem>> ListAsync(CancellationToken ct = default);
     void Add(PantryItem item);
     void Remove(PantryItem item);
+}
+
+public interface IGroceryExclusionRepository
+{
+    Task<IReadOnlyList<GroceryExclusion>> ListAsync(CancellationToken ct = default);
+    void Add(GroceryExclusion exclusion);
+    void Remove(GroceryExclusion exclusion);
 }
 
 public interface ITargetsRepository

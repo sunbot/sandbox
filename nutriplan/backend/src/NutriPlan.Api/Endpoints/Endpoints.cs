@@ -112,6 +112,8 @@ public static class PlanEndpoints
             s.SuggestAsync(new GapFillRequest(date, includePlanned ?? true, micros ?? true, maxItems ?? 3, recipesOnly ?? false, mode, meal,
                 exclude?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(GapFillRequest.MaxExclude).ToList()), ct));
         g.MapGet("/grocery", (DateOnly from, DateOnly to, bool? subtractPantry, GroceryService s, CancellationToken ct) => s.BuildAsync(from, to, subtractPantry ?? true, ct));
+        g.MapPost("/grocery/exclusions", async (HideGroceryItemRequest r, GroceryExclusionService s, CancellationToken ct) => { await s.HideAsync(r, ct); return Results.NoContent(); });
+        g.MapDelete("/grocery/exclusions", async (string? key, GroceryExclusionService s, CancellationToken ct) => { await s.RestoreAsync(key, ct); return Results.NoContent(); });
 
         var t = api.MapGroup("/targets").WithTags("Targets");
         t.MapGet("/", (TargetsService s, CancellationToken ct) => s.GetAsync(ct));

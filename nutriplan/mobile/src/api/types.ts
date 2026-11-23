@@ -134,8 +134,8 @@ export type GapReport = {
   skippedIdeas: number;
 };
 
-export type GroceryItem = { name: string; foodId?: string | null; totalGrams?: number | null; display: string; inPantry: boolean; usedIn: string[]; unconvertedAmounts: string[] };
-export type GroceryList = { from: string; to: string; itemCount: number; aisles: { aisle: string; items: GroceryItem[] }[] };
+export type GroceryItem = { name: string; foodId?: string | null; totalGrams?: number | null; display: string; inPantry: boolean; usedIn: string[]; unconvertedAmounts: string[]; key: string };
+export type GroceryList = { from: string; to: string; itemCount: number; aisles: { aisle: string; items: GroceryItem[] }[]; hiddenItems: GroceryItem[] };
 
 export type RecipeSummary = {
   id: string;

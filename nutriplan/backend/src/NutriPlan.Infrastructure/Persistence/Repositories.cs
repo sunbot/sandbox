@@ -3,6 +3,7 @@ using NutriPlan.Application.Abstractions;
 using NutriPlan.Application.Foods;
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
+using NutriPlan.Domain.Grocery;
 using NutriPlan.Domain.Pantry;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
@@ -263,6 +264,17 @@ public sealed class PantryRepository(NutriPlanDbContext db) : IPantryRepository
     }
     public void Add(PantryItem item) { item.AssignOwner(Owner.Of(db)); db.PantryItems.Add(item); }
     public void Remove(PantryItem item) => db.PantryItems.Remove(item);
+}
+
+public sealed class GroceryExclusionRepository(NutriPlanDbContext db) : IGroceryExclusionRepository
+{
+    public async Task<IReadOnlyList<GroceryExclusion>> ListAsync(CancellationToken ct = default)
+    {
+        var me = Owner.Of(db);
+        return await db.GroceryExclusions.Where(x => x.OwnerId == me).ToListAsync(ct);
+    }
+    public void Add(GroceryExclusion exclusion) { exclusion.AssignOwner(Owner.Of(db)); db.GroceryExclusions.Add(exclusion); }
+    public void Remove(GroceryExclusion exclusion) => db.GroceryExclusions.Remove(exclusion);
 }
 
 public sealed class TargetsRepository(NutriPlanDbContext db) : ITargetsRepository

@@ -165,3 +165,14 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    and, on a recipe with a finished volume, 1 cup; edit the logged entry between cups and servings. On a recipe, choose an
    ingredient → pick another recipe → Use as this ingredient; the line reads "Your recipe: …".
 6. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
+
+## Removing items from the grocery list
+
+Any grocery item, including ones generated from planned meals, can be removed with the minus button on its row (Undo in the snackbar). This only hides the item for the signed-in user (`grocery_exclusions`, owner-scoped); plans, recipes and snapshots are never changed.
+
+- **Identity**: an exclusion is keyed by ingredient (`food:{foodId}`, or `text:{lowercase name}` for unmatched lines), not by amount, aisle or date range. Merged lines from several recipes are one item, so one removal hides them all; quantity changes, recalculation and other date ranges keep it hidden.
+- **Checked-off**: check marks stay a device-local state per range; a removed item is simply not shown or counted, and its check returns if restored.
+- **Restore**: "Show removed items" at the bottom lists the removed items of the current range (tap to restore) and "Restore all" clears every exclusion.
+- **Plan changes do not reset it**: if the plan no longer needs the item the exclusion sits unused; if it is planned again later it stays removed (visible under "removed items") until restored.
+
+Android check: plan a recipe, open Groceries, tap the minus on an ingredient, confirm it disappears and the count drops; edit the plan's servings, return and confirm it is still gone; tap Undo or restore it from "removed items"; confirm the recipe and plan are unchanged. A second signed-in user must not see the exclusion.

@@ -3,6 +3,7 @@ using NutriPlan.Application.Foods;
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
 using NutriPlan.Domain.Nutrients;
+using NutriPlan.Domain.Grocery;
 using NutriPlan.Domain.Pantry;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
@@ -10,13 +11,14 @@ using NutriPlan.Domain.Recipes;
 namespace NutriPlan.Application.Tests;
 
 /// <summary>In-memory implementations of the persistence ports so services can be tested without a database.</summary>
-public sealed class InMemoryStore : IFoodRepository, IRecipeRepository, IDiaryRepository, IPlanRepository, IPantryRepository, ITargetsRepository, IUnitOfWork, IClock
+public sealed class InMemoryStore : IFoodRepository, IRecipeRepository, IDiaryRepository, IPlanRepository, IPantryRepository, IGroceryExclusionRepository, ITargetsRepository, IUnitOfWork, IClock
 {
     public List<Food> Foods { get; } = [];
     public List<Recipe> Recipes { get; } = [];
     public List<DiaryEntry> Diary { get; } = [];
     public List<PlanEntry> Plan { get; } = [];
     public List<PantryItem> Pantry { get; } = [];
+    public List<GroceryExclusion> GroceryExclusions { get; } = [];
     public NutritionTargets Targets { get; } = new();
     public DateOnly Today { get; set; } = new(2026, 11, 18); // a Wednesday
     public DateTimeOffset Now => new(Today.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
@@ -81,6 +83,11 @@ public sealed class InMemoryStore : IFoodRepository, IRecipeRepository, IDiaryRe
     Task<IReadOnlyList<PantryItem>> IPantryRepository.ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<PantryItem>>(Pantry.ToList());
     void IPantryRepository.Add(PantryItem item) => Pantry.Add(item);
     void IPantryRepository.Remove(PantryItem item) => Pantry.Remove(item);
+
+    // Grocery exclusions
+    Task<IReadOnlyList<GroceryExclusion>> IGroceryExclusionRepository.ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<GroceryExclusion>>(GroceryExclusions.ToList());
+    void IGroceryExclusionRepository.Add(GroceryExclusion exclusion) => GroceryExclusions.Add(exclusion);
+    void IGroceryExclusionRepository.Remove(GroceryExclusion exclusion) => GroceryExclusions.Remove(exclusion);
 
     // Targets
     Task<NutritionTargets> ITargetsRepository.GetAsync(CancellationToken ct) => Task.FromResult(Targets);

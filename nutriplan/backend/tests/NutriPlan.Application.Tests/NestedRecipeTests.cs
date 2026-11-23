@@ -260,7 +260,7 @@ public class NestedRecipeTests
 
     // ── Review fixes (each failed before its fix) ─────────────────────────────────────────────────────
 
-    private GroceryService Grocery() => new(_store, _store, _store, _store, _store);
+    private GroceryService Grocery() => new(_store, _store, _store, _store, _store, _store);
 
     private static double GramsOf(GroceryListDto list, string food) =>
         list.Aisles.SelectMany(a => a.Items).Single(i => i.Name.Contains(food, StringComparison.OrdinalIgnoreCase)).TotalGrams!.Value;
