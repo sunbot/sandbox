@@ -114,7 +114,7 @@ export default function TodayScreen() {
     setClearing(null);
     data.hideMany(request.entryIds);
     snackbar({
-      message: `Cleared ${request.entryIds.length} ${request.entryIds.length === 1 ? 'entry' : 'entries'} from ${request.meal}`,
+      message: `Removing ${request.entryIds.length} ${request.entryIds.length === 1 ? 'entry' : 'entries'} from ${request.meal} — Undo?`,
       actionLabel: 'Undo',
       onAction: () => data.unhideMany(request.entryIds),
       onTimeout: () => clearMeal.mutate(request, {
