@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, patch, post, put, q, api } from './client';
+import { normalizeGrocery } from './grocery';
 import { NUTRITION_KEYS } from './invalidation';
 import type * as T from './types';
 import { today, type Meal } from '@/lib/format';
@@ -193,7 +194,7 @@ export const useGaps = (date: string, mode: T.GapMode = 'BestMatch', meal?: Meal
   });
 
 export const useGrocery = (from: string, to: string) =>
-  useQuery({ queryKey: keys.grocery(from, to), queryFn: () => get<T.GroceryList>(`/plan/grocery?${q({ from, to })}`) });
+  useQuery({ queryKey: keys.grocery(from, to), queryFn: () => get<T.GroceryList>(`/plan/grocery?${q({ from, to })}`), select: normalizeGrocery });
 
 // ── Recipes ───────────────────────────────────────────────────────────
 export const useRecipes = (search: string, enabled = true) =>
