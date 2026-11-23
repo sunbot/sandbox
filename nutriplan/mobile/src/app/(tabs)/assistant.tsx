@@ -92,19 +92,21 @@ export default function AskScreen() {
 
 function Response({ r }: { r: AssistantResponse }) {
   const t = useTheme();
+  const who = r.interpreter === 'Claude' || (!r.interpreter && r.usedLanguageModel) ? 'Understood by Claude'
+    : r.interpreter === 'RulesFallback' ? 'Claude unavailable, built-in rules used'
+    : 'Understood by built-in rules';
+  const provenance = r.foodMatches.length ? `${who} · numbers from the USDA food database` : who;
   return (
-    <View style={{ gap: t.space.sm }}>
+    <View style={{ gap: t.space.sm, borderLeftWidth: 3, borderLeftColor: t.colors.primaryLight, paddingLeft: t.space.md }}>
       <AppText variant="body" tone="secondary">{r.reply}</AppText>
       {r.foodMatches.length ? <ReviewCard response={r} /> : null}
       <OtherResults r={r} />
-      <AppText variant="caption" tone="muted">
-        {r.interpreter === 'Claude' || (!r.interpreter && r.usedLanguageModel) ? 'Understood by Claude'
-          : r.interpreter === 'RulesFallback' ? 'Claude unavailable, built-in rules used'
-          : 'Understood by built-in rules'} · numbers from the USDA food database
-      </AppText>
-      {r.interpreterNote && r.interpreter === 'RulesFallback' ? (
-        <AppText variant="caption" tone="muted">{r.interpreterNote}</AppText>
-      ) : null}
+      <View accessible accessibilityLabel={`Source: ${provenance}`} style={{ gap: t.space.xs }}>
+        <AppText variant="caption" tone="muted">{provenance}</AppText>
+        {r.interpreterNote && r.interpreter === 'RulesFallback' ? (
+          <AppText variant="caption" tone="muted">{r.interpreterNote}</AppText>
+        ) : null}
+      </View>
     </View>
   );
 }
