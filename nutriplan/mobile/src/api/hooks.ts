@@ -118,6 +118,14 @@ export function useDeleteEntry() {
   return useMutation({ mutationFn: (id: string) => del(`/diary/${id}`), onSuccess: invalidate });
 }
 
+export function useClearMeal() {
+  const invalidate = useInvalidateNutrition();
+  return useMutation({
+    mutationFn: (r: { date: string; meal: Meal; entryIds: string[] }) => post<void>('/diary/clear-meal', r),
+    onSettled: invalidate,
+  });
+}
+
 export function useCopyMeal() {
   const invalidate = useInvalidateNutrition();
   return useMutation({

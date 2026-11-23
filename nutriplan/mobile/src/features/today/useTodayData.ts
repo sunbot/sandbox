@@ -38,6 +38,8 @@ export function useTodayData(date: string, quickMeal: Meal) {
     planned,
     hide: (id: string) => setHidden((s) => new Set(s).add(id)),
     unhide: (id: string) => setHidden((s) => { const n = new Set(s); n.delete(id); return n; }),
+    hideMany: (ids: string[]) => setHidden((s) => new Set([...s, ...ids])),
+    unhideMany: (ids: string[]) => setHidden((s) => { const n = new Set(s); ids.forEach((id) => n.delete(id)); return n; }),
     refetchAll: () => Promise.all([day.refetch(), targets.refetch(), week.refetch(), quick.refetch()]),
   };
 }
@@ -61,7 +63,8 @@ function applyHidden(d: Day, hiddenEntries: DiaryEntry[], hidden: ReadonlySet<st
   const progress = d.progress.map((p) => {
     const removed = hiddenEntries.reduce((sum, e) => sum + (e.item.nutrition.nutrients[String(p.nutrientId)] ?? 0), 0);
     const amount = Math.max(0, p.amount - removed);
-    return { ...p, amount, percent: p.target ? (amount / p.target) * 100 : p.percent };
+    const missingFrom = Math.max(0, (p.missingFrom ?? 0) - hiddenEntries.filter((e) => e.item.nutrition.nutrients[String(p.nutrientId)] === undefined).length);
+    return { ...p, amount, missingFrom, percent: p.target ? (amount / p.target) * 100 : p.percent };
   });
   return { ...d, totals, meals, progress };
 }

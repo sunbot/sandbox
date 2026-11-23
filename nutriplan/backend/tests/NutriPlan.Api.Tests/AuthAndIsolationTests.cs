@@ -273,6 +273,24 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     // ── Isolation between two users ───────────────────────────────────────────────────────────────────
 
     [PostgresFact]
+    public async Task Clear_meal_requires_auth_and_rejects_mixed_owners_without_partial_deletion()
+    {
+        var a = await NewMember();
+        var b = await NewMember();
+        var aEntry = await Json(await a.PostAsJsonAsync("/api/diary/quick", new { date = Day, meal = "Breakfast", name = "A breakfast", calories = 100 }));
+        var bEntry = await Json(await b.PostAsJsonAsync("/api/diary/quick", new { date = Day, meal = "Breakfast", name = "B breakfast", calories = 200 }));
+        var request = new { date = Day, meal = "Breakfast", entryIds = new[] { (string)bEntry["id"]!, (string)aEntry["id"]! } };
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Client(null).PostAsJsonAsync("/api/diary/clear-meal", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await b.PostAsJsonAsync("/api/diary/clear-meal", request)).StatusCode);
+        Assert.Contains("A breakfast", await a.GetStringAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        Assert.Contains("B breakfast", await b.GetStringAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        Assert.Equal(HttpStatusCode.NoContent, (await b.PostAsJsonAsync("/api/diary/clear-meal", new { date = Day, meal = "Breakfast", entryIds = new[] { (string)bEntry["id"]! } })).StatusCode);
+        Assert.Contains("A breakfast", await a.GetStringAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        Assert.DoesNotContain("B breakfast", await b.GetStringAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+    }
+
+    [PostgresFact]
     public async Task One_user_cannot_see_or_change_another_users_data()
     {
         var a = await NewMember();

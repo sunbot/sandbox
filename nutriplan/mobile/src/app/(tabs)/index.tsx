@@ -5,9 +5,9 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/ds/icons';
-import { useDeleteEntry, useLogFood, useLogRecipe, usePlanMutations, useUpdateEntry } from '@/api/hooks';
+import { useClearMeal, useDeleteEntry, useLogFood, useLogRecipe, usePlanMutations, useUpdateEntry } from '@/api/hooks';
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
-import { AppText, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
+import { AppText, ConfirmationSheet, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
 import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
@@ -31,6 +31,7 @@ export default function TodayScreen() {
   const data = useTodayData(date, recentMeal);
 
   const del = useDeleteEntry();
+  const clearMeal = useClearMeal();
   const update = useUpdateEntry();
   const logFood = useLogFood();
   const logRecipe = useLogRecipe();
@@ -41,6 +42,7 @@ export default function TodayScreen() {
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({}); // kept if a sheet is dismissed by accident
   const [showNutrients, setShowNutrients] = useState(false);
   const [loggingId, setLoggingId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState<{ date: string; meal: Meal; entryIds: string[] } | null>(null);
 
   const isToday = date === today();
   const go = (pathname: '/food/search' | '/scan', meal: Meal = quickMeal) => router.push({ pathname, params: { date, meal, mode: 'log' } });
@@ -105,6 +107,22 @@ export default function TodayScreen() {
       }),
     });
   }, [data, del, snackbar]);
+
+  const confirmClear = () => {
+    if (!clearing) return;
+    const request = clearing;
+    setClearing(null);
+    data.hideMany(request.entryIds);
+    snackbar({
+      message: `Cleared ${request.entryIds.length} ${request.entryIds.length === 1 ? 'entry' : 'entries'} from ${request.meal}`,
+      actionLabel: 'Undo',
+      onAction: () => data.unhideMany(request.entryIds),
+      onTimeout: () => clearMeal.mutate(request, {
+        onSettled: () => data.unhideMany(request.entryIds),
+        onError: (err) => snackbar({ message: errorText(err, "Couldn't clear that meal. Refresh and try again.") }),
+      }),
+    });
+  };
 
   /* ── Render ── */
 
@@ -186,7 +204,9 @@ export default function TodayScreen() {
             return (
               <MealSection key={m} meal={m} totals={md?.totals.calories ?? 0} entries={entries} planned={planned}
                 expanded={isExpanded} onToggle={() => setExpanded((x) => ({ ...x, [m]: !isExpanded }))}
-                onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry} onLogPlanned={logPlanned} loggingId={loggingId} />
+                onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry}
+                onClear={() => setClearing({ date, meal: m, entryIds: entries.map((e) => e.id) })}
+                onLogPlanned={logPlanned} loggingId={loggingId} />
             );
           })}
         </View>
@@ -208,6 +228,9 @@ export default function TodayScreen() {
       <NutrientsSheet visible={showNutrients} onClose={() => setShowNutrients(false)} progress={day.progress} mode={nutrientMode} />
       <MealPickerSheet visible={pickingMeal} meal={recentMeal} onClose={() => setPickingMeal(false)}
         onPick={(m) => { setRecentMeal(m); setPickingMeal(false); }} />
+      <ConfirmationSheet visible={clearing !== null} title={`Clear ${clearing?.meal ?? 'meal'}?`}
+        message={clearing ? `Remove ${clearing.entryIds.length} logged ${clearing.entryIds.length === 1 ? 'entry' : 'entries'} from ${clearing.meal} on ${clearing.date}? Planned items are not removed.` : undefined}
+        confirmLabel="Clear entries" destructive onConfirm={confirmClear} onCancel={() => setClearing(null)} />
     </View>
   );
 }
