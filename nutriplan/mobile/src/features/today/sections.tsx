@@ -138,7 +138,7 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
 
 /* ───────────────────────── Meal section ───────────────────────── */
 
-export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onLogPlanned, loggingId }: {
+export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onClear, onLogPlanned, loggingId }: {
   meal: Meal;
   totals: number;
   entries: DiaryEntry[];
@@ -148,6 +148,7 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   onAdd: () => void;
   onEntry: (e: DiaryEntry) => void;
   onDeleteEntry: (e: DiaryEntry) => void;
+  onClear: () => void;
   onLogPlanned: (p: PlanEntry) => void;
   loggingId?: string | null;
 }) {
@@ -198,6 +199,7 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
           ))}
           <View style={{ flexDirection: 'row' }}>
             <TextButton label={`Add to ${mealLabel(meal).toLowerCase()}`} icon={Plus} onPress={onAdd} />
+            {entries.length ? <TextButton label={`Clear ${mealLabel(meal).toLowerCase()}`} onPress={onClear} /> : null}
           </View>
         </View>
       ) : null}

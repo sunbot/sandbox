@@ -29,7 +29,7 @@ test('every diary and plan mutation invalidates', () => {
   const plan = section('Plan');
   for (const [name, body] of [['diary', diary], ['plan', plan]] as const) {
     const mutations = (body.match(/useMutation\(/g) ?? []).length;
-    const invalidating = (body.match(/onSuccess: invalidate|\.\.\.opts/g) ?? []).length;
+    const invalidating = (body.match(/on(?:Success|Settled): invalidate|\.\.\.opts/g) ?? []).length;
     assert.ok(mutations > 0, `${name}: found no mutations`);
     assert.ok(invalidating >= mutations, `${name}: ${mutations} mutations but ${invalidating} invalidate`);
   }

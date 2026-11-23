@@ -99,6 +99,8 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
         b.Entity<DiaryEntry>(e =>
         {
             e.ToTable("diary_entries");
+            e.Property(x => x.Date).IsConcurrencyToken();
+            e.Property(x => x.Meal).IsConcurrencyToken();
             e.HasKey(x => x.Id);
             e.Property(x => x.Meal).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Item).HasColumnType("jsonb").HasConversion(Json.Of<ItemSnapshot>(), Json.Comparer<ItemSnapshot>());

@@ -60,6 +60,38 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
             new TestUser(user ?? Domain.Users.AppUser.LegacyOwnerId));
 
     [PostgresFact]
+    public async Task Clearing_rolls_back_if_an_entry_was_moved_after_it_was_read()
+    {
+        var date = new DateOnly(2026, 11, 20);
+        Guid first, second;
+        await using (var db = NewContext())
+        {
+            var diary = new DiaryService(new DiaryRepository(db), new FoodRepository(db), new RecipeRepository(db), new TargetsRepository(db), db, new PlanRepository(db));
+            first = (await diary.LogQuickAsync(new LogQuickRequest(date, MealSlot.Breakfast, "First", 100, null, null, null))).Id;
+            second = (await diary.LogQuickAsync(new LogQuickRequest(date, MealSlot.Breakfast, "Second", 200, null, null, null))).Id;
+        }
+        await using (var clearing = NewContext())
+        {
+            var entries = await new DiaryRepository(clearing).GetRangeAsync(date, date);
+            await using (var moving = NewContext())
+            {
+                var entry = await new DiaryRepository(moving).GetAsync(second);
+                entry!.Move(date.AddDays(1), MealSlot.Lunch);
+                await moving.SaveChangesAsync();
+            }
+            foreach (var entry in entries) clearing.DiaryEntries.Remove(entry);
+            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => clearing.SaveChangesAsync());
+        }
+        await using (var db = NewContext())
+        {
+            Assert.NotNull(await new DiaryRepository(db).GetAsync(first));
+            var moved = await new DiaryRepository(db).GetAsync(second);
+            Assert.Equal(date.AddDays(1), moved!.Date);
+            Assert.Equal(MealSlot.Lunch, moved.Meal);
+        }
+    }
+
+    [PostgresFact]
     public async Task Usda_import_search_and_logging_work_end_to_end()
     {
         var folder = WriteUsdaFixture();

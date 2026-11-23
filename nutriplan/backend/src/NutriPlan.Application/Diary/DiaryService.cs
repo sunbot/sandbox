@@ -33,6 +33,8 @@ public sealed record FoodAmount(Guid FoodId, double? Grams, double? Amount, stri
 /// <summary>Several foods for one meal (Ask's "Log all"): every item is saved, or none is.</summary>
 public sealed record LogFoodsRequest(DateOnly Date, MealSlot Meal, IReadOnlyList<FoodAmount> Items);
 
+public sealed record ClearMealRequest(DateOnly Date, MealSlot Meal, IReadOnlyList<Guid> EntryIds);
+
 /// <summary>Log a recipe: <c>Servings</c>, or <c>Amount</c> in <c>Unit</c> (one of the recipe's measures: servings, or g/cups when its finished weight/volume is set).</summary>
 public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings, Guid? PlanEntryId = null, double? Amount = null, string? Unit = null);
 
@@ -181,6 +183,26 @@ public sealed class DiaryService(
         // Un-logging a planned meal puts it back on the plan, so it isn't left marked eaten with no diary entry.
         if (entry.PlanEntryId is { } planId && await plans.GetAsync(planId, ct) is { Status: PlanStatus.Eaten } planned)
             planned.Reopen();
+        await uow.SaveChangesAsync(ct);
+    }
+
+    public async Task ClearMealAsync(ClearMealRequest r, CancellationToken ct = default)
+    {
+        if (!Enum.IsDefined(r.Meal) || r.EntryIds is null || r.EntryIds.Count == 0 || r.EntryIds.Distinct().Count() != r.EntryIds.Count)
+            throw new ValidationException("Choose at least one valid entry.");
+
+        var ids = r.EntryIds.ToHashSet();
+        var entries = (await diary.GetRangeAsync(r.Date, r.Date, ct))
+            .Where(e => e.Meal == r.Meal && ids.Contains(e.Id)).ToList();
+        if (entries.Count != ids.Count)
+            throw new ValidationException("The meal changed. Refresh and try again; nothing was deleted.");
+
+        foreach (var entry in entries)
+        {
+            diary.Remove(entry);
+            if (entry.PlanEntryId is { } planId && await plans.GetAsync(planId, ct) is { Status: PlanStatus.Eaten } planned)
+                planned.Reopen();
+        }
         await uow.SaveChangesAsync(ct);
     }
 

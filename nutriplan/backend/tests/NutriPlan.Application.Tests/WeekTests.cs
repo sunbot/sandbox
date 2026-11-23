@@ -41,6 +41,43 @@ public class WeekTests
     }
 
     [Fact]
+    public async Task Clearing_confirmed_entries_reopens_plans_and_leaves_other_entries_and_totals()
+    {
+        var date = _store.Today;
+        var oats = _store.AddFood("Oats", 379, 13, 68, 6.5);
+        var planned = await Plan().AddFoodAsync(new AddPlanFoodRequest(date, MealSlot.Breakfast, oats.Id, 80, null, null));
+        var logged = await Plan().MarkEatenAsync(planned.Id);
+        var other = await Diary().LogQuickAsync(new LogQuickRequest(date, MealSlot.Breakfast, "Other", 100, null, null, null));
+        var later = await Diary().LogQuickAsync(new LogQuickRequest(date, MealSlot.Breakfast, "Added later", 50, null, null, null));
+        await Diary().LogQuickAsync(new LogQuickRequest(date, MealSlot.Lunch, "Lunch", 200, null, null, null));
+        await Diary().LogQuickAsync(new LogQuickRequest(date.AddDays(1), MealSlot.Breakfast, "Tomorrow", 300, null, null, null));
+        var saves = _store.Saves;
+
+        await Diary().ClearMealAsync(new ClearMealRequest(date, MealSlot.Breakfast, [logged.Id, other.Id]));
+
+        Assert.Equal(saves + 1, _store.Saves);
+        Assert.Equal(PlanStatus.Planned, _store.Plan.Single().Status);
+        Assert.Contains(_store.Diary, e => e.Id == later.Id);
+        Assert.Equal(3, _store.Diary.Count);
+        Assert.Equal(250, (await Diary().GetDayAsync(date)).Totals.Calories);
+    }
+
+    [Fact]
+    public async Task Clearing_stale_wrong_scope_or_invalid_selection_changes_nothing()
+    {
+        var date = _store.Today;
+        var breakfast = await Diary().LogQuickAsync(new LogQuickRequest(date, MealSlot.Breakfast, "Breakfast", 100, null, null, null));
+        var lunch = await Diary().LogQuickAsync(new LogQuickRequest(date, MealSlot.Lunch, "Lunch", 200, null, null, null));
+        var tomorrow = await Diary().LogQuickAsync(new LogQuickRequest(date.AddDays(1), MealSlot.Breakfast, "Tomorrow", 300, null, null, null));
+        var saves = _store.Saves;
+        foreach (var ids in new[] { new[] { breakfast.Id, lunch.Id }, new[] { breakfast.Id, tomorrow.Id }, new[] { breakfast.Id, Guid.NewGuid() }, new[] { breakfast.Id, breakfast.Id }, Array.Empty<Guid>() })
+            await Assert.ThrowsAsync<ValidationException>(() => Diary().ClearMealAsync(new ClearMealRequest(date, MealSlot.Breakfast, ids)));
+        await Assert.ThrowsAsync<ValidationException>(() => Diary().ClearMealAsync(new ClearMealRequest(date, (MealSlot)999, [breakfast.Id])));
+        Assert.Equal(saves, _store.Saves);
+        Assert.Equal(3, _store.Diary.Count);
+    }
+
+    [Fact]
     public async Task A_skipped_meal_can_be_planned_again_but_a_logged_one_cannot()
     {
         var oats = _store.AddFood("Oats", 379, 13, 68, 6.5);

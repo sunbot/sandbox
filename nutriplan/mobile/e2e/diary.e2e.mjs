@@ -15,7 +15,7 @@ const almonds = { id: 'f1', name: 'Nuts, almonds', source: 'UsdaSrLegacy', quali
   measures: [{ unit: 'almond', label: 'almond', plural: 'almonds', base: 1.2, kind: 'Count', source: 'almond', countable: true }, { unit: 'cup', label: 'cup', plural: 'cups', base: 143, kind: 'Volume', source: 'cup, whole', countable: false },
     { unit: 'g', label: 'g', plural: 'g', base: 1, kind: 'Mass', source: null, countable: false }, { unit: 'oz', label: 'oz', plural: 'oz', base: 28.349523, kind: 'Mass', source: null, countable: false }] };
 
-async function openToday(totals, food = almonds) {
+async function openToday(totals, food = almonds, clear = () => [204]) {
   const ctx = await phone(b);
   const p = await ctx.newPage();
   const errors = [];
@@ -34,6 +34,7 @@ async function openToday(totals, food = almonds) {
     ]],
     'PATCH /api/diary/e1': (c) => { const body = JSON.parse(c.body); return { ...almondsEntry, item: { ...almondsEntry.item, quantity: body.amount, unit: body.unit } }; },
     'DELETE /api/diary/': () => [204],
+    'POST /api/diary/clear-meal': clear,
   });
   await p.goto(server.url + '/');
   const row = p.getByRole('button', { name: /^Almonds, 28 g/ }).first();
@@ -41,6 +42,35 @@ async function openToday(totals, food = almonds) {
   return { ctx, p, calls, row, errors };
 }
 const deletes = (calls) => calls.filter((c) => c.method === 'DELETE').length;
+
+test('clear meal confirms the count, supports cancel and undo, and sends only confirmed entries', async () => {
+  const { ctx, p, calls } = await openToday();
+  const clear = p.getByRole('button', { name: 'Clear breakfast' });
+  await clear.click();
+  await p.getByText(`Remove 2 logged entries from Breakfast on ${today()}? Planned items are not removed.`).waitFor();
+  await p.getByRole('button', { name: 'Cancel' }).click();
+  assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
+  await clear.click();
+  await p.getByRole('button', { name: 'Clear entries' }).click();
+  await p.getByRole('button', { name: 'Undo' }).click();
+  assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
+  assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
+  await clear.click();
+  await p.getByRole('button', { name: 'Clear entries' }).click();
+  await p.waitForTimeout(6000);
+  const request = calls.find((c) => c.path.includes('clear-meal'));
+  assert.deepEqual(JSON.parse(request.body), { date: today(), meal: 'Breakfast', entryIds: ['e1', 'e2'] });
+  await ctx.close();
+});
+
+test('clear failure restores entries and shows an error', async () => {
+  const { ctx, p } = await openToday(undefined, almonds, () => [500, { detail: 'Clear failed' }]);
+  await p.getByRole('button', { name: 'Clear breakfast' }).click();
+  await p.getByRole('button', { name: 'Clear entries' }).click();
+  await p.getByText('Clear failed').waitFor({ timeout: 10000 });
+  assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
+  await ctx.close();
+});
 
 test('nutrition view shows the saved snapshot, preserves a quantity draft and never saves it', async () => {
   const { ctx, p, calls, row, errors } = await openToday();
