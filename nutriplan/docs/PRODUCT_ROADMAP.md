@@ -226,6 +226,16 @@ imports and no restaurant providers without owner approval.
 
 ---
 
+## Merged from Copilot PRs
+
+Reviewed at the end of Phases 2 and 2.5 (2026-11-23), tested locally with Postgres, then merged into master:
+
+| PR | Feature | Roadmap fit | Notes |
+|---|---|---|---|
+| #65 | Clear a meal (diary): confirm, Undo, planned items reopened | Phase 6 (UX) | atomic; refuses partial deletes if the meal changed; own isolation + Postgres tests |
+| #67 | Remove/restore grocery items (also plan-generated) | Phase 6 (UX) | additive migration `GroceryExclusions` (new owner-scoped table); cross-user and browser tests added at merge |
+| #66 | Bulk-move diary entries | Phase 6 (UX) | **left open**: still marked WIP and being worked on at review time |
+
 ## Development principles
 
 1. Prefer simple solutions over unnecessary architecture.

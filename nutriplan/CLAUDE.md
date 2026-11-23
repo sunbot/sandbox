@@ -98,6 +98,11 @@ Check current version-specific Expo SDK 58 documentation for native APIs and use
 - Accounts: Google sign-in via Firebase, invite-only (`docs/AUTH.md`). The API fails closed (fallback policy requires an active app user; production won't start without `Auth:FirebaseProjectId`). Every user-owned read/write is scoped by `owner_id` in repositories **and** EF query filters; raw SQL must name the owner. Never take a user id from request data. Native session tokens live in SecureStore, never AsyncStorage.
 - Hosted API access should use HTTPS, bounded inputs, sensible rate limits and safe errors. Preserve anti-SSRF controls in `HttpWebPageFetcher`.
 - Preserve/verify backups and use controlled, reversible database migrations. Avoid destructive operations and do not alter production data without explicit approval.
+- Copilot PRs (owner's rule, 2026-11-23): at the end of each major phase, review open Copilot PRs targeting `master` for
+  correctness, security, user-data safety, architectural fit, tests and conflicts with recent master. Merge approved ones one at a time after
+  running the relevant tests (they get no CI on GitHub until approved, so run the suites locally, including Postgres); add
+  missing safety tests on master. Leave unsafe, incomplete (WIP) or conflicting ones open and report why. Never interrupt an
+  active implementation phase for one. Record merges in `docs/PRODUCT_ROADMAP.md` and `docs/DEVELOPMENT_STATUS.md`.
 - Workflow (owner's choice, 2026-11-23): commit directly to `master` once the relevant tests pass locally; no feature branches or PR approvals needed. Stop and ask before destructive migrations, irreversible changes or paid services. Do not publish a release APK until required CI checks pass; use versioned immutable artifacts and protected signing keys.
 - The repo's default branch is `master`: verify actual deployment and CI branch names rather than assuming `main`.
 

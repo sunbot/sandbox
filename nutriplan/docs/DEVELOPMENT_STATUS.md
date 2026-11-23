@@ -29,6 +29,12 @@ stands right now.
 |---|---|---|
 | APK build 23 (`android-latest`) | `c6ba8c0` | ✓ published 2026-11-23 03:02 UTC (APKs are rebuilt only on request) |
 
+## Copilot PRs (checked at the end of Phases 2 and 2.5)
+
+- #65 clear a meal: merged (`176768a`); Android checklist item 7.
+- #67 grocery remove/restore: merged (`eeb4c25`) plus tests (`102cc98`). Production gets a new table via an additive migration on deploy.
+- #66 bulk-move diary entries: left open (WIP, still being changed at review time). Re-check at the next phase end.
+
 ## Blockers / safety notes
 
 - `nutriplan/.env.local` in the dev container holds the production `DATABASE_URL`, which the app prefers over local
@@ -46,3 +52,4 @@ stands right now.
 - 2026-11-23 — Phase 2.5: read-only audit SQL, matching benchmark, local USDA copy measured; FOOD_DATA_QUALITY_AUDIT.md and
   RESTAURANT_NUTRITION_STRATEGY.md written. Curry reproduced (388 kcal versus 364 reported); coconut milk and sweet potato
   mismatches found.
+- 2026-11-23 — End-of-phase Copilot review: #65 and #67 merged after local backend (Postgres), unit and browser runs; #66 left open (WIP).
