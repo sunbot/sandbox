@@ -45,6 +45,12 @@ public sealed record SaveRecipeRequest(
 /// Point an ingredient at a food (<c>FoodId</c>, amount as <c>Grams</c> or <c>Amount</c>+<c>Unit</c>), at another of your recipes
 /// (<c>RecipeId</c>, amount as <c>Servings</c> or <c>Amount</c>+<c>Unit</c> in its measures), or exclude it (<c>Ignore</c>).
 /// </summary>
+/// <summary>Add a line from search: exactly one of <c>FoodId</c>/<c>RecipeId</c>, with an amount as for <see cref="UpdateIngredientRequest"/>.</summary>
+/// <summary>Make more or less of a whole recipe (2 = double, 0.5 = half).</summary>
+public sealed record ScaleRecipeRequest(double Factor);
+
+public sealed record AddIngredientRequest(Guid? FoodId, Guid? RecipeId, double? Amount, string? Unit, double? Grams = null, double? Servings = null);
+
 public sealed record UpdateIngredientRequest(Guid? FoodId, double? Grams, double? Amount, string? Unit, bool? Ignore, Guid? RecipeId = null, double? Servings = null);
 
 public sealed partial class RecipeService(
@@ -54,6 +60,9 @@ public sealed partial class RecipeService(
     IWebPageFetcher fetcher,
     IUnitOfWork uow)
 {
+    /// <summary>Upper bound on lines in one recipe (a pasted list gone wrong, not a real recipe).</summary>
+    public const int MaxIngredients = 200;
+
     /// <summary>Catches a typo (a misplaced zero) in how many servings of a recipe go into another.</summary>
     public const double MaxIngredientServings = 500;
 
@@ -132,7 +141,89 @@ public sealed partial class RecipeService(
             ing.Status = IngredientMatchStatus.Ignored;
             ing.ResolutionNote = "Excluded by you";
         }
-        else if ((r.RecipeId ?? (r.FoodId is null ? ing.RecipeId : null)) is { } subId)
+        else await ApplyChoiceAsync(recipe, ing, r, ct);
+        await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
+        await uow.SaveChangesAsync(ct);
+        return await ToDetailAsync(recipe, ct);
+    }
+
+    /// <summary>
+    /// A new ingredient line chosen from search: a food (amount in one of its measures, or grams) or one of your recipes
+    /// (servings, or an amount in its measures). The line reads the way it was chosen ("1.5 cup Oats") and is confirmed.
+    /// </summary>
+    public async Task<RecipeDetailDto> AddIngredientAsync(Guid id, AddIngredientRequest r, CancellationToken ct = default)
+    {
+        var recipe = await Get(id, ct);
+        if (r.FoodId is null == r.RecipeId is null) throw new ValidationException("Choose a food or one of your recipes.");
+        if (recipe.Ingredients.Count >= MaxIngredients) throw new ValidationException($"A recipe can have up to {MaxIngredients} ingredients.");
+        var name = r.FoodId is { } fid
+            ? (await foods.GetAsync(fid, ct) ?? throw new NotFoundException($"Food {fid} not found.")).DisplayName
+            : (await recipes.GetAsync(r.RecipeId!.Value, ct) ?? throw new NotFoundException($"Recipe {r.RecipeId} not found.")).Name;
+        var amountText = r.Servings is { } sv ? $"{Fmt(sv)} {(sv == 1 ? "serving" : "servings")}"
+            : r.Amount is { } a ? $"{Fmt(a)} {r.Unit}".TrimEnd()
+            : r.Grams is { } g ? $"{Fmt(g)} g" : "1";
+        var line = RecipeIngredient.FromText($"{amountText} {name}", recipe.Ingredients.Count == 0 ? 0 : recipe.Ingredients.Max(i => i.Position) + 1);
+        line.FoodText = name; // the chosen food's name, not whatever the parser makes of it
+        // The choice is checked (loops, measures) before the line joins the recipe, so a refused choice leaves it unchanged.
+        await ApplyChoiceAsync(recipe, line, new UpdateIngredientRequest(r.FoodId, r.Grams, r.Amount, r.Unit, null, r.RecipeId, r.Servings), ct);
+        recipe.ReplaceIngredients([.. recipe.Ingredients, line]);
+        await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
+        await uow.SaveChangesAsync(ct);
+        return await ToDetailAsync(recipe, ct);
+    }
+
+    /// <summary>Removes an ingredient line for good (Leave out keeps it, uncounted). The other lines keep their order.</summary>
+    public async Task<RecipeDetailDto> RemoveIngredientAsync(Guid id, int position, CancellationToken ct = default)
+    {
+        var recipe = await Get(id, ct);
+        var gone = recipe.GetIngredient(position);
+        var rest = recipe.Ingredients.Where(i => !ReferenceEquals(i, gone)).OrderBy(i => i.Position).ToList();
+        for (var i = 0; i < rest.Count; i++) rest[i].Position = i;
+        recipe.ReplaceIngredients(rest);
+        await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
+        await uow.SaveChangesAsync(ct);
+        return await ToDetailAsync(recipe, ct);
+    }
+
+    /// <summary>
+    /// Makes more or less of the whole recipe: every line's amount, grams and servings, the servings it makes, and its
+    /// finished weight/volume are multiplied by <paramref name="factor"/>, so per-serving nutrition stays the same and the
+    /// whole recipe scales. Line text follows ("1 1/2 cups flour" ×2 → "3 cups flour"); lines with no amount are unchanged.
+    /// </summary>
+    public async Task<RecipeDetailDto> ScaleAsync(Guid id, double factor, CancellationToken ct = default)
+    {
+        if (!double.IsFinite(factor) || factor <= 0 || factor > 20) throw new ValidationException("Scale by a factor between 0 and 20 (for example 2 to double, 0.5 to halve).");
+        var recipe = await Get(id, ct);
+        if (recipe.Servings * factor > 500) throw new ValidationException("That would make more than 500 servings.");
+        var lines = recipe.Ingredients.OrderBy(i => i.Position).ToList();
+        foreach (var ing in lines.Where(i => i.ResolutionNote != "Section header"))
+        {
+            if (ing.Amount is { } a)
+            {
+                ing.Amount = Math.Round(a * factor, 3);
+                ing.RawText = RecipeScaling.ScaleLeadingAmount(ing.RawText, ing.Amount.Value);
+            }
+            if (ing.Grams is { } g) ing.Grams = Math.Round(g * factor, 2);
+            if (ing.Servings is { } sv) ing.Servings = Math.Round(sv * factor, 4);
+        }
+        recipe.ReplaceIngredients(lines);
+        recipe.SetServings(Math.Round(recipe.Servings * factor, 3));
+        recipe.ServingDescription = $"{recipe.Servings:0.##} (set by you)";
+        if (recipe.CookedWeightGrams is { } w) recipe.CookedWeightGrams = Math.Round(w * factor, 1);
+        if (recipe.FinishedVolumeMl is { } v) recipe.FinishedVolumeMl = Math.Round(v * factor, 1);
+        await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
+        await uow.SaveChangesAsync(ct);
+        return await ToDetailAsync(recipe, ct);
+    }
+
+    /// <summary>Points a line at a food or one of your recipes, with its amount; refuses loops and amounts that can't be converted.</summary>
+    private async Task ApplyChoiceAsync(Recipe recipe, RecipeIngredient ing, UpdateIngredientRequest r, CancellationToken ct)
+    {
+        if ((r.RecipeId ?? (r.FoodId is null ? ing.RecipeId : null)) is { } subId)
         {
             var sub = await recipes.GetAsync(subId, ct) ?? throw new NotFoundException($"Recipe {subId} not found.");
             if (subId == recipe.Id) throw new ValidationException("A recipe can't be an ingredient of itself.");
@@ -176,11 +267,9 @@ public sealed partial class RecipeService(
             ing.MatchConfidence = 1;
             ing.ResolutionNote = r.Grams is not null ? $"{r.Grams:0.#} g entered by you" : note;
         }
-        await RecalculateAsync(recipe, ct);
-        await PropagateAsync([recipe], ct);
-        await uow.SaveChangesAsync(ct);
-        return await ToDetailAsync(recipe, ct);
     }
+
+    private static string Fmt(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     public async Task<RecipeDetailDto> RematchAsync(Guid id, CancellationToken ct = default)
     {
