@@ -21,7 +21,7 @@ product decision.
 |---|---|
 | 1 Unified Recipe System | Awaiting Device Verification |
 | 2 Recipe Editor and Usability | Awaiting Device Verification |
-| 2.5 Food Data Quality Audit and Restaurant Strategy | Not Started |
+| 2.5 Food Data Quality Audit and Restaurant Strategy | Implemented (awaiting owner review of findings and strategy) |
 | 2.6 Ingredient Verification and Critical Data Corrections | Not Started |
 | 3 Food Creation and Nutrition Facts OCR | Not Started |
 | 4 Fill the Gaps Improvements | In Progress (earlier work shipped; remaining items not started) |
@@ -91,24 +91,27 @@ accepted; doc and dead-code cleanups).
 Limits: a line whose text doesn't start with a number keeps its original text when scaled (its scaled amount is kept and noted);
 numbers inside parentheses are left alone (they're usually package sizes).
 
-## Phase 2.5 — Food Data Quality Audit and Restaurant Strategy · High · Not Started
+## Phase 2.5 — Food Data Quality Audit and Restaurant Strategy · High · Implemented (awaiting owner review)
 
 Before OCR or nutrition scoring: audit the nutrition database and matching. Audit tooling must be read-only; no large
 imports and no restaurant providers without owner approval.
 
-- ⬜ `docs/FOOD_DATA_QUALITY_AUDIT.md`: USDA Foundation, SR Legacy, FNDDS (Survey), branded lookup, Open Food Facts, custom
+- ✅ `docs/FOOD_DATA_QUALITY_AUDIT.md`: USDA Foundation, SR Legacy, FNDDS (Survey), branded lookup, Open Food Facts, custom
   foods, food search, barcode lookup, serving conversions, nutrient completeness, source provenance.
-- ⬜ Measure actual database coverage where read-only access exists; otherwise ship reproducible read-only audit scripts and
-  label unverified assumptions.
-- ⬜ Benchmark ingredient matching: dry vs cooked foods, coconut milk, ambiguous household measures, branded foods,
+- 🟡 Measure actual database coverage where read-only access exists; otherwise ship reproducible read-only audit scripts and
+  label unverified assumptions. (USDA coverage measured on a local copy of production's exact USDA files; production-only
+  rows such as user, branded and OFF foods need `scripts/audit/food_data_audit.sql` run read-only against production.)
+- ✅ Benchmark ingredient matching: dry vs cooked foods, coconut milk, ambiguous household measures, branded foods,
   AI-generated recipes.
-- ⬜ Reproduce the Red Lentil and Sweet Potato Curry calculation (reported 364 kcal, 16 g protein, 55 g carbs, 10 g fat per
-  serving) from the actual matches and gram conversions, without forcing the expected result.
-- ⬜ `docs/RESTAURANT_NUTRITION_STRATEGY.md`: official data for Chipotle, Chick-fil-A, McDonald's, Taco Bell, Panera,
+- 🟡 Reproduce the Red Lentil and Sweet Potato Curry calculation (reported 364 kcal, 16 g protein, 55 g carbs, 10 g fat per
+  serving) from the actual matches and gram conversions, without forcing the expected result. (A typical version reproduces it:
+  388/16/58/11. The coconut milk can matches the beverage, and sweet potato a cooked dish with fat: ≈ 525 kcal, 26 g fat
+  corrected. The owner's exact recipe text is still needed to confirm.)
+- ✅ `docs/RESTAURANT_NUTRITION_STRATEGY.md`: official data for Chipotle, Chick-fil-A, McDonald's, Taco Bell, Panera,
   Starbucks: availability, licensing, freshness, costs, APIs, maintenance, commercial reuse (public ≠ redistributable).
-- ⬜ Recommend a low-cost strategy: USDA stays the core; restaurant nutrition added with attribution and a clear official vs
+- ✅ Recommend a low-cost strategy: USDA stays the core; restaurant nutrition added with attribution and a clear official vs
   estimate distinction.
-- ⬜ Only safe read-only audit tooling and tests are implemented in this phase.
+- ✅ Only safe read-only audit tooling and tests are implemented in this phase (`scripts/audit/`, `MatchingBenchmark`).
 
 ## Phase 2.6 — Ingredient Verification and Critical Data Corrections · High · Not Started
 

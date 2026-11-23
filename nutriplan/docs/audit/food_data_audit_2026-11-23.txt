@@ -1,0 +1,84 @@
+BEGIN
+== 1. Foods by source and quality (catalogue foods; user foods counted separately) ==
+     source     | quality  | foods 
+----------------+----------+-------
+ UsdaFoundation | Verified |   378
+ UsdaSrLegacy   | Verified |  7793
+ UsdaSurvey     | Verified |  5431
+(3 rows)
+
+              what              | count 
+--------------------------------+-------
+ user-created foods (any owner) |     0
+(1 row)
+
+== 2. Key nutrient completeness: % of foods that REPORT each nutrient (absent = unknown, not zero) ==
+     source     | foods | energy | protein | carbs |  fat  | fiber | sugars | added_sugars | sat_fat | sodium | potassium | calcium | iron  | vit_d | vit_c |  b12  | folate 
+----------------+-------+--------+---------+-------+-------+-------+--------+--------------+---------+--------+-----------+---------+-------+-------+-------+-------+--------
+ UsdaFoundation |   378 |  100.0 |    99.7 |  99.7 |  99.7 |  48.9 |   41.5 |          0.0 |    33.1 |   98.1 |      98.7 |    98.7 |  98.7 |  16.4 |  32.8 |  22.5 |    0.0
+ UsdaSrLegacy   |  7793 |  100.0 |   100.0 | 100.0 | 100.0 |  92.8 |   77.1 |          0.0 |    95.6 |   98.9 |      96.4 |    98.9 |  99.0 |  66.5 |  94.1 |  91.3 |   83.2
+ UsdaSurvey     |  5431 |  100.0 |   100.0 | 100.0 | 100.0 | 100.0 |  100.0 |          0.0 |   100.0 |  100.0 |     100.0 |   100.0 | 100.0 | 100.0 | 100.0 | 100.0 |  100.0
+(3 rows)
+
+== 3. Nutrients reported per food (distribution) ==
+     source     | min | median | max 
+----------------+-----+--------+-----
+ UsdaFoundation |   7 |     18 |  31
+ UsdaSrLegacy   |   6 |     33 |  34
+ UsdaSurvey     |  33 |     33 |  33
+(3 rows)
+
+== 4. Household measures: % of foods with at least one portion (needed for cups/pieces; never invented) ==
+     source     | foods | with_portions | borrowed_portions 
+----------------+-------+---------------+-------------------
+ UsdaFoundation |   378 |          42.3 |              13.0
+ UsdaSrLegacy   |  7793 |          96.6 |               0.0
+ UsdaSurvey     |  5431 |          99.0 |               0.0
+(3 rows)
+
+== 5. Energy consistency: stated kcal vs 4/4/9 from macros (beyond 25% and 20 kcal); alcohol/polyols explain some ==
+     source     | checked | inconsistent 
+----------------+---------+--------------
+ UsdaFoundation |     377 |            0
+ UsdaSrLegacy   |    7793 |          107
+ UsdaSurvey     |    5431 |           96
+(3 rows)
+
+== 6. Suspicious values ==
+                check                | count 
+-------------------------------------+-------
+ kcal reported as 0 but macros > 5 g |     3
+ macros over 100 g per 100 g         |     0
+ no energy at all (kcal unknown)     |     0
+ missing source id (provenance)      |     0
+(4 rows)
+
+== 7. Raw vs cooked naming for staples (matching depends on these existing side by side) ==
+      staple      | raw_or_dry | cooked 
+------------------+------------+--------
+ Beans, black     |          2 |      4
+ Chicken, broiler |         25 |     97
+ Chickpeas        |          2 |      2
+ Lentils          |          4 |      4
+ Oats             |          1 |      0
+ Pasta            |          6 |     19
+ Quinoa           |          1 |      2
+ Rice, brown      |          4 |     14
+ Rice, white      |         11 |     29
+ Sweet potato     |          3 |     14
+(10 rows)
+
+== 8. Coconut milk entries (canned vs beverage differ ~5x in kcal) ==
+    source    |                                      name                                       | kcal_per_100g | portions 
+--------------+---------------------------------------------------------------------------------+---------------+----------
+ UsdaSurvey   | Rice, cooked with coconut milk                                                  |           267 |        1
+ UsdaSurvey   | Coconut milk, used in cooking                                                   |           230 |        1
+ UsdaSrLegacy | Nuts, coconut milk, raw (liquid expressed from grated meat and water)           |           230 |        2
+ UsdaSrLegacy | Nuts, coconut milk, frozen (liquid expressed from grated meat and water)        |           202 |        2
+ UsdaSrLegacy | Nuts, coconut milk, canned (liquid expressed from grated meat and water)        |           197 |        2
+ UsdaSurvey   | Yogurt, coconut milk                                                            |           108 |        4
+ UsdaSurvey   | Coconut milk                                                                    |            31 |        2
+ UsdaSrLegacy | Beverages, coconut milk, sweetened, fortified with calcium, vitamins A, B12, D2 |            31 |        1
+(8 rows)
+
+ROLLBACK

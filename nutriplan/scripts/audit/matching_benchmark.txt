@@ -1,0 +1,59 @@
+# Ingredient-matching benchmark lines (one per line; "## name | servings" starts a recipe, "#" lines are comments).
+## Dry vs cooked staples | 1
+1 cup dried red lentils
+1 cup red lentils
+2 cups cooked lentils
+1 cup uncooked white rice
+3 cups cooked brown rice
+8 oz dry pasta
+1 cup rolled oats
+1 cup quinoa
+## Coconut milk | 1
+1 can (13.5 oz) coconut milk
+1 can (13.5 oz) full-fat coconut milk
+1 can light coconut milk
+400 ml coconut milk
+1 cup unsweetened coconut milk beverage
+## Household measures | 1
+1 medium sweet potato
+2 large sweet potatoes, peeled and cubed
+1 onion, diced
+3 cloves garlic, minced
+1 tbsp grated fresh ginger
+1 bunch cilantro
+a handful of spinach
+1 can (14.5 oz) diced tomatoes
+2 tbsp tomato paste
+1 tbsp curry powder
+1 tsp ground cumin
+4 cups vegetable broth
+1 lime, juiced
+2 tbsp olive oil
+salt to taste
+## Proteins | 1
+1 lb boneless skinless chicken breast
+6 oz salmon fillet
+1 lb 80/20 ground beef
+2 large eggs
+1 block (14 oz) extra firm tofu
+## Branded wording | 1
+1 scoop whey protein powder
+2 slices Dave's Killer Bread
+1 cup Fairlife 2% milk
+1 Chobani plain greek yogurt
+## Red Lentil and Sweet Potato Curry (typical AI-generated version; the owner's original text is still needed) | 4
+1 tbsp coconut oil
+1 medium onion, diced
+3 cloves garlic, minced
+1 tbsp fresh ginger, grated
+2 tbsp curry powder
+1 tsp ground turmeric
+1 tsp ground cumin
+1 cup dried red lentils, rinsed
+2 medium sweet potatoes, peeled and cubed
+1 can (14 oz) diced tomatoes
+1 can (13.5 oz) coconut milk
+3 cups vegetable broth
+2 cups fresh spinach
+1 tbsp lime juice
+Salt and pepper to taste
