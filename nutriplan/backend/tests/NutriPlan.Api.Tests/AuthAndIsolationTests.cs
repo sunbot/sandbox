@@ -382,6 +382,7 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
         }));
         var foodId = (string)food["id"]!;
         var entry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Snack", foodId, grams = 40.0 }));
+        var secondEntry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Lunch", foodId, grams = 20.0 }));
         var plan = await Json(await a.PostAsJsonAsync("/api/plan/food", new { date = Day.AddDays(1), meal = "Snack", foodId, grams = 40.0 }));
 
         // The owner sees the food's measures and can change an amount in them.
@@ -389,13 +390,29 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
         Assert.Contains(mine["measures"]!.AsArray(), m => (string?)m!["unit"] == "g");
         var changed = await Json(await a.PatchAsJsonAsync($"/api/diary/{entry["id"]}", new { amount = 1.5, unit = "oz" }));
         Assert.Equal("oz", (string?)changed["item"]!["unit"]);
+        var moveResponse = await a.PostAsJsonAsync("/api/diary/move", new
+        {
+            date = Day, entryIds = new[] { (string)entry["id"]!, (string)secondEntry["id"]! }, meal = "Dinner",
+        });
+        Assert.True(moveResponse.IsSuccessStatusCode, await moveResponse.Content.ReadAsStringAsync());
+        var moved = (await moveResponse.Content.ReadFromJsonAsync<JsonArray>())!;
+        Assert.All(moved.AsArray(), e =>
+        {
+            Assert.Equal("Dinner", (string?)e!["meal"]);
+            Assert.Equal(Day.ToString("yyyy-MM-dd"), (string?)e["date"]);
+        });
 
         // Another user can neither read the food nor change the entry or the planned item.
         Assert.Equal(HttpStatusCode.NotFound, (await b.GetAsync($"/api/foods/{foodId}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PatchAsJsonAsync($"/api/diary/{entry["id"]}", new { amount = 99.0, unit = "g" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/diary/move", new
+        {
+            date = Day, entryIds = new[] { (string)entry["id"]! }, meal = "Breakfast",
+        })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync($"/api/plan/{plan["id"]}/amount", new { amount = 99.0, unit = "g" })).StatusCode);
         var still = (await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"))).ToJsonString();
         Assert.Contains("\"unit\":\"oz\"", still);
+        Assert.Equal(2, still.Split("\"meal\":\"Dinner\"").Length - 1);
     }
 
     [PostgresFact]

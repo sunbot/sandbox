@@ -78,6 +78,7 @@ public static class DiaryEndpoints
         g.MapPost("/recipe", (LogRecipeRequest r, DiaryService s, CancellationToken ct) => s.LogRecipeAsync(r, ct));
         g.MapPost("/quick", (LogQuickRequest r, DiaryService s, CancellationToken ct) => s.LogQuickAsync(r, ct));
         g.MapPost("/copy", (CopyRequest r, DiaryService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, r.ToMeal, ct));
+        g.MapPost("/move", (MoveDiaryEntriesRequest r, DiaryService s, CancellationToken ct) => s.MoveManyAsync(r, ct));
         g.MapPost("/{id:guid}/relog", (Guid id, RelogRequest r, DiaryService s, CancellationToken ct) => s.RelogAsync(id, r.Date, r.Meal, ct));
         g.MapPatch("/{id:guid}", (Guid id, UpdateDiaryRequest r, DiaryService s, CancellationToken ct) => s.UpdateAsync(id, r.Scale, r.Date, r.Meal, r.Note, ct, r.Amount, r.Unit, r.Grams));
         g.MapDelete("/{id:guid}", async (Guid id, DiaryService s, CancellationToken ct) => { await s.DeleteAsync(id, ct); return Results.NoContent(); });
