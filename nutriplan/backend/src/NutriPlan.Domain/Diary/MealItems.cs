@@ -21,6 +21,16 @@ public sealed record ItemSnapshot(
     double? Grams,
     NutrientProfile Nutrients)
 {
+    /// <summary>
+    /// For a recipe: how many servings this is, whatever measure it's shown in ("1 cup" of a soup may be 0.5). Saved with the
+    /// snapshot so its amount never depends on the recipe's current finished weight/volume. Null on entries made before it existed.
+    /// </summary>
+    public double? Servings { get; init; }
+
+    /// <summary>A recipe item's servings: as saved, or for older entries their quantity when that was in servings; else unknown.</summary>
+    public double? RecipeServings => Kind != ItemKind.Recipe ? null
+        : Servings ?? (QuantityUnit.Trim().StartsWith("serving", StringComparison.OrdinalIgnoreCase) ? Quantity : null);
+
     public static ItemSnapshot ForFood(Guid foodId, string name, double grams, NutrientProfile nutrients, double? quantity = null, string? unit = null) =>
         new(ItemKind.Food, foodId, null, name, quantity ?? grams, unit ?? "g", grams, nutrients.Rounded());
 
@@ -35,7 +45,7 @@ public sealed record ItemSnapshot(
     public static ItemSnapshot ForRecipe(Guid recipeId, string name, double servings, NutrientProfile nutrientsPerServing,
         double? quantity = null, string? unit = null, double? grams = null) =>
         new(ItemKind.Recipe, null, recipeId, name, Math.Round(quantity ?? servings, 3), unit ?? (servings == 1 ? "serving" : "servings"),
-            grams is { } g ? Math.Round(g, 2) : null, nutrientsPerServing.Scale(servings).Rounded());
+            grams is { } g ? Math.Round(g, 2) : null, nutrientsPerServing.Scale(servings).Rounded()) { Servings = Math.Round(servings, 4) };
 
     public static ItemSnapshot QuickCalories(string name, double calories, double? protein = null, double? carbs = null, double? fat = null)
     {
@@ -57,6 +67,7 @@ public sealed record ItemSnapshot(
         QuantityUnit = unit,
         Grams = Grams is null && newGrams is null ? null : newGrams is { } g ? Math.Round(g, 2) : Math.Round(Grams!.Value * factor, 2),
         Nutrients = Nutrients.Scale(factor).Rounded(),
+        Servings = Servings is { } s ? Math.Round(s * factor, 4) : null,
     };
 
     /// <summary>Same item, different amount: nutrients scale linearly.</summary>
@@ -65,6 +76,7 @@ public sealed record ItemSnapshot(
         Quantity = Math.Round(Quantity * factor, 3),
         Grams = Grams is null ? null : Math.Round(Grams.Value * factor, 2),
         Nutrients = Nutrients.Scale(factor).Rounded(),
+        Servings = Servings is { } s ? Math.Round(s * factor, 4) : null,
     };
 }
 

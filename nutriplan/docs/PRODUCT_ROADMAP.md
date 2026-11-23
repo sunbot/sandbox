@@ -35,6 +35,12 @@ Design and rules: `docs/RECIPES.md`. Commits `17c48c7` (backend), `765105e` (app
 | Reuse existing recipe, quantity, nutrition services | ✅ | same `Recipe`, `RecipeService`, `ItemAmounts`, `QuantityPicker` |
 | Avoid historical recalculation / batch tracking | ✅ (by design) | not built |
 
+Independent review (2026-11-23) found 10 issues, all fixed with regression tests: grocery list read a recipe planned by
+weight as servings and didn't expand nested recipes; recipe entries converted from the recipe's current volume instead of
+their own servings (now saved on the snapshot); heavy batches hit the 5 kg food limit; a re-pointed weighed line lost its
+weight; removed finished weight kept an old conversion silently; the editor drifted the stored volume; ingredient amounts
+were capped at 50 servings and didn't prefill; recipe search ran on every keystroke.
+
 Known limits / follow-ups (carried into Phase 2 unless noted):
 - Ingredient text is never auto-matched to your own recipes; you pick them (deliberate, avoids silent mismatches).
 - A recipe used inside another can't be deleted until removed there (guard, not cascade).

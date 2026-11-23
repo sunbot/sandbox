@@ -211,7 +211,8 @@ export default function RecipeScreen() {
       <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => setOpenPos(null)} busy={m.updateIngredient.isPending}
         onChooseFood={(ing) => { setOpenPos(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
         onLeaveOut={(ing) => { m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); setOpenPos(null); }}
-        onRecipeAmount={(ing) => { setOpenPos(null); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position) } }); }}
+        onRecipeAmount={(ing) => { setOpenPos(null); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position),
+          ...(ing.amount != null && ing.servings ? { amount: String(ing.amount), unit: ing.unit ?? 'serving' } : {}) } }); }}
         onOpenRecipe={(rid) => { setOpenPos(null); router.push({ pathname: '/recipe/[id]', params: { id: rid } }); }}
         onSetGrams={(ing, grams) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, grams }); setOpenPos(null); })} />
 

@@ -22,6 +22,13 @@ another recipe, at any depth.
   amount given by weight or volume ("200 g sauce") is converted again through the changed finished weight/volume; one given in
   servings stays that many servings.
 - **Snapshots don't move**: diary and plan entries keep the nutrition they were saved with. Only new logs and plans use new numbers.
+  A recipe entry also saves its **servings** (`ItemSnapshot.Servings`), so "1 cup" stays 1 serving's worth even if the
+  recipe's finished volume later changes; converting the entry to another measure starts from those saved servings.
+- **A conversion that no longer works isn't kept silently**: if a nested line was given by weight/volume and that recipe's
+  finished weight/volume is removed, the line stops counting and asks for an amount (it stays linked to the recipe; Refresh
+  matches never turns it into a food).
+- **Limits**: recipe entries are bounded by servings (50 per meal; 500 as an ingredient), not by the 5 kg food limit, so a
+  heavy batch can be planned.
 - **Delete guard**: a recipe used inside another can't be deleted until it's removed there (its parents would silently lose it).
 - Decision: recalculate-and-cache on write rather than compute-on-read. Recipes are few per user and change rarely, reads
   are many, and every reader already uses the cached value; on-read recursion would have touched every read path.
@@ -33,6 +40,11 @@ A recipe is measured in **servings** always; by **weight** (g, oz) only when you
 ingredients. Each measure's `base` is servings per unit, so the app's `QuantityPicker` (base unit `serving`) converts recipes
 exactly as it does foods. Logging, planning (`Amount` + `Unit`), editing a logged/planned recipe, and nesting all resolve
 through the same `RecipeMeasures.Resolve`.
+
+## Grocery list
+
+A planned recipe's ingredients are scaled by its saved servings (a recipe planned as "250 g" of a 1 kg pot is a quarter of
+it), and a line that is another of your recipes is expanded into that recipe's own ingredients, all the way down.
 
 ## App
 

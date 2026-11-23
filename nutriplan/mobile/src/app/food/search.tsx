@@ -24,9 +24,11 @@ export default function FoodSearch() {
   const settled = useDebounced(text, 500);
   const local = useFoodSearch(text);
   const branded = useBrandedSearch(settled);
-  const recipeSearch = useRecipes(text.trim().length >= 2 ? text.trim() : '');
+  // Your recipes are searched after a short pause, and only once there's something to search for.
+  const recipeText = useDebounced(text.trim(), 250);
+  const recipeSearch = useRecipes(recipeText, recipeText.length >= 2);
   // In a recipe's ingredient search the recipe itself isn't offered (the server refuses loops either way).
-  const recipes = recipeMatches(recipeSearch.data ?? [], text, params.mode === 'ingredient' ? params.recipeId : undefined);
+  const recipes = recipeMatches(recipeText.length >= 2 ? recipeSearch.data ?? [] : [], recipeText, params.mode === 'ingredient' ? params.recipeId : undefined);
   const RECIPES_SHOWN = 5;
   const [opening, setOpening] = useState<string | null>(null);
   // A short local list keeps the packaged-products section in view; the rest is one tap away.

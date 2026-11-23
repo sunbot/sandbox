@@ -18,7 +18,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 export default function RecipeAmount() {
   const t = useTheme();
   const snackbar = useSnackbar();
-  const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient'; recipeId?: string; position?: string }>();
+  const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient'; recipeId?: string; position?: string; amount?: string; unit?: string }>();
   const recipe = useRecipe(params.id);
   const logRecipe = useLogRecipe();
   const { addRecipe } = usePlanMutations();
@@ -38,10 +38,12 @@ export default function RecipeAmount() {
   const r = recipe.data;
   const s = r.summary;
   const measures = r.measures?.length ? r.measures : [SERVING];
-  const v = value ?? { text: '1', unit: 'serving' };
+  // "Change amount" opens with the line's current amount in its own measure.
+  const start = params.amount && matchMeasure(measures, params.unit) ? { text: params.amount, unit: matchMeasure(measures, params.unit)!.unit } : { text: '1', unit: 'serving' };
+  const v = value ?? start;
   const measure = matchMeasure(measures, v.unit) ?? measures[0];
   const qty = parseQuantity(v.text);
-  const check = checkQuantity(qty, measure, true, 'serving');
+  const check = ingredientCheck(checkQuantity(qty, measure, !forIngredient, 'serving'), forIngredient);
   const servings = check.ok ? check.base : 0;
   const n = eatingNutrition(s.perServing, servings);
   const busy = logRecipe.isPending || addRecipe.isPending || updateIngredient.isPending;
@@ -104,4 +106,11 @@ export default function RecipeAmount() {
       <TextButton label="Open recipe" tone="secondary" onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: s.id } })} />
     </ScrollView>
   );
+}
+
+/** Server limits: a meal is up to 50 servings; an ingredient of another recipe up to 500 (a big pot of stock). */
+const MAX_INGREDIENT_SERVINGS = 500;
+function ingredientCheck(c: ReturnType<typeof checkQuantity>, forIngredient: boolean): ReturnType<typeof checkQuantity> {
+  if (!forIngredient || !c.ok) return c;
+  return c.base > MAX_INGREDIENT_SERVINGS ? { ok: false, message: `That's more than ${MAX_INGREDIENT_SERVINGS} servings. Check the amount.` } : c;
 }

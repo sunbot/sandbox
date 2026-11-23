@@ -55,6 +55,8 @@ export type Item = {
   unit: string;
   grams?: number | null;
   nutrition: Nutrition;
+  /** For a recipe: how many servings this is, whatever its unit (saved with the entry). */
+  servings?: number | null;
 };
 
 export type DiaryEntry = { id: string; date: string; meal: Meal; item: Item; planEntryId?: string | null; note?: string | null };

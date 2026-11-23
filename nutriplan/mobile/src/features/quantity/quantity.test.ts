@@ -198,3 +198,11 @@ test('a recipe measure reads as servings, or per serving when one unit is a tiny
   assert.equal(measureWorth(oz, 'serving'), '17.6 oz per serving');
   assert.equal(measureWorth({ ...cup, base: 143 }, 'g'), '143 g');
 });
+
+test('a logged recipe converts from its own saved servings, not from the recipe\'s current volume', () => {
+  // Logged as 1 cup when a cup was 1 serving; the soup now makes 8 cups for 4 servings (a cup is 0.5 serving).
+  const now: Measure[] = [SERVING, { unit: 'cup', label: 'cup', plural: 'cups', base: 0.5, kind: 'Volume', source: null, countable: false }];
+  const entry = item({ kind: 'Recipe', unit: 'cup', quantity: 1, servings: 1 });
+  assert.equal(scaleFactor(entry, 1, SERVING, now), 1);   // 1 serving → same as logged
+  assert.equal(scaleFactor(entry, 2, now[1], now), 2);    // same unit: ratio of amounts
+});

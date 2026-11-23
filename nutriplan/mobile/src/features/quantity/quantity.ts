@@ -135,7 +135,9 @@ export function scaleFactor(item: Item, qty: number, to: Measure, measures: Meas
   if (same) return qty / item.quantity;
   const from = matchMeasure(measures, item.unit);
   // Recipes compare servings (never grams: a recipe's weight is only known through its finished weight).
-  const oldBase = item.kind !== 'Recipe' && item.grams && item.grams > 0 ? item.grams : from && from.base > 0 ? item.quantity * from.base : 0;
+  // A recipe's servings are saved with the entry, so a later change to its finished weight/volume doesn't skew this.
+  const oldBase = item.kind === 'Recipe' ? item.servings ?? (from && from.base > 0 ? item.quantity * from.base : 0)
+    : item.grams && item.grams > 0 ? item.grams : from && from.base > 0 ? item.quantity * from.base : 0;
   if (!(oldBase > 0) || !(to.base > 0)) return null;
   return (qty * to.base) / oldBase;
 }

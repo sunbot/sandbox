@@ -188,8 +188,8 @@ export const useGrocery = (from: string, to: string) =>
   useQuery({ queryKey: keys.grocery(from, to), queryFn: () => get<T.GroceryList>(`/plan/grocery?${q({ from, to })}`) });
 
 // ── Recipes ───────────────────────────────────────────────────────────
-export const useRecipes = (search: string) =>
-  useQuery({ queryKey: keys.recipes(search), queryFn: () => get<T.RecipeSummary[]>(`/recipes?${q({ search })}`) });
+export const useRecipes = (search: string, enabled = true) =>
+  useQuery({ queryKey: keys.recipes(search), queryFn: () => get<T.RecipeSummary[]>(`/recipes?${q({ search })}`), enabled });
 
 export const useRecipe = (id: string, enabled = true) =>
   useQuery({ queryKey: keys.recipe(id), queryFn: () => get<T.RecipeDetail>(`/recipes/${id}`), enabled: enabled && !!id });

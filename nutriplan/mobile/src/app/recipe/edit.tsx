@@ -45,11 +45,12 @@ function Form({ recipe }: { recipe: RecipeDetail | null }) {
   const [cooked, setCooked] = useState(recipe?.cookedWeightGrams ? String(recipe.cookedWeightGrams) : '');
   const [volUnit, setVolUnit] = useState<VolumeUnit>('cups');
   const [volume, setVolume] = useState(volumeText(recipe?.finishedVolumeMl, 'cups'));
+  const [volumeEdited, setVolumeEdited] = useState(false); // untouched: the stored ml is saved back exactly (no rounding drift)
   const [error, setError] = useState<string | null>(null);
   const ingredients = lines.split('\n').map((l) => l.trim()).filter(Boolean);
   const cookedValue = cooked.trim() === '' ? null : Number(cooked.replace(',', '.'));
   const cookedOk = cookedValue === null || (Number.isFinite(cookedValue) && cookedValue > 0);
-  const volumeMl = volumeFromText(volume, volUnit);
+  const volumeMl = volumeEdited ? volumeFromText(volume, volUnit) : recipe?.finishedVolumeMl ?? null;
   const volumeOk = volumeMl !== undefined;
   const valid = name.trim().length > 0 && Number(servings) > 0 && ingredients.length > 0 && cookedOk && volumeOk;
 
@@ -77,7 +78,7 @@ function Form({ recipe }: { recipe: RecipeDetail | null }) {
         <Field label="Finished dish weight in grams (optional)" value={cooked} onChangeText={setCooked} keyboardType="decimal-pad" placeholder="e.g. 1200" />
         <AppText variant="caption" tone="muted">Weigh the cooked dish to see nutrition per 100 g. Leave it empty if you don’t know: it is never estimated from the ingredients.</AppText>
         {!cookedOk ? <AppText variant="secondary" tone="error" accessibilityLiveRegion="polite">Enter the weight as a positive number of grams, or leave it empty.</AppText> : null}
-        <Field label={`Finished volume in ${volUnit} (optional)`} value={volume} onChangeText={setVolume} keyboardType="decimal-pad" placeholder={volUnit === 'cups' ? 'e.g. 8' : 'e.g. 1900'} />
+        <Field label={`Finished volume in ${volUnit} (optional)`} value={volume} onChangeText={(v) => { setVolume(v); setVolumeEdited(true); }} keyboardType="decimal-pad" placeholder={volUnit === 'cups' ? 'e.g. 8' : 'e.g. 1900'} />
         <View style={{ flexDirection: 'row', gap: t.space.sm }}>
           {(['cups', 'ml'] as const).map((u) => (
             <FilterChip key={u} label={u} selected={volUnit === u} onPress={() => { if (u !== volUnit) { setVolume(volumeText(volumeMl, u)); setVolUnit(u); } }} />

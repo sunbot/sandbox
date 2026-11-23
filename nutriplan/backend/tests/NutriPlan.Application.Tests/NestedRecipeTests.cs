@@ -257,4 +257,101 @@ public class NestedRecipeTests
         Assert.False(line.IsRecipe);
         Assert.True(line.CountsTowardNutrition);
     }
+
+    // ── Review fixes (each failed before its fix) ─────────────────────────────────────────────────────
+
+    private GroceryService Grocery() => new(_store, _store, _store, _store, _store);
+
+    private static double GramsOf(GroceryListDto list, string food) =>
+        list.Aisles.SelectMany(a => a.Items).Single(i => i.Name.Contains(food, StringComparison.OrdinalIgnoreCase)).TotalGrams!.Value;
+
+    [Fact]
+    public async Task Grocery_list_counts_a_recipe_planned_by_weight_in_servings_and_expands_nested_recipes()
+    {
+        var beef = _store.AddFood("Beef, ground", 250, 26, 0, 15);
+        var sauce = (await Recipes().CreateAsync(new SaveRecipeRequest("Bolognese", 4, ["800 g beef"], null, null, null, null, 1000))).Summary.Id;
+        await Recipes().UpdateIngredientAsync(sauce, 0, new UpdateIngredientRequest(beef.Id, 800, null, null, null));
+        var lasagne = (await Recipes().CreateAsync(new SaveRecipeRequest("Lasagne", 2, ["2 servings bolognese"], null, null, null, null, null))).Summary.Id;
+        await Recipes().UpdateIngredientAsync(lasagne, 0, new UpdateIngredientRequest(null, null, null, null, null, sauce, 2)); // half the sauce
+
+        // 250 g of the 1000 g sauce = 1 of 4 servings → a quarter of its 800 g beef.
+        await Plan().AddRecipeAsync(new AddPlanRecipeRequest(_store.Today, MealSlot.Dinner, sauce, 0, 250, "g"));
+        Assert.Equal(200, GramsOf(await Grocery().BuildAsync(_store.Today, _store.Today), "beef"), 1);
+
+        // A whole lasagne (2 servings) uses 2 of the sauce's 4 servings → 400 g beef, listed as beef, not as "Bolognese".
+        _store.Plan.Clear();
+        await Plan().AddRecipeAsync(new AddPlanRecipeRequest(_store.Today, MealSlot.Dinner, lasagne, 2));
+        var list = await Grocery().BuildAsync(_store.Today, _store.Today);
+        Assert.Equal(400, GramsOf(list, "beef"), 1);
+        Assert.DoesNotContain(list.Aisles.SelectMany(a => a.Items), i => i.Name.Contains("Bolognese"));
+    }
+
+    [Fact]
+    public async Task Pointing_a_weighed_recipe_line_at_another_recipe_keeps_its_weight()
+    {
+        var a = await SimpleAsync("Sauce A", 400, 4);
+        await Recipes().UpdateAsync(a, new SaveRecipeRequest("Sauce A", 4, ["400 g Sauce A base"], null, null, null, null, 1000));
+        var b = await SimpleAsync("Sauce B", 400, 4);
+        await Recipes().UpdateAsync(b, new SaveRecipeRequest("Sauce B", 4, ["400 g Sauce B base"], null, null, null, null, 500));
+        var dish = await WithLineAsync("Dish", "250 g sauce");
+        await Recipes().UpdateIngredientAsync(dish, 0, new UpdateIngredientRequest(null, null, 250, "g", null, a));   // 1 of 4 servings
+        var d = await Recipes().UpdateIngredientAsync(dish, 0, new UpdateIngredientRequest(null, null, null, null, null, b)); // still 250 g
+        Assert.Equal(2, d.Ingredients[0].Servings!.Value, 3);       // 250 of 500 g = 2 of 4 servings
+        Assert.Equal(250, d.Ingredients[0].Grams!.Value, 1);
+        await Assert.ThrowsAsync<ValidationException>(() => Recipes().UpdateIngredientAsync(dish, 0, new UpdateIngredientRequest(null, 100, null, null, null, b)));
+    }
+
+    [Fact]
+    public async Task Changing_a_logged_recipe_to_another_measure_uses_its_own_servings_not_the_recipes_current_volume()
+    {
+        var soup = await SimpleAsync("Soup", 1000, 4);
+        await Recipes().UpdateAsync(soup, new SaveRecipeRequest("Soup", 4, ["1000 g Soup base"], null, null, null, null, null, 946.35)); // 4 cups
+        var logged = await Diary().LogRecipeAsync(new LogRecipeRequest(_store.Today, MealSlot.Lunch, soup, 0, null, 1, "cup")); // 1 serving, 250 kcal
+        Assert.Equal(1, logged.Item.Servings!.Value, 3);
+        await Recipes().UpdateAsync(soup, new SaveRecipeRequest("Soup", 4, ["1000 g Soup base"], null, null, null, null, null, 1892.7)); // now 8 cups
+
+        var changed = await Diary().UpdateAsync(logged.Id, null, null, null, null, default, 1, "serving");
+        Assert.Equal(250, changed.Item.Nutrition.Calories, 0);       // still 1 serving's worth, not doubled
+        Assert.Equal(1, changed.Item.Servings!.Value, 3);
+    }
+
+    [Fact]
+    public async Task A_big_batch_of_a_heavy_recipe_is_limited_by_servings_not_by_5_kg()
+    {
+        var chili = await SimpleAsync("Chili", 2000, 4);
+        await Recipes().UpdateAsync(chili, new SaveRecipeRequest("Chili", 4, ["2000 g Chili base"], null, null, null, null, 8000)); // 2 kg a serving
+        var planned = await Plan().AddRecipeAsync(new AddPlanRecipeRequest(_store.Today, MealSlot.Dinner, chili, 3)); // 6 kg
+        Assert.Equal(6000, planned.Item.Grams!.Value, 1);
+        await Assert.ThrowsAsync<ValidationException>(() => Plan().AddRecipeAsync(new AddPlanRecipeRequest(_store.Today, MealSlot.Dinner, chili, 51)));
+    }
+
+    [Fact]
+    public async Task A_cup_entry_is_still_held_to_the_servings_limit()
+    {
+        var soup = await SimpleAsync("Soup", 1000, 4);
+        await Recipes().UpdateAsync(soup, new SaveRecipeRequest("Soup", 4, ["1000 g Soup base"], null, null, null, null, null, 946.35)); // 1 cup a serving
+        var logged = await Diary().LogRecipeAsync(new LogRecipeRequest(_store.Today, MealSlot.Lunch, soup, 0, null, 1, "cup"));
+        await Assert.ThrowsAsync<ValidationException>(() => Diary().UpdateAsync(logged.Id, null, null, null, null, default, 500, "cup"));
+        Assert.Equal(3, (await Diary().UpdateAsync(logged.Id, null, null, null, null, default, 3, "cups")).Item.Servings!.Value, 3);
+    }
+
+    [Fact]
+    public async Task Removing_a_nested_recipes_finished_weight_stops_its_weighed_lines_counting_until_you_choose_an_amount()
+    {
+        var sauce = await SimpleAsync("Sauce", 400, 4);
+        await Recipes().UpdateAsync(sauce, new SaveRecipeRequest("Sauce", 4, ["400 g Sauce base"], null, null, null, null, 600));
+        var lasagne = await WithLineAsync("Lasagne", "300 g sauce");
+        await Recipes().UpdateIngredientAsync(lasagne, 0, new UpdateIngredientRequest(null, null, 300, "g", null, sauce));
+        Assert.Equal(200, R(lasagne).NutritionPerServing.Calories, 1);
+
+        await Recipes().UpdateAsync(sauce, new SaveRecipeRequest("Sauce", 4, ["400 g Sauce base"], null, null, null, null, null)); // weight cleared
+        var d = await Recipes().GetAsync(lasagne);
+        Assert.Equal(0, d.Summary.Coverage);
+        Assert.Contains("finished weight", d.Ingredients[0].Note);
+        Assert.Equal(sauce, d.Ingredients[0].RecipeId);               // still linked, never re-matched to a food
+        await Recipes().RematchAsync(lasagne);
+        Assert.Equal(sauce, R(lasagne).Ingredients[0].RecipeId);
+        // Choosing an amount again makes it count.
+        Assert.Equal(1, (await Recipes().UpdateIngredientAsync(lasagne, 0, new UpdateIngredientRequest(null, null, null, null, null, sauce, 2))).Summary.Coverage);
+    }
 }

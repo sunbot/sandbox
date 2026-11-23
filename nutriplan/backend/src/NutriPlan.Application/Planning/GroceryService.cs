@@ -1,4 +1,5 @@
 using NutriPlan.Application.Abstractions;
+using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
@@ -31,7 +32,13 @@ public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary,
     public async Task<GroceryListDto> BuildAsync(DateOnly from, DateOnly to, bool subtractPantry = true, CancellationToken ct = default)
     {
         var entries = (await PlanReconciliation.ReadRangeAsync(plan, diary, from, to, ct)).Where(e => e.Status == PlanStatus.Planned).ToList();
-        var recipeMap = await recipes.GetManyAsync(entries.Where(e => e.Item.RecipeId is not null).Select(e => e.Item.RecipeId!.Value).Distinct(), ct);
+        var recipeMap = (await recipes.GetManyAsync(entries.Where(e => e.Item.RecipeId is not null).Select(e => e.Item.RecipeId!.Value).Distinct(), ct))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        // Recipes used inside planned recipes (any depth) are expanded into their own ingredients, so load them too.
+        for (var pending = recipeMap.Values.SelectMany(r => r.SubRecipeIds).Where(id => !recipeMap.ContainsKey(id)).Distinct().ToList();
+             pending.Count > 0;
+             pending = pending.Where(recipeMap.ContainsKey).SelectMany(id => recipeMap[id].SubRecipeIds).Where(id => !recipeMap.ContainsKey(id)).Distinct().ToList())
+            foreach (var (id, r) in await recipes.GetManyAsync(pending, ct)) recipeMap[id] = r;
 
         var lines = new List<Line>();
         var seenBatches = new HashSet<Guid>();
@@ -39,21 +46,17 @@ public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary,
         {
             if (entry.Item.RecipeId is { } recipeId && recipeMap.TryGetValue(recipeId, out var recipe))
             {
-                // A batch is cooked once: count the whole batch's servings on its first entry.
+                // A batch is cooked once: count the whole batch's servings on its first entry. Servings come from the
+                // snapshot (a recipe planned as "250 g" is 0.25 of a 1 kg pot, not 250 servings).
                 double servings;
                 if (entry.BatchId is { } batchId)
                 {
                     if (!seenBatches.Add(batchId)) continue;
-                    servings = entries.Where(e => e.BatchId == batchId).Sum(e => e.Item.Quantity);
+                    servings = entries.Where(e => e.BatchId == batchId).Sum(e => ServingsOf(e.Item, recipe));
                 }
-                else servings = entry.Item.Quantity;
+                else servings = ServingsOf(entry.Item, recipe);
 
-                var factor = servings / recipe.Servings;
-                foreach (var ing in recipe.Ingredients.Where(i => i.Status != IngredientMatchStatus.Ignored))
-                {
-                    lines.Add(new Line(ing.FoodId, ing.FoodName ?? ing.FoodText, ing.FoodText, ing.Grams * factor,
-                        ing.Grams is null ? FormatRaw(ing, factor) : null, recipe.Name));
-                }
+                AddRecipeLines(lines, recipe, servings / recipe.Servings, recipe.Name, recipeMap, []);
             }
             else if (entry.Item.FoodId is { } foodId)
             {
@@ -124,6 +127,33 @@ public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary,
             ? p : null;
         var count = portion is null ? null : $"≈ {Math.Ceiling(grams.Value / portion.GramsPerUnit):0} {portion.Description}";
         return string.Join(" · ", new[] { text, imperial, count }.Where(s => s is not null));
+    }
+
+    /// <summary>A planned recipe's servings: saved on the snapshot, or for older entries read through the recipe's measures.</summary>
+    private static double ServingsOf(ItemSnapshot item, Recipe recipe) =>
+        item.RecipeServings ?? RecipeMeasures.Resolve(recipe, item.Quantity, item.QuantityUnit).Servings ?? item.Quantity;
+
+    /// <summary>
+    /// A recipe's ingredients at <paramref name="factor"/> × the whole recipe. A line that is another of your recipes is
+    /// expanded into that recipe's ingredients (its servings ÷ the servings it makes), all the way down; a loop (which saving
+    /// never allows) is cut off rather than followed forever.
+    /// </summary>
+    private static void AddRecipeLines(List<Line> lines, Recipe recipe, double factor, string usedIn, IReadOnlyDictionary<Guid, Recipe> recipeMap, HashSet<Guid> path)
+    {
+        if (!path.Add(recipe.Id)) return;
+        foreach (var ing in recipe.Ingredients.Where(i => i.Status != IngredientMatchStatus.Ignored))
+        {
+            if (ing.IsRecipe)
+            {
+                if (ing.Servings is > 0 && recipeMap.TryGetValue(ing.RecipeId!.Value, out var sub) && sub.Servings > 0)
+                    AddRecipeLines(lines, sub, factor * ing.Servings.Value / sub.Servings, usedIn, recipeMap, path);
+                else lines.Add(new Line(null, ing.RecipeName ?? ing.FoodText, ing.FoodText, null, FormatRaw(ing, factor), usedIn));
+                continue;
+            }
+            lines.Add(new Line(ing.FoodId, ing.FoodName ?? ing.FoodText, ing.FoodText, ing.Grams * factor,
+                ing.Grams is null ? FormatRaw(ing, factor) : null, usedIn));
+        }
+        path.Remove(recipe.Id);
     }
 
     private static string FormatRaw(RecipeIngredient ing, double factor) =>

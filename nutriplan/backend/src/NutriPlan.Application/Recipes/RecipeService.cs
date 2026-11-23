@@ -140,10 +140,15 @@ public sealed partial class RecipeService(
             links[recipe.Id] = new RecipeLink(recipe.Id, recipe.Name, recipe.SubRecipeIds.ToList());
             if (RecipeGraph.PathTo(subId, recipe.Id, x => links.TryGetValue(x, out var l) ? l.Uses : []) is { } loop)
                 throw new ValidationException($"“{sub.Name}” already uses “{recipe.Name}” ({string.Join(" → ", loop.Select(x => $"“{links[x].Name}”"))}), so it can't also be an ingredient of it.");
+            if (r.Grams is not null) throw new ValidationException("A recipe ingredient is measured in its servings (or by weight/volume through Amount and Unit), not Grams.");
             RecipeAmount amount;
-            if (r.Servings is { } sv) amount = sv > 0 ? new RecipeAmount(sv, sub.GramsPerServing is { } gps ? sv * gps : null, $"{sv:0.##} servings of {sub.Servings:0.##}") : new RecipeAmount(null, null, "Enter an amount greater than zero.");
-            else amount = RecipeMeasures.Resolve(sub, r.Amount ?? (ing.IsRecipe || ing.Amount is null ? ing.Servings ?? ing.Amount ?? 1 : ing.Amount.Value),
-                r.Amount is not null ? r.Unit : ing.IsRecipe && ing.Amount is null ? RecipeMeasures.Serving : ing.Unit);
+            if (r.Servings is { } sv)
+                amount = sv > 0 ? RecipeMeasures.Resolve(sub, sv, RecipeMeasures.Serving) : new RecipeAmount(null, null, "Enter an amount greater than zero.");
+            else if (r.Amount is { } given) amount = RecipeMeasures.Resolve(sub, given, r.Unit);
+            // No amount sent: keep the line's own amount in its own measure ("250 g" stays 250 g of the new recipe);
+            // a line with no amount (or a recipe line saved in servings only) uses its servings, else 1 serving.
+            else if (ing.Amount is { } own) amount = RecipeMeasures.Resolve(sub, own, ing.Unit);
+            else amount = RecipeMeasures.Resolve(sub, ing.Servings ?? 1, RecipeMeasures.Serving);
             if (!amount.IsResolved) throw new ValidationException(amount.Explanation);
             if (amount.Servings > MaxIngredientServings) throw new ValidationException("That's a lot of servings for one ingredient. Check the amount.");
             ing.UseRecipe(sub.Id, sub.Name, Math.Round(amount.Servings!.Value, 4), amount.Grams is { } gg ? Math.Round(gg, 2) : null);
@@ -311,6 +316,7 @@ public sealed partial class RecipeService(
         foreach (var ing in recipe.Ingredients)
         {
             if (ing.Status is IngredientMatchStatus.Ignored or IngredientMatchStatus.Confirmed) continue;
+            if (ing.IsRecipe) continue; // one of your recipes, chosen by you: never re-matched to a food
             if (onlyUnmatched && ing.Status == IngredientMatchStatus.AutoMatched && ing.Grams is not null) continue;
 
             if (IngredientQuery.IsNeverCounted(ing.RawText))
@@ -463,6 +469,15 @@ public sealed partial class RecipeService(
                 ing.RecipeName = sub.Name;
                 var a = ing.Amount is { } amt ? RecipeMeasures.Resolve(sub, amt, ing.Unit) : null;
                 if (a is { IsResolved: true }) (ing.Servings, ing.Grams) = (Math.Round(a.Servings!.Value, 4), a.Grams is { } g ? Math.Round(g, 2) : null);
+                else if (a is not null)
+                {
+                    // Given by weight/volume, and the recipe no longer has that finished weight/volume: don't keep counting
+                    // an old conversion silently. The line stops counting until you choose an amount (shown as "check").
+                    (ing.Servings, ing.Grams) = (null, null);
+                    ing.Status = IngredientMatchStatus.AutoMatched;
+                    ing.MatchConfidence = 0;
+                    ing.ResolutionNote = $"{a.Explanation} Choose an amount for this line.";
+                }
                 else ing.Grams = ing.Servings is { } sv && sub.GramsPerServing is { } gps ? Math.Round(sv * gps, 2) : null;
             }
             var foodMap = await foods.GetManyAsync(parent.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);

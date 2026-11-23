@@ -60,10 +60,12 @@ public sealed record ItemDto(
     double Quantity,
     string Unit,
     double? Grams,
-    NutritionDto Nutrition)
+    NutritionDto Nutrition,
+    double? Servings = null)
 {
+    /// <remarks><c>Servings</c>: for a recipe, how many servings the item is (whatever its unit), when known.</remarks>
     public static ItemDto From(ItemSnapshot s) => new(
-        s.Kind.ToString(), s.FoodId, s.RecipeId, s.Name, s.Quantity, s.QuantityUnit, s.Grams, NutritionDto.From(s.Nutrients));
+        s.Kind.ToString(), s.FoodId, s.RecipeId, s.Name, s.Quantity, s.QuantityUnit, s.Grams, NutritionDto.From(s.Nutrients), s.RecipeServings);
 }
 
 /// <param name="Status">

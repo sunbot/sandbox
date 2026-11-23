@@ -46,20 +46,24 @@ public static class ItemAmounts
                 {
                     // Same measure: scale by the ratio of amounts, from the entry's own snapshot.
                     var f = amount / item.Quantity;
-                    if (itemIsServings) CheckServings(amount);
+                    // The typo guard is on servings for every recipe entry (a soup in cups too), when they're known.
+                    if (item.RecipeServings is { } sv0) CheckServings(sv0 * f);
+                    else if (itemIsServings) CheckServings(amount);
                     var newUnit = itemIsServings ? (amount == 1 ? "serving" : "servings") : item.QuantityUnit;
-                    return Bounded(item.WithAmount(f, amount, newUnit, item.Grams is { } g0 ? g0 * f : null), false, null);
+                    return item.WithAmount(f, amount, newUnit, item.Grams is { } g0 ? g0 * f : null);
                 }
-                // Another measure (servings ↔ grams/cups): both amounts are read as servings through the recipe's finished weight/volume.
+                // Another measure (servings ↔ grams/cups): the new amount is read as servings through the recipe's finished
+                // weight/volume; the old one is the snapshot's own servings (so a later change to the recipe doesn't skew it).
                 var recipe = item.RecipeId is { } rid && recipes is not null ? await recipes.GetAsync(rid, ct) : null;
                 if (recipe is null) throw new ValidationException("This recipe is no longer available, so only its amount in the same measure can change.");
                 var to = RecipeMeasures.Resolve(recipe, amount, unit);
                 if (!to.IsResolved) throw new ValidationException(to.Explanation);
-                var fromServings = itemIsServings ? item.Quantity : RecipeMeasures.Resolve(recipe, item.Quantity, item.QuantityUnit).Servings;
+                var fromServings = item.RecipeServings ?? RecipeMeasures.Resolve(recipe, item.Quantity, item.QuantityUnit).Servings;
                 if (fromServings is not > 0) throw new ValidationException("This entry's original amount can't be converted, so change it in its own measure.");
                 CheckServings(to.Servings!.Value);
                 var (q, label) = RecipeLabel(to.Servings!.Value, amount, unit);
-                return Bounded(item.WithAmount(to.Servings!.Value / fromServings.Value, q, label, to.Grams), false, null);
+                // Recipes are bounded by servings (50), not the 5 kg food limit: a big batch can weigh more.
+                return item.WithAmount(to.Servings!.Value / fromServings.Value, q, label, to.Grams) with { Servings = Math.Round(to.Servings!.Value, 4) };
             }
         }
 
@@ -99,8 +103,7 @@ public static class ItemAmounts
     {
         var a = RecipeMeasures.Resolve(recipe, amount, unit);
         if (!a.IsResolved) throw new ValidationException(a.Explanation);
-        CheckServings(a.Servings!.Value);
-        if (a.Grams is { } g) CheckBase(g, false);
+        CheckServings(a.Servings!.Value); // recipes are bounded by servings, not by the 5 kg food limit
         var (q, label) = RecipeLabel(a.Servings!.Value, amount, unit);
         return ItemSnapshot.ForRecipe(recipe.Id, recipe.Name, a.Servings!.Value, recipe.NutritionPerServing, q, label, a.Grams);
     }

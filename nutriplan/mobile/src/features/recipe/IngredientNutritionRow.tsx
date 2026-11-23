@@ -56,7 +56,8 @@ export function IngredientNutritionRow({ ingredient: ing, onPress }: { ingredien
 
 /** How much of a nested recipe a line uses: "1.5 servings", plus its weight when the recipe's finished weight is known. */
 export function recipeAmount(ing: Pick<Ingredient, 'servings' | 'grams'>): string {
-  const sv = ing.servings ?? 0;
+  if (!ing.servings) return 'amount needed';
+  const sv = ing.servings;
   const servings = `${Math.round(sv * 100) / 100} serving${sv === 1 ? '' : 's'}`;
   return ing.grams ? `${servings} (${Math.round(ing.grams)} g)` : servings;
 }

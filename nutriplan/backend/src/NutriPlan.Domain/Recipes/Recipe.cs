@@ -179,13 +179,14 @@ public sealed class Recipe : Users.IOwned
 
     /// <summary>
     /// Re-reads ingredient lines with the current parser (optionally new lines from a re-import). Lines you confirmed
-    /// or excluded yourself are kept as they are when their text hasn't changed; everything else starts fresh.
+    /// or excluded yourself, and lines that are one of your recipes, are kept as they are when their text hasn't changed;
+    /// everything else starts fresh.
     /// </summary>
     public void ReparseIngredients(IEnumerable<string>? lines = null)
     {
         // Matched by text, so a confirmed line keeps its choice even when lines are added or reordered.
         var keep = _ingredients
-            .Where(i => i.Status is IngredientMatchStatus.Confirmed || (i.Status is IngredientMatchStatus.Ignored && i.ResolutionNote == "Excluded by you"))
+            .Where(i => i.Status is IngredientMatchStatus.Confirmed || i.IsRecipe || (i.Status is IngredientMatchStatus.Ignored && i.ResolutionNote == "Excluded by you"))
             .GroupBy(i => i.RawText)
             .ToDictionary(g => g.Key, g => new Queue<RecipeIngredient>(g.OrderBy(i => i.Position)));
         var source = (lines ?? _ingredients.OrderBy(i => i.Position).Select(i => i.RawText)).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
