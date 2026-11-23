@@ -8,12 +8,32 @@ PR approvals. Stop and ask before destructive migrations, irreversible changes, 
 **Stable tags:** after the owner confirms a feature is stable, tag the verified commit `stable-<feature>-vN` (annotated)
 and push it. Never move or overwrite a stable tag; never tag unverified work.
 
-Status key: ✅ done · 🟡 partly done · ⬜ not started. Requirements stay listed until done, even when not being worked on.
+**Phase status** (one of): Not Started · In Progress · Implemented · Awaiting Device Verification · Verified Stable.
+Only the owner moves a phase to Verified Stable. Current state and next action: `docs/DEVELOPMENT_STATUS.md`.
+
+**Requirement status:** ✅ done · 🟡 partly done · ⬜ not started. Requirements stay listed until done, even when not being worked on.
+
+**Execution order:** 1 → 2 → 2.5 → 2.6 → 3 → 4 → 5 → 6 → 7 → 8. The roadmap lead (Claude) works through it autonomously,
+pushing tested increments to `master`, and stops for the owner at the end of each phase that needs Android testing or a
+product decision.
+
+| Phase | Status |
+|---|---|
+| 1 Unified Recipe System | Awaiting Device Verification |
+| 2 Recipe Editor and Usability | In Progress |
+| 2.5 Food Data Quality Audit and Restaurant Strategy | Not Started |
+| 2.6 Ingredient Verification and Critical Data Corrections | Not Started |
+| 3 Food Creation and Nutrition Facts OCR | Not Started |
+| 4 Fill the Gaps Improvements | In Progress (earlier work shipped; remaining items not started) |
+| 5 Ask Assistant Improvements | In Progress (earlier work shipped; remaining items not started) |
+| 6 UX Improvements and Bug Fixes | In Progress (ongoing) |
+| 7 Recipe Sharing and Favorites | Not Started (favorites already exist) |
+| 8 Nutrition Intelligence | Not Started |
 Each entry names where it lives so this file can be checked against the code.
 
 ---
 
-## Phase 1 — Unified Recipe System · Critical · ✅ first implementation shipped (2026-11-23)
+## Phase 1 — Unified Recipe System · Critical · Awaiting Device Verification
 
 One recipe system where any recipe can be logged, planned, or used as an ingredient in another recipe.
 Design and rules: `docs/RECIPES.md`. Commits `17c48c7` (backend), `765105e` (app), plus the review/test follow-up.
@@ -47,7 +67,7 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - The recipe screen's own "Log or plan" box still takes servings only; weight/volume logging is via Add food → the recipe.
 - Not yet verified on a physical Android phone (checklist: `docs/LOGGING.md` item 5).
 
-## Phase 2 — Recipe Editor and Usability · High · ⬜ (next)
+## Phase 2 — Recipe Editor and Usability · High · In Progress
 
 - ⬜ Search and add individual ingredients (today: type lines, then match each).
 - 🟡 Search and add existing recipes as ingredients (works per line via "Choose a food or recipe"; no "add ingredient" search yet).
@@ -59,7 +79,34 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - ⬜ Make imported ingredients easy to review and correct.
 - ⬜ Intuitive mobile editing and navigation.
 
-## Phase 3 — Food Creation and Nutrition Label OCR · High · ⬜
+## Phase 2.5 — Food Data Quality Audit and Restaurant Strategy · High · Not Started
+
+Before OCR or nutrition scoring: audit the nutrition database and matching. Audit tooling must be read-only; no large
+imports and no restaurant providers without owner approval.
+
+- ⬜ `docs/FOOD_DATA_QUALITY_AUDIT.md`: USDA Foundation, SR Legacy, FNDDS (Survey), branded lookup, Open Food Facts, custom
+  foods, food search, barcode lookup, serving conversions, nutrient completeness, source provenance.
+- ⬜ Measure actual database coverage where read-only access exists; otherwise ship reproducible read-only audit scripts and
+  label unverified assumptions.
+- ⬜ Benchmark ingredient matching: dry vs cooked foods, coconut milk, ambiguous household measures, branded foods,
+  AI-generated recipes.
+- ⬜ Reproduce the Red Lentil and Sweet Potato Curry calculation (reported 364 kcal, 16 g protein, 55 g carbs, 10 g fat per
+  serving) from the actual matches and gram conversions, without forcing the expected result.
+- ⬜ `docs/RESTAURANT_NUTRITION_STRATEGY.md`: official data for Chipotle, Chick-fil-A, McDonald's, Taco Bell, Panera,
+  Starbucks: availability, licensing, freshness, costs, APIs, maintenance, commercial reuse (public ≠ redistributable).
+- ⬜ Recommend a low-cost strategy: USDA stays the core; restaurant nutrition added with attribution and a clear official vs
+  estimate distinction.
+- ⬜ Only safe read-only audit tooling and tests are implemented in this phase.
+
+## Phase 2.6 — Ingredient Verification and Critical Data Corrections · High · Not Started
+
+- ⬜ Use the audit's findings to improve match transparency and fix demonstrated high-impact bugs (each with a regression test).
+- ⬜ For AI-generated and imported recipes: a review showing original ingredient, matched food, source, gram weight,
+  confidence, nutrition contribution and warnings; correction before saving where feasible.
+- ⬜ Report match coverage, confidence and nutrient completeness separately; never imply 100% matching means accurate nutrition.
+- ⬜ Stop for approval before any significant data migration or new external provider.
+
+## Phase 3 — Food Creation and Nutrition Label OCR · High · Not Started
 
 - ⬜ Photograph Nutrition Facts labels.
 - ⬜ Extract calories, macros, micronutrients, and serving information.
@@ -69,10 +116,10 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - ⬜ Require confirmation before saving.
 - ✅ Save foods to the user's catalog (manual "From label" form exists).
 - 🟡 Preserve nutrition provenance (manual foods are `User` source; OCR provenance to add).
-- ⬜ Investigate on-device OCR to avoid recurring AI API costs.
+- ⬜ Investigate on-device OCR to avoid recurring AI API costs (prefer free on-device OCR where practical).
 - ✅ Maintain manual food creation as a fallback.
 
-## Phase 4 — Fill the Gaps Improvements · High · 🟡
+## Phase 4 — Fill the Gaps Improvements · High · In Progress (remaining items Not Started)
 
 - ⬜ Consolidate repeated missing-nutrient warnings.
 - ⬜ Concise nutrition summary.
@@ -86,7 +133,7 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - ✅ Avoid repeated suggestions where alternatives exist.
 - ✅ Never invent serving sizes or nutrition values.
 
-## Phase 5 — Ask Assistant Improvements · High · 🟡
+## Phase 5 — Ask Assistant Improvements · High · In Progress (remaining items Not Started)
 
 - ✅ Log foods through natural language.
 - ⬜ Add custom recipes to diary entries.
@@ -101,7 +148,7 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - ✅ Keep AI costs low; deterministic logic where practical (rule-based interpreter first).
 - ✅ Partial selection and adding foods in Ask review (#61).
 
-## Phase 6 — UX Improvements and Bug Fixes · Medium (quick fixes earlier) · 🟡
+## Phase 6 — UX Improvements and Bug Fixes · Medium (quick fixes earlier) · In Progress
 
 - ⬜ Smooth sign-out loading and navigation.
 - ⬜ Avoid abrupt screen transitions.
@@ -114,7 +161,7 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - ✅ Maintain Android and web compatibility (CI web build + browser tests).
 - ✅ Regression tests for fixed bugs (rule in `CLAUDE.md`; `mobile/e2e`).
 
-## Phase 7 — Recipe Sharing and Favorites · Later · 🟡
+## Phase 7 — Recipe Sharing and Favorites · Later · Not Started (favorites exist)
 
 - ⬜ Share recipes with invited users.
 - ✅ Favorite saved recipes.
@@ -125,7 +172,7 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - ⬜ Shared-recipe changes must not unexpectedly modify another user's data (note: nested recipes are owner-scoped today; sharing must copy, not link).
 - ⬜ Moderation and commercialization only when needed.
 
-## Phase 8 — Nutrition Intelligence · Medium–High (after recipe foundations and core nutrition-data work) · ⬜
+## Phase 8 — Nutrition Intelligence · Medium–High (after recipe foundations and the Phase 2.5 data audit) · Not Started
 
 ### Food Quality Score
 - ⬜ Transparent 0–100 food and recipe score.
