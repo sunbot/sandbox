@@ -1,6 +1,7 @@
 using NutriPlan.Application.Abstractions;
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
+using NutriPlan.Domain.Grocery;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
 using NutriPlan.Domain.Units;
@@ -15,19 +16,22 @@ public sealed record GroceryItemDto(
     double? PantryGrams,
     bool InPantry,
     IReadOnlyList<string> UsedIn,
-    IReadOnlyList<string> UnconvertedAmounts);
+    IReadOnlyList<string> UnconvertedAmounts,
+    string Key);
 
 public sealed record GroceryAisleDto(string Aisle, IReadOnlyList<GroceryItemDto> Items);
 
-public sealed record GroceryListDto(DateOnly From, DateOnly To, IReadOnlyList<GroceryAisleDto> Aisles, int ItemCount);
+/// <summary><paramref name="HiddenItems"/> are this range's items the user removed from their list (restorable); they aren't in Aisles or ItemCount.</summary>
+public sealed record GroceryListDto(DateOnly From, DateOnly To, IReadOnlyList<GroceryAisleDto> Aisles, int ItemCount, IReadOnlyList<GroceryItemDto> HiddenItems);
 
 /// <summary>
 /// Builds a shopping list from the planned (not yet eaten) meals in a date range:
 /// recipe ingredients are scaled by planned servings, identical foods are merged, pantry stock is
 /// subtracted, and items are grouped by food category as a stand-in for store aisles.
-/// Batch-cooked recipes are only bought once.
+/// Batch-cooked recipes are only bought once. Items the user removed (<see cref="GroceryExclusion"/>) are
+/// kept out of the list but never touch the plan or recipes, so removal survives every recalculation.
 /// </summary>
-public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary, IRecipeRepository recipes, IFoodRepository foods, IPantryRepository pantry)
+public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary, IRecipeRepository recipes, IFoodRepository foods, IPantryRepository pantry, IGroceryExclusionRepository exclusions)
 {
     public async Task<GroceryListDto> BuildAsync(DateOnly from, DateOnly to, bool subtractPantry = true, CancellationToken ct = default)
     {
@@ -66,6 +70,7 @@ public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary,
 
         var foodMap = await foods.GetManyAsync(lines.Where(l => l.FoodId is not null).Select(l => l.FoodId!.Value).Distinct(), ct);
         var pantryItems = subtractPantry ? await pantry.ListAsync(ct) : [];
+        var hiddenKeys = (await exclusions.ListAsync(ct)).Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
 
         var items = lines
             .GroupBy(l => l.FoodId?.ToString() ?? l.Text.ToLowerInvariant())
@@ -88,18 +93,22 @@ public sealed class GroceryService(IPlanRepository plan, IDiaryRepository diary,
                         pantryGrams,
                         inPantry,
                         g.Select(l => l.UsedIn).Distinct().ToList(),
-                        g.Where(l => l.RawAmount is not null).Select(l => l.RawAmount!).ToList()));
+                        g.Where(l => l.RawAmount is not null).Select(l => l.RawAmount!).ToList(),
+                        GroceryExclusion.KeyFor(first.FoodId, first.Text)));
             })
+            .Where(i => i.Item.TotalGrams is null or >= 1) // a pinch of salt isn't a shopping item
             .ToList();
 
+        var hidden = items.Where(i => hiddenKeys.Contains(i.Item.Key)).Select(i => i.Item).OrderBy(i => i.Name).ToList();
+        items = items.Where(i => !hiddenKeys.Contains(i.Item.Key)).ToList();
+
         var aisles = items
-            .Where(i => i.Item.TotalGrams is null or >= 1) // a pinch of salt isn't a shopping item
             .GroupBy(i => i.Aisle)
             .OrderBy(g => Aisles.Order(g.Key))
             .Select(g => new GroceryAisleDto(g.Key, g.Select(x => x.Item).OrderBy(i => i.InPantry).ThenBy(i => i.Name).ToList()))
             .ToList();
 
-        return new GroceryListDto(from, to, aisles, items.Count(i => !i.Item.InPantry));
+        return new GroceryListDto(from, to, aisles, items.Count(i => !i.Item.InPantry), hidden);
     }
 
     /// <summary>"Chicken, broilers or fryers, breast, meat only, raw" → "Chicken breast" style short name.</summary>

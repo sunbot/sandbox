@@ -273,6 +273,15 @@ export function usePantryMutations() {
   };
 }
 
+export function useGroceryExclusions() {
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ['grocery'] });
+  return {
+    hide: useMutation({ mutationFn: (r: { key: string; name: string }) => post<void>('/plan/grocery/exclusions', r), onSuccess: refresh }),
+    restore: useMutation({ mutationFn: (key?: string) => del(`/plan/grocery/exclusions${key ? `?${q({ key })}` : ''}`), onSuccess: refresh }),
+  };
+}
+
 // ── Insights, targets, assistant ──────────────────────────────────────
 export const useHeatmap = (date: string) => useQuery({ queryKey: keys.heatmap(date), queryFn: () => get<T.Heatmap>(`/insights/heatmap?${q({ date, today: today() })}`) });
 

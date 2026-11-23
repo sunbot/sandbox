@@ -6,6 +6,7 @@ using NutriPlan.Application.Abstractions;
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
 using NutriPlan.Domain.Nutrients;
+using NutriPlan.Domain.Grocery;
 using NutriPlan.Domain.Pantry;
 using NutriPlan.Domain.Planning;
 using NutriPlan.Domain.Recipes;
@@ -33,6 +34,7 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
     public DbSet<DiaryEntry> DiaryEntries => Set<DiaryEntry>();
     public DbSet<PlanEntry> PlanEntries => Set<PlanEntry>();
     public DbSet<PantryItem> PantryItems => Set<PantryItem>();
+    public DbSet<GroceryExclusion> GroceryExclusions => Set<GroceryExclusion>();
     public DbSet<NutritionTargets> Targets => Set<NutritionTargets>();
 
     // Explicit, so it doesn't hide DbContext.SaveChangesAsync.
@@ -128,6 +130,16 @@ public sealed class NutriPlanDbContext(DbContextOptions<NutriPlanDbContext> opti
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.HasIndex(x => x.OwnerId);
+            Owned(e);
+        });
+
+        b.Entity<GroceryExclusion>(e =>
+        {
+            e.ToTable("grocery_exclusions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Key).HasMaxLength(GroceryExclusion.MaxKeyLength).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            e.HasIndex(x => new { x.OwnerId, x.Key }).IsUnique();
             Owned(e);
         });
 

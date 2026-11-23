@@ -185,6 +185,43 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                     b.ToTable("foods", (string)null);
                 });
 
+            modelBuilder.Entity("NutriPlan.Domain.Grocery.GroceryExclusion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_grocery_exclusions");
+
+                    b.HasIndex("OwnerId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_grocery_exclusions_owner_id_key");
+
+                    b.ToTable("grocery_exclusions", (string)null);
+                });
+
             modelBuilder.Entity("NutriPlan.Domain.Pantry.PantryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -626,6 +663,16 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_foods_app_users_owner_id");
+                });
+
+            modelBuilder.Entity("NutriPlan.Domain.Grocery.GroceryExclusion", b =>
+                {
+                    b.HasOne("NutriPlan.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_grocery_exclusions_app_users_owner_id");
                 });
 
             modelBuilder.Entity("NutriPlan.Domain.Pantry.PantryItem", b =>

@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IDiaryRepository, DiaryRepository>();
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<IPantryRepository, PantryRepository>();
+        services.AddScoped<IGroceryExclusionRepository, GroceryExclusionRepository>();
         services.AddScoped<ITargetsRepository, TargetsRepository>();
         services.AddScoped<IUserDirectory, UserDirectory>();
         services.AddScoped<UsdaImporter>();

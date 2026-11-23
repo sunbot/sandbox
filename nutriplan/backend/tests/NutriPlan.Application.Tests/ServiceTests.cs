@@ -87,7 +87,7 @@ public class ServiceTests
         await Plan().AddBatchAsync(new AddBatchRequest(recipe.Id, 1,
             [new(_store.Today, MealSlot.Lunch), new(_store.Today.AddDays(1), MealSlot.Lunch), new(_store.Today.AddDays(2), MealSlot.Lunch), new(_store.Today.AddDays(3), MealSlot.Lunch)]));
 
-        var list = await new GroceryService(_store, _store, _store, _store, _store).BuildAsync(_store.Today, _store.Today.AddDays(6));
+        var list = await new GroceryService(_store, _store, _store, _store, _store, _store).BuildAsync(_store.Today, _store.Today.AddDays(6));
         var item = list.Aisles.SelectMany(a => a.Items).Single();
         Assert.Equal(800, item.TotalGrams);
         Assert.Equal("Meat & Seafood", list.Aisles.Single().Aisle);

@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { Pressable, ScrollView, Share, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useGrocery } from '@/api/hooks';
-import { AppCard, AppText, EmptyState, PrimaryButton, SecondaryButton, Skeleton, TextButton } from '@/components/ds';
-import { CloudOff, ShoppingBasket, Square, SquareCheck } from '@/components/ds/icons';
+import { useGrocery, useGroceryExclusions } from '@/api/hooks';
+import { AppCard, AppText, EmptyState, PrimaryButton, SecondaryButton, Skeleton, TextButton, useSnackbar } from '@/components/ds';
+import { CircleMinus, CloudOff, ShoppingBasket, Square, SquareCheck, Undo2 } from '@/components/ds/icons';
 import { addDays, shortDay, today } from '@/lib/format';
 import { usePersistedState } from '@/lib/persisted';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -17,6 +18,9 @@ export default function GroceryScreen() {
   const from = params.from ?? today();
   const to = params.to ?? addDays(from, 6);
   const list = useGrocery(from, to);
+  const { hide, restore } = useGroceryExclusions();
+  const snackbar = useSnackbar();
+  const [showHidden, setShowHidden] = useState(false);
   const [checked, setChecked] = usePersistedState<Record<string, boolean>>(`grocery.checked.${from}.${to}`, {});
   const page = { padding: t.screenPadding, gap: t.space.lg, paddingBottom: t.space.huge };
 
@@ -34,6 +38,12 @@ export default function GroceryScreen() {
   const g = list.data;
   const all = g.aisles.flatMap((a) => a.items.filter((i) => !i.inPantry).map((i) => `${a.aisle}:${i.name}`));
   const done = all.filter((k) => checked[k]).length;
+
+  const remove = (i: { key: string; name: string }) =>
+    hide.mutate({ key: i.key, name: i.name }, {
+      onSuccess: () => snackbar({ message: `Removed ${i.name} from the list`, actionLabel: 'Undo', onAction: () => restore.mutate(i.key) }),
+      onError: (e) => snackbar({ message: e instanceof Error ? e.message : "Couldn't remove it" }),
+    });
 
   const share = () => {
     const text = g.aisles
@@ -62,9 +72,10 @@ export default function GroceryScreen() {
             const key = `${a.aisle}:${i.name}`;
             const isDone = !!checked[key] || i.inPantry;
             return (
-              <Pressable key={key} disabled={i.inPantry} onPress={() => setChecked((c) => ({ ...c, [key]: !c[key] }))}
+              <View key={key} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable disabled={i.inPantry} onPress={() => setChecked((c) => ({ ...c, [key]: !c[key] }))}
                 accessibilityRole="checkbox" accessibilityState={{ checked: isDone, disabled: i.inPantry }} aria-checked={isDone} accessibilityLabel={`${i.name}, ${i.inPantry ? 'in your pantry' : i.display}`}
-                style={({ pressed }) => [{ flexDirection: 'row', gap: t.space.md, alignItems: 'center', minHeight: 56, paddingHorizontal: t.space.lg, paddingVertical: t.space.sm, borderTopWidth: 1, borderTopColor: t.colors.border }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+                style={({ pressed }) => [{ flex: 1, flexDirection: 'row', gap: t.space.md, alignItems: 'center', minHeight: 56, paddingHorizontal: t.space.lg, paddingVertical: t.space.sm, borderTopWidth: 1, borderTopColor: t.colors.border }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
                 {isDone ? <SquareCheck size={22} strokeWidth={1.8} color={t.colors.primary} /> : <Square size={22} strokeWidth={1.8} color={t.colors.textMuted} />}
                 <View style={{ flex: 1, gap: 2 }}>
                   <AppText variant="body" tone={isDone ? 'muted' : 'default'} style={isDone ? { textDecorationLine: 'line-through' } : undefined}>{i.name}</AppText>
@@ -73,10 +84,35 @@ export default function GroceryScreen() {
                   </AppText>
                 </View>
               </Pressable>
+              <Pressable onPress={() => remove(i)} accessibilityRole="button" accessibilityLabel={`Remove ${i.name} from the list`}
+                style={({ pressed }) => [{ width: 48, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: t.colors.border }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+                <CircleMinus size={22} strokeWidth={1.8} color={t.colors.textMuted} />
+              </Pressable>
+              </View>
             );
           })}
         </AppCard>
       ))}
+      {g.hiddenItems.length > 0 ? (
+        <AppCard padded={false}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: t.space.sm }}>
+            <View style={{ flex: 1 }}>
+              <TextButton label={`${showHidden ? 'Hide' : 'Show'} removed items (${g.hiddenItems.length})`} tone="secondary" onPress={() => setShowHidden((v) => !v)} />
+            </View>
+            <TextButton label="Restore all" tone="secondary" onPress={() => restore.mutate(undefined)} />
+          </View>
+          {showHidden ? g.hiddenItems.map((i) => (
+            <Pressable key={i.key} onPress={() => restore.mutate(i.key)} accessibilityRole="button" accessibilityLabel={`Restore ${i.name} to the list`}
+              style={({ pressed }) => [{ flexDirection: 'row', gap: t.space.md, alignItems: 'center', minHeight: 56, paddingHorizontal: t.space.lg, borderTopWidth: 1, borderTopColor: t.colors.border }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+              <Undo2 size={22} strokeWidth={1.8} color={t.colors.textMuted} />
+              <View style={{ flex: 1 }}>
+                <AppText variant="body" tone="muted">{i.name}</AppText>
+                <AppText variant="caption" tone="muted">Removed · {i.display} · tap to restore</AppText>
+              </View>
+            </Pressable>
+          )) : null}
+        </AppCard>
+      ) : null}
     </ScrollView>
   );
 }
