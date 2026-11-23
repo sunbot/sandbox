@@ -102,6 +102,11 @@ starting to scroll closes it (that tap doesn't open the editor). A drag has to b
 vertical scrolling are untouched. Screen readers get a "Delete" action on the row, and Delete is also in
 the editor. Long press is reserved (not used).
 
+On Today, expand a nonempty meal and choose **Clear breakfast/lunch/dinner/snack**. The confirmation names the date and
+number of logged entries; planned items are not removed. Undo cancels the clear before the five-second window closes.
+Only the confirmed entries are sent to the server, so entries added later are left alone. If a confirmed entry was moved
+or removed meanwhile, the clear fails as a whole and the diary refreshes. Clearing a logged planned item reopens its plan.
+
 - Implementation: `features/diary/SwipeableDiaryRow.tsx`: React Native's own `PanResponder` + `Pressable` (not a gesture-handler
   swipe component: inside `ReanimatedSwipeable` taps on the row and on the revealed Delete button never arrived on an Android phone,
   so editing and deleting didn't work). `GestureHandlerRootView` and gesture-handler's `ScrollView` on Today/Week stay from the
@@ -165,3 +170,7 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    and, on a recipe with a finished volume, 1 cup; edit the logged entry between cups and servings. On a recipe, choose an
    ingredient → pick another recipe → Use as this ingredient; the line reads "Your recipe: …".
 6. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
+7. On a non-today date, expand each meal with logged entries and check Clear, the count/date and Cancel. Confirm and Undo:
+   entries and totals return unchanged. Confirm again and wait; refresh and check only that date and meal were cleared,
+   planned items remain, and a logged planned item returns to the plan. Empty meals have no Clear action. Repeat offline:
+   the error is shown and entries return or refresh when connectivity is restored.
