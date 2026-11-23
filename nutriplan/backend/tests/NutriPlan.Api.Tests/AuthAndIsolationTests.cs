@@ -226,6 +226,32 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     }
 
     [PostgresFact]
+    public async Task Grocery_removals_belong_to_one_member_and_another_cannot_restore_or_see_them()
+    {
+        var a = await NewMember();
+        var b = await NewMember();
+        var recipe = await Json(await a.PostAsJsonAsync("/api/recipes", new { name = "A's stew", servings = 1, ingredients = new[] { "1 cup mystery stock" } }));
+        (await a.PostAsJsonAsync("/api/plan/recipe", new { date = Day, meal = "Dinner", recipeId = (string)recipe["summary"]!["id"]!, servings = 1 })).EnsureSuccessStatusCode();
+        var list = await Json(await a.GetAsync($"/api/plan/grocery?from={Day:yyyy-MM-dd}&to={Day:yyyy-MM-dd}"));
+        var item = list["aisles"]!.AsArray().SelectMany(x => x!["items"]!.AsArray()).First()!;
+        var key = (string)item["key"]!;
+
+        Assert.Equal(HttpStatusCode.NoContent, (await a.PostAsJsonAsync("/api/plan/grocery/exclusions", new { key, name = (string)item["name"]! })).StatusCode);
+        // B restoring "all" only touches B's own removals; B never sees A's.
+        Assert.Equal(HttpStatusCode.NoContent, (await b.DeleteAsync("/api/plan/grocery/exclusions")).StatusCode);
+        var bList = await Json(await b.GetAsync($"/api/plan/grocery?from={Day:yyyy-MM-dd}&to={Day:yyyy-MM-dd}"));
+        Assert.Empty(bList["hiddenItems"]!.AsArray());
+        Assert.Equal(0, (int)bList["itemCount"]!);
+
+        var after = await Json(await a.GetAsync($"/api/plan/grocery?from={Day:yyyy-MM-dd}&to={Day:yyyy-MM-dd}"));
+        Assert.Equal(key, (string?)after["hiddenItems"]!.AsArray().Single()!["key"]);
+        Assert.DoesNotContain(after["aisles"]!.AsArray().SelectMany(x => x!["items"]!.AsArray()), i => (string?)i!["key"] == key);
+        // Hiding the same key twice is harmless; a bad key is refused.
+        Assert.Equal(HttpStatusCode.NoContent, (await a.PostAsJsonAsync("/api/plan/grocery/exclusions", new { key, name = "again" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await a.PostAsJsonAsync("/api/plan/grocery/exclusions", new { key = "nonsense", name = "x" })).StatusCode);
+    }
+
+    [PostgresFact]
     public async Task The_configured_owner_claims_the_existing_data_and_can_administer()
     {
         var session = await Json(await Owner().GetAsync("/api/account/session"));
