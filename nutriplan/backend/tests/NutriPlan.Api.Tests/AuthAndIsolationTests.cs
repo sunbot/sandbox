@@ -196,6 +196,36 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     }
 
     [PostgresFact]
+    public async Task A_member_cannot_nest_see_or_learn_about_another_members_recipe()
+    {
+        var a = await NewMember();
+        var b = await NewMember();
+        var sauce = await Json(await a.PostAsJsonAsync("/api/recipes", new { name = "A's sauce", servings = 2, ingredients = new[] { "1 cup tomatoes" } }));
+        var sauceId = (string)sauce["summary"]!["id"]!;
+        var bowl = await Json(await b.PostAsJsonAsync("/api/recipes", new { name = "B's bowl", servings = 1, ingredients = new[] { "1 serving sauce" } }));
+        var bowlId = (string)bowl["summary"]!["id"]!;
+
+        // B can't use A's recipe as an ingredient: to B it doesn't exist (404, not 403, so nothing leaks).
+        var nest = await b.PutAsJsonAsync($"/api/recipes/{bowlId}/ingredients/0", new { recipeId = sauceId, servings = 1 });
+        Assert.Equal(HttpStatusCode.NotFound, nest.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.GetAsync($"/api/recipes/{sauceId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/diary/recipe", new { date = Day, meal = "Lunch", recipeId = sauceId, servings = 1 })).StatusCode);
+
+        // A nests their own recipe; B's recipe list and A's "Used in" stay separate.
+        var aBowl = await Json(await a.PostAsJsonAsync("/api/recipes", new { name = "A's bowl", servings = 1, ingredients = new[] { "1 serving sauce" } }));
+        var aBowlId = (string)aBowl["summary"]!["id"]!;
+        var nested = await Json(await a.PutAsJsonAsync($"/api/recipes/{aBowlId}/ingredients/0", new { recipeId = sauceId, servings = 1 }));
+        Assert.Equal(sauceId, (string?)nested["ingredients"]![0]!["recipeId"]);
+        var usedIn = (await Json(await a.GetAsync($"/api/recipes/{sauceId}")))["usedIn"]!.AsArray();
+        Assert.Equal(["A's bowl"], usedIn.Select(u => (string)u!["name"]!));
+        var bList = await b.GetFromJsonAsync<JsonArray>("/api/recipes");
+        Assert.DoesNotContain(bList!, r => (string?)r!["id"] == sauceId || (string?)r!["id"] == aBowlId);
+        // And B can't delete A's sauce (404), while A is told it's in use.
+        Assert.Equal(HttpStatusCode.NotFound, (await b.DeleteAsync($"/api/recipes/{sauceId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await a.DeleteAsync($"/api/recipes/{sauceId}")).StatusCode);
+    }
+
+    [PostgresFact]
     public async Task The_configured_owner_claims_the_existing_data_and_can_administer()
     {
         var session = await Json(await Owner().GetAsync("/api/account/session"));

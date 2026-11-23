@@ -206,4 +206,55 @@ public class NestedRecipeTests
         Assert.Contains("finished weight", e.Message);
         Assert.Empty(_store.Diary);
     }
+
+    [Fact]
+    public async Task Unknown_nutrients_stay_unknown_through_nesting_and_known_ones_add_up()
+    {
+        // The sauce's tomatoes report vitamin C; the noodles don't; nothing reports vitamin D.
+        var tomato = new Domain.Foods.Food("Tomatoes, raw", Domain.Foods.FoodSource.UsdaSrLegacy, new Domain.Nutrients.NutrientProfile(new Dictionary<int, double>
+        {
+            [Domain.Nutrients.NutrientIds.Energy] = 20, [Domain.Nutrients.NutrientIds.VitaminC] = 14,
+        }));
+        _store.Foods.Add(tomato);
+        var sauce = (await Recipes().CreateAsync(new SaveRecipeRequest("Sauce", 2, ["200 g tomatoes"], null, null, null, null, null))).Summary.Id;
+        await Recipes().UpdateIngredientAsync(sauce, 0, new UpdateIngredientRequest(tomato.Id, 200, null, null, null)); // 28 mg C, 14 per serving
+
+        var noodles = await SimpleAsync("Noodles", 100, 1);
+        var outer = (await Recipes().CreateAsync(new SaveRecipeRequest("Noodles with sauce", 1, ["1 serving noodles", "1 serving sauce"], null, null, null, null, null))).Summary.Id;
+        await Recipes().UpdateIngredientAsync(outer, 0, new UpdateIngredientRequest(null, null, null, null, null, noodles, 1));
+        var d = await Recipes().UpdateIngredientAsync(outer, 1, new UpdateIngredientRequest(null, null, null, null, null, sauce, 1));
+
+        var n = R(outer).NutritionPerServing;
+        Assert.Equal(14, n[Domain.Nutrients.NutrientIds.VitaminC]!.Value, 2);           // the known part only (a minimum)
+        Assert.False(n.Has(Domain.Nutrients.NutrientIds.VitaminD));                     // nobody reports it: unknown, not 0
+        Assert.Equal(100 + 20, d.Total!.Calories, 1);
+    }
+
+    [Fact]
+    public async Task Existing_recipes_without_nested_lines_calculate_exactly_as_before()
+    {
+        var id = await SimpleAsync("Plain stew", 500, 2, kcalPer100: 80); // 400 kcal over 2
+        var r = R(id);
+        var foods = _store.Foods.ToDictionary(f => f.Id);
+        var before = RecipeNutritionCalculator.Calculate(r, foods);               // the old call, no recipes passed
+        var now = RecipeNutritionCalculator.Calculate(r, foods, new Dictionary<Guid, Recipe>());
+        Assert.Equal(before.PerServing, now.PerServing);
+        Assert.Equal(before.Coverage, now.Coverage);
+        Assert.Equal(200, r.NutritionPerServing.Calories, 1);
+        Assert.Equal(["serving"], (await Recipes().GetAsync(id)).Measures!.Select(m => m.Unit)); // no weight/volume until entered
+        Assert.Empty(r.SubRecipeIds);
+    }
+
+    [Fact]
+    public async Task An_ingredient_list_saved_before_nesting_existed_still_reads()
+    {
+        // JSON as stored by earlier versions: no recipeId/recipeName/servings keys.
+        const string old = """[{"position":0,"rawText":"100 g rice","amount":100,"unit":"g","foodText":"rice","preparation":null,"foodId":"5b0a7c0e-8c7e-4a53-9f25-0d0b8f1f0c11","foodName":"Rice","grams":100,"status":"Confirmed","matchConfidence":1,"resolutionNote":null}]""";
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+        var lines = System.Text.Json.JsonSerializer.Deserialize<List<RecipeIngredient>>(old, options)!;
+        var line = Assert.Single(lines);
+        Assert.Null(line.RecipeId);
+        Assert.False(line.IsRecipe);
+        Assert.True(line.CountsTowardNutrition);
+    }
 }
