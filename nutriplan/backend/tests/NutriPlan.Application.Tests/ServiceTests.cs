@@ -72,6 +72,11 @@ public class ServiceTests
         Assert.Equal(recipeId, lunch.Item.RecipeId);
         Assert.Equal(linkedPlanId, breakfast.PlanEntryId);
         Assert.Equal("keep this", breakfast.Note);
+        Assert.Equal(40, breakfast.Item.Grams);
+        Assert.Equal(40, breakfast.Item.Quantity);
+        Assert.Equal("g", breakfast.Item.QuantityUnit);
+        Assert.Equal(2, lunch.Item.Quantity);
+        Assert.Equal("servings", lunch.Item.QuantityUnit);
         Assert.Equal(foodSnapshot.Nutrients.Amounts, breakfast.Item.Nutrients.Amounts);
         Assert.Equal(recipeSnapshot.Nutrients.Amounts, lunch.Item.Nutrients.Amounts);
     }
@@ -93,6 +98,38 @@ public class ServiceTests
 
         Assert.Equal(0, _store.Saves);
         Assert.Equal(MealSlot.Breakfast, entry.Meal);
+    }
+
+    [Fact]
+    public async Task Bulk_move_rejects_more_than_100_entries_before_writing()
+    {
+        var entry = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Snack", 100));
+        ((IDiaryRepository)_store).Add(entry);
+        var ids = Enumerable.Range(0, 101).Select(_ => Guid.NewGuid()).ToArray();
+
+        await Assert.ThrowsAsync<Common.ValidationException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, ids, MealSlot.Dinner)));
+
+        Assert.Equal(0, _store.Saves);
+        Assert.Equal(MealSlot.Breakfast, entry.Meal);
+    }
+
+    [Fact]
+    public async Task Bulk_move_rejects_mixed_dates_without_moving_any_entry()
+    {
+        var current = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Today", 100));
+        var previous = new DiaryEntry(_store.Today.AddDays(-1), MealSlot.Lunch, ItemSnapshot.QuickCalories("Yesterday", 200));
+        ((IDiaryRepository)_store).Add(current);
+        ((IDiaryRepository)_store).Add(previous);
+
+        await Assert.ThrowsAsync<Common.NotFoundException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [current.Id, previous.Id], MealSlot.Dinner)));
+
+        Assert.Equal(0, _store.Saves);
+        Assert.Equal(_store.Today, current.Date);
+        Assert.Equal(MealSlot.Breakfast, current.Meal);
+        Assert.Equal(_store.Today.AddDays(-1), previous.Date);
+        Assert.Equal(MealSlot.Lunch, previous.Meal);
     }
 
     [Fact]

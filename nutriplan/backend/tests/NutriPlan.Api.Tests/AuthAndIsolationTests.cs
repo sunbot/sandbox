@@ -401,6 +401,25 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
             Assert.Equal("Dinner", (string?)e!["meal"]);
             Assert.Equal(Day.ToString("yyyy-MM-dd"), (string?)e["date"]);
         });
+        var callerEntry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Lunch", foodId, grams = 10.0 }));
+        var otherFood = await Json(await b.PostAsJsonAsync("/api/foods", new
+        {
+            name = "Qwzx other member bar", brand = (string?)null, barcode = (string?)null, servingGrams = 40.0, servingDescription = "1 bar",
+            nutrientsPerServing = new Dictionary<string, double> { ["1008"] = 150 },
+        }));
+        var otherEntry = await Json(await b.PostAsJsonAsync("/api/diary/food", new
+        {
+            date = Day, meal = "Breakfast", foodId = (string)otherFood["id"]!, grams = 40.0,
+        }));
+        Assert.Equal(HttpStatusCode.NotFound, (await a.PostAsJsonAsync("/api/diary/move", new
+        {
+            date = Day, entryIds = new[] { (string)callerEntry["id"]!, (string)otherEntry["id"]! }, meal = "Snack",
+        })).StatusCode);
+        var afterMixedOwnerMove = await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        var callerEntryAfter = afterMixedOwnerMove["meals"]!.AsArray()
+            .SelectMany(m => m!["entries"]!.AsArray())
+            .Single(e => (string?)e!["id"] == (string)callerEntry["id"]!)!;
+        Assert.Equal("Lunch", (string?)callerEntryAfter!["meal"]);
 
         // Another user can neither read the food nor change the entry or the planned item.
         Assert.Equal(HttpStatusCode.NotFound, (await b.GetAsync($"/api/foods/{foodId}")).StatusCode);
