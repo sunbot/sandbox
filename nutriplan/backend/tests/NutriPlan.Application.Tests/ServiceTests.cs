@@ -75,6 +75,21 @@ public class ServiceTests
     }
 
     [Fact]
+    public async Task Budget_preview_uses_unsaved_settings_and_leaves_saved_targets_alone()
+    {
+        _store.Targets.Calories = 2000;
+        _store.Targets.BudgetMode = BudgetMode.Daily;
+        var p = await Plan().PreviewBudgetAsync(new BudgetPreviewRequest(1400, BudgetMode.Weekly, DayOfWeek.Monday, 0.15, 0, _store.Today));
+        Assert.Equal(1400, p.BaseTarget);
+        Assert.Equal(1190, p.MinTarget);
+        Assert.Equal(1610, p.MaxTarget);
+        Assert.Equal(2000, _store.Targets.Calories);
+        Assert.Equal(BudgetMode.Daily, _store.Targets.BudgetMode);
+        Assert.Equal(0.15, _store.Targets.MaxDailyAdjustment);
+        await Assert.ThrowsAsync<Common.ValidationException>(() => Plan().PreviewBudgetAsync(new BudgetPreviewRequest(0, null, null, null, 0, null)));
+    }
+
+    [Fact]
     public async Task Batch_recipe_is_bought_once_on_the_grocery_list()
     {
         var chicken = _store.AddFood("Chicken breast, raw", 120, 22.5, 0, 2.6);

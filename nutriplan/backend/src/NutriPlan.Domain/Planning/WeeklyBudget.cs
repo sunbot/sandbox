@@ -29,6 +29,19 @@ public sealed record WeekBudget(
     double UnabsorbedCarryover,
     IReadOnlyList<DayBudget> Days);
 
+/// <summary>What a flexibility setting allows (<see cref="MinTarget"/>–<see cref="MaxTarget"/> a day) and, in weekly mode,
+/// roughly what the days after today become if today ends <see cref="ExtraKcal"/> over its target. A preview only.</summary>
+public sealed record BudgetPreview(
+    double BaseTarget,
+    double MinTarget,
+    double MaxTarget,
+    double TodayTarget,
+    double ExtraKcal,
+    int DaysAfterToday,
+    double? NextDaysTarget,
+    bool CapReached,
+    double UnabsorbedCarryover);
+
 /// <summary>
 /// "I strayed, now what?" In weekly mode, whatever was eaten over/under on past days is spread
 /// across the remaining days (including today), capped at ±<see cref="NutritionTargets.MaxDailyAdjustment"/>
@@ -89,5 +102,33 @@ public static class WeeklyBudgetCalculator
             result.Sum(d => d.Projected),
             Math.Round(unabsorbed),
             result);
+    }
+
+    /// <summary>Allowed daily range for the setting. Each day stands alone → exactly the base target.</summary>
+    public static (double Min, double Max) DailyRange(NutritionTargets targets)
+    {
+        if (targets.BudgetMode != BudgetMode.Weekly) return (Math.Round(targets.Calories), Math.Round(targets.Calories));
+        var cap = targets.Calories * targets.MaxDailyAdjustment;
+        return (Math.Round(targets.Calories - cap), Math.Round(targets.Calories + cap));
+    }
+
+    /// <summary>Runs the same <see cref="Calculate"/> twice: once as things stand, once with today ending at its adjusted
+    /// target plus <paramref name="extraKcal"/> (so the following days absorb it, within the cap).</summary>
+    public static BudgetPreview Preview(NutritionTargets targets, DateOnly today, IReadOnlyList<DayBudgetInput> days, double extraKcal)
+    {
+        var now = Calculate(targets, today, days);
+        var todayBudget = now.Days.FirstOrDefault(d => d.IsToday);
+        var (min, max) = DailyRange(targets);
+        var after = days.Count(d => d.Date > today);
+        var todayTarget = todayBudget?.AdjustedTarget ?? Math.Round(targets.Calories);
+        if (targets.BudgetMode != BudgetMode.Weekly || todayBudget is null || after == 0)
+            return new BudgetPreview(targets.Calories, min, max, todayTarget, extraKcal, after, null, false, 0);
+
+        var ate = todayTarget + extraKcal;
+        var hypothetical = days.Select(d => d.Date == today ? d with { ConsumedCalories = ate } : d).ToList();
+        var next = Calculate(targets, today.AddDays(1), hypothetical);
+        var nextTarget = next.Days.First(d => d.Date > today).AdjustedTarget;
+        return new BudgetPreview(targets.Calories, min, max, todayTarget, extraKcal, after, nextTarget,
+            next.UnabsorbedCarryover != 0, next.UnabsorbedCarryover);
     }
 }

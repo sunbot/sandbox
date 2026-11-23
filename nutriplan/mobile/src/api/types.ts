@@ -231,6 +231,12 @@ export type Targets = {
   nutrients: NutrientTarget[];
 };
 
+/** What unsaved Targets settings would mean (a preview, computed by the server's weekly budget calculation). */
+export type BudgetPreview = {
+  baseTarget: number; minTarget: number; maxTarget: number; todayTarget: number; extraKcal: number;
+  daysAfterToday: number; nextDaysTarget: number | null; capReached: boolean; unabsorbedCarryover: number;
+};
+
 /** Given: the amount you said. Assumed: no amount, a standard USDA portion to confirm. NeedsAmount: you must choose one. */
 export type QuantityStatus = 'Given' | 'Assumed' | 'NeedsAmount';
 export type FoodMatch = {

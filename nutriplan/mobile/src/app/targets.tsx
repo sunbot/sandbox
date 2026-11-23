@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
-import { useTargets, useUpdateTargets } from '@/api/hooks';
+import { useBudgetPreview, useTargets, useUpdateTargets } from '@/api/hooks';
 import type { Targets } from '@/api/types';
 import { AppCard, AppText, EmptyState, FilterChip, PrimaryButton, Skeleton, useSnackbar } from '@/components/ds';
 import { CloudOff, Star } from '@/components/ds/icons';
+import { exampleText, rangeText } from '@/features/targets/budgetPreview';
+import { useDebounced } from '@/lib/useDebounced';
 import { useTheme } from '@/theme/ThemeProvider';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const ADJUST = [0.1, 0.15, 0.2, 0.25];
+const EXAMPLE_OVER_KCAL = 300;
 const MACRO_IDS = [1008, 1003, 1004, 1005];
 
 /** Daily calories and macros, how the week balances, and micronutrient targets with the ones you focus on. */
@@ -50,6 +53,11 @@ function TargetsForm({ t: targets }: { t: Targets }) {
   const [focus, setFocus] = useState<Set<number>>(() => new Set(targets.nutrients.filter((n) => n.isFocus).map((n) => n.nutrientId)));
   const macroKcal = Number(form.protein) * 4 + Number(form.carbs) * 4 + Number(form.fat) * 9;
   const mismatch = Math.abs(macroKcal - Number(form.calories)) > 50;
+
+  const kcalValue = Number(useDebounced(form.calories, 400));
+  const validKcal = Number.isFinite(kcalValue) && kcalValue > 0;
+  const preview = useBudgetPreview({ calories: kcalValue, mode, weekStartsOn: weekStart, maxDailyAdjustment: adjust, extraKcal: EXAMPLE_OVER_KCAL }, validKcal);
+  const example = preview.data && mode === 'Weekly' ? exampleText(preview.data) : null;
 
   const save = async () => {
     const overrides: Record<number, number | null> = {};
@@ -97,6 +105,14 @@ function TargetsForm({ t: targets }: { t: Targets }) {
               {ADJUST.map((a) => <FilterChip key={a} label={`±${Math.round(a * 100)}%`} selected={Math.abs(adjust - a) < 0.001} onPress={() => setAdjust(a)} />)}
             </View>
             <AppText variant="caption" tone="muted">Extra calories today lower the rest of the week a little (and the other way round), never more than this per day.</AppText>
+            {preview.data ? (
+              <View style={{ gap: t.space.xs, marginTop: t.space.xs }} accessibilityLiveRegion="polite">
+                <AppText variant="label" tone="secondary">Preview — not saved</AppText>
+                <AppText variant="secondary" numeric>{rangeText(preview.data, Math.round(adjust * 100))}</AppText>
+                <AppText variant="caption" tone="muted">That's the allowed range. Your actual target on any day depends on what you've logged this week and the days left.</AppText>
+                {example ? <AppText variant="caption" tone="muted" numeric>{example}</AppText> : null}
+              </View>
+            ) : validKcal ? null : <AppText variant="caption" tone="warning">Enter a calorie target above to preview.</AppText>}
           </View>
         ) : null}
         <View style={{ gap: t.space.xs }}>

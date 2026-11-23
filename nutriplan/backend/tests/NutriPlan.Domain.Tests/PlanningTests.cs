@@ -51,6 +51,62 @@ public class PlanningTests
         Assert.Equal(-5800, week.UnabsorbedCarryover);
     }
 
+    [Theory]
+    [InlineData(0.10, 1260, 1540)]
+    [InlineData(0.15, 1190, 1610)]
+    [InlineData(0.20, 1120, 1680)]
+    [InlineData(0.25, 1050, 1750)]
+    public void Daily_range_follows_the_flexibility_setting(double adj, double min, double max)
+    {
+        var targets = new NutritionTargets { Calories = 1400, BudgetMode = BudgetMode.Weekly, MaxDailyAdjustment = adj };
+        Assert.Equal((min, max), WeeklyBudgetCalculator.DailyRange(targets));
+    }
+
+    [Fact]
+    public void Daily_range_rounds_and_collapses_when_each_day_stands_alone()
+    {
+        Assert.Equal((1730, 2271), WeeklyBudgetCalculator.DailyRange(new NutritionTargets { Calories = 2000.5, BudgetMode = BudgetMode.Weekly, MaxDailyAdjustment = 0.135 }));
+        Assert.Equal((2000, 2000), WeeklyBudgetCalculator.DailyRange(new NutritionTargets { Calories = 2000, BudgetMode = BudgetMode.Daily }));
+    }
+
+    [Fact]
+    public void Preview_matches_the_production_calculation_for_the_following_days()
+    {
+        var targets = new NutritionTargets { Calories = 2000, BudgetMode = BudgetMode.Weekly, MaxDailyAdjustment = 0.25 };
+        var days = Enumerable.Range(0, 7).Select(i => new DayBudgetInput(Monday.AddDays(i), 0, 0)).ToList();
+        var today = Monday.AddDays(1); // 5 days remain after today
+        var p = WeeklyBudgetCalculator.Preview(targets, today, days, 500);
+        Assert.Equal(2000, p.TodayTarget);
+        Assert.Equal(5, p.DaysAfterToday);
+        Assert.Equal(1900, p.NextDaysTarget); // 500 over, spread over 5 days
+        Assert.False(p.CapReached);
+
+        var asLogged = days.Select(d => d.Date == today ? d with { ConsumedCalories = 2500 } : d).ToList();
+        var real = WeeklyBudgetCalculator.Calculate(targets, today.AddDays(1), asLogged);
+        Assert.Equal(real.Days[2].AdjustedTarget, p.NextDaysTarget);
+    }
+
+    [Fact]
+    public void Preview_reports_cap_saturation_and_never_exceeds_the_cap()
+    {
+        var targets = new NutritionTargets { Calories = 2000, BudgetMode = BudgetMode.Weekly, MaxDailyAdjustment = 0.10 };
+        var days = Enumerable.Range(0, 7).Select(i => new DayBudgetInput(Monday.AddDays(i), 0, 0)).ToList();
+        var p = WeeklyBudgetCalculator.Preview(targets, Monday.AddDays(5), days, 2000);
+        Assert.Equal(1800, p.NextDaysTarget);
+        Assert.True(p.CapReached);
+        Assert.Equal(-1800, p.UnabsorbedCarryover); // 2000 over, Sunday absorbs at most 200
+    }
+
+    [Fact]
+    public void Preview_has_no_example_on_the_last_day_or_when_days_stand_alone()
+    {
+        var days = Enumerable.Range(0, 7).Select(i => new DayBudgetInput(Monday.AddDays(i), 0, 0)).ToList();
+        var weekly = new NutritionTargets { Calories = 2000, BudgetMode = BudgetMode.Weekly };
+        Assert.Null(WeeklyBudgetCalculator.Preview(weekly, Monday.AddDays(6), days, 300).NextDaysTarget);
+        var daily = new NutritionTargets { Calories = 2000, BudgetMode = BudgetMode.Daily };
+        Assert.Null(WeeklyBudgetCalculator.Preview(daily, Monday, days, 300).NextDaysTarget);
+    }
+
     [Fact]
     public void Plan_entry_becomes_diary_entry_linked_to_plan()
     {
