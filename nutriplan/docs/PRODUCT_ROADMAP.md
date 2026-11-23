@@ -234,7 +234,7 @@ Reviewed at the end of Phases 2 and 2.5 (2026-11-23), tested locally with Postgr
 |---|---|---|---|
 | #65 | Clear a meal (diary): confirm, Undo, planned items reopened | Phase 6 (UX) | atomic; refuses partial deletes if the meal changed; own isolation + Postgres tests |
 | #67 | Remove/restore grocery items (also plan-generated) | Phase 6 (UX) | additive migration `GroceryExclusions` (new owner-scoped table); cross-user and browser tests added at merge |
-| #66 | Bulk-move diary entries | Phase 6 (UX) | **left open**: still marked WIP and being worked on at review time |
+| #66 | Move several diary entries to another meal | Phase 6 (UX) | merged later (`bff4a51`) once Copilot finished: 5 conflicts with #65 resolved keeping both; Clear hidden while selecting; a fragile test assertion fixed |
 
 ## Development principles
 

@@ -33,7 +33,7 @@ stands right now.
 
 - #65 clear a meal: merged (`176768a`); Android checklist item 7.
 - #67 grocery remove/restore: merged (`eeb4c25`) plus tests (`102cc98`). Production gets a new table via an additive migration on deploy.
-- #66 bulk-move diary entries: left open (WIP, still being changed at review time). Re-check at the next phase end.
+- #66 bulk-move diary entries: merged at the owner's request once Copilot finished (`bff4a51`): conflicts with #65 resolved, Clear hidden while selecting, a fragile test fixed. Android checklist item 8.
 
 ## Blockers / safety notes
 
@@ -53,3 +53,4 @@ stands right now.
   RESTAURANT_NUTRITION_STRATEGY.md written. Curry reproduced (388 kcal versus 364 reported); coconut milk and sweet potato
   mismatches found.
 - 2026-11-23 — End-of-phase Copilot review: #65 and #67 merged after local backend (Postgres), unit and browser runs; #66 left open (WIP).
+- 2026-11-23 — Copilot #66 merged into master (`bff4a51`) after resolving conflicts with #65; all suites pass (backend with Postgres, unit, browser 38).
