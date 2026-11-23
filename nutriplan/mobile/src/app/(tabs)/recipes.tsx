@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useRecipeMutations, useRecipes } from '@/api/hooks';
 import { AppCard, AppText, Badge, EmptyState, PrimaryButton, SearchField, SecondaryButton, Skeleton } from '@/components/ds';
 import { ChefHat, ChevronRight, Download, Plus, Star } from '@/components/ds/icons';
+import { paprikaImportError, urlImportError, type ImportNotice } from '@/features/recipe/importNotice';
 import { RecipeThumb } from '@/features/recipe/RecipeThumb';
 import { useServerAuth } from '@/lib/authImage';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -21,11 +22,15 @@ export default function RecipesScreen() {
   const m = useRecipeMutations();
   const server = useServerAuth();
 
-  // Shown on the screen (not in an alert, which doesn't appear in the web version).
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; title: string; lines: string[] } | null>(null);
+  // Shown next to the import method that produced them (not in an alert, which doesn't appear in the web version).
+  const [fileNotice, setFileNotice] = useState<ImportNotice | null>(null);
+  const [urlNotice, setUrlNotice] = useState<ImportNotice | null>(null);
+
+  // The tab stays mounted while you're elsewhere: drop old results when leaving so they aren't stale on return.
+  useFocusEffect(useCallback(() => () => { setFileNotice(null); setUrlNotice(null); }, []));
 
   const importPaprika = async () => {
-    setNotice(null);
+    setFileNotice(null);
     const pick = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
     if (pick.canceled || !pick.assets?.[0]) return;
     const a = pick.assets[0];
@@ -33,7 +38,7 @@ export default function RecipesScreen() {
       // On web the picker gives a real File; on Android a file:// copy in the cache.
       const result = await m.importPaprika.mutateAsync({ uri: a.uri, name: a.name, mimeType: a.mimeType, file: a.file });
       const total = result.imported + result.updated;
-      setNotice({
+      setFileNotice({
         kind: total > 0 ? 'ok' : 'error',
         title: total > 0
           ? `Imported ${total} recipe${total === 1 ? '' : 's'} (${result.imported} new, ${result.updated} updated)`
@@ -45,19 +50,28 @@ export default function RecipesScreen() {
         ],
       });
     } catch (e) {
-      setNotice({ kind: 'error', title: 'Import failed', lines: [e instanceof Error ? e.message : String(e)] });
+      setFileNotice(paprikaImportError(e instanceof Error ? e.message : String(e)));
     }
   };
 
   const importUrl = async () => {
+    setUrlNotice(null);
     try {
       const r = await m.importUrl.mutateAsync(url.trim());
       setUrl('');
       router.push({ pathname: '/recipe/[id]', params: { id: r.summary.id } });
     } catch (e) {
-      setNotice({ kind: 'error', title: 'Import failed', lines: [e instanceof Error ? e.message : String(e)] });
+      setUrlNotice(urlImportError(e instanceof Error ? e.message : String(e)));
     }
   };
+
+  const noticeBox = (n: ImportNotice | null, actions?: React.ReactNode) => n ? (
+    <View accessibilityLiveRegion="polite" style={{ gap: t.space.sm, padding: t.space.md, borderRadius: t.radii.button, backgroundColor: n.kind === 'error' ? t.colors.errorLight : t.colors.primaryLight }}>
+      <AppText variant="bodyStrong" tone={n.kind === 'error' ? 'error' : 'default'}>{n.title}</AppText>
+      {n.lines.map((l, i) => <AppText key={i} variant="secondary" tone="secondary">{l}</AppText>)}
+      {actions}
+    </View>
+  ) : null;
 
   const list = recipes.data ?? [];
 
@@ -72,25 +86,29 @@ export default function RecipesScreen() {
         <View style={{ gap: t.space.md, marginBottom: t.space.sm }}>
           {planDate ? <AppText variant="label" tone="primary">Pick a recipe to plan</AppText> : null}
           <SearchField value={search} onChangeText={setSearch} onClear={() => setSearch('')} placeholder="Search recipes or categories" accessibilityLabel="Search recipes" />
+          <PrimaryButton label="New recipe" icon={Plus} onPress={() => router.push('/recipe/edit')} />
           <AppCard style={{ gap: t.space.md }}>
-            <View style={{ flexDirection: 'row', gap: t.space.sm, flexWrap: 'wrap' }}>
-              <PrimaryButton label="New recipe" icon={Plus} onPress={() => router.push('/recipe/edit')} />
-              <SecondaryButton label="Import Paprika file" icon={Download} onPress={importPaprika} loading={m.importPaprika.isPending} />
-            </View>
-            {m.importPaprika.isPending ? <AppText variant="secondary" tone="secondary">Importing and matching ingredients… a large export can take a minute or two.</AppText> : null}
+            <AppText variant="cardTitle">Import from website</AppText>
             <View style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'center' }}>
-              <TextInput value={url} onChangeText={setUrl} placeholder="Or paste a recipe link" autoCapitalize="none" keyboardType="url" placeholderTextColor={t.colors.textMuted}
+              <TextInput value={url} onChangeText={(v) => { setUrl(v); setUrlNotice(null); }} placeholder="Paste a recipe link" autoCapitalize="none" keyboardType="url" placeholderTextColor={t.colors.textMuted}
                 accessibilityLabel="Recipe link" onSubmitEditing={() => url.trim() && importUrl()}
                 style={[t.type.body, { flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: t.space.md, borderRadius: t.radii.button, borderWidth: 1, borderColor: t.colors.border, backgroundColor: t.colors.surfaceMuted, color: t.colors.text }]} />
               <SecondaryButton label="Import" onPress={importUrl} disabled={!url.trim()} loading={m.importUrl.isPending} />
             </View>
-            {notice ? (
-              <View accessibilityLiveRegion="polite" style={{ gap: 4, padding: t.space.md, borderRadius: t.radii.button, backgroundColor: notice.kind === 'error' ? t.colors.errorLight : t.colors.primaryLight }}>
-                <AppText variant="bodyStrong" tone={notice.kind === 'error' ? 'error' : 'default'}>{notice.title}</AppText>
-                {notice.lines.map((l, i) => <AppText key={i} variant="secondary" tone="secondary">{l}</AppText>)}
+            {noticeBox(urlNotice, urlNotice?.fallback ? (
+              <View style={{ gap: t.space.sm }}>
+                <AppText variant="secondary" tone="secondary">You can paste the ingredients and instructions into a new recipe, or import a Paprika export if you have one.</AppText>
+                <SecondaryButton label="Enter recipe manually" icon={Plus} onPress={() => router.push('/recipe/edit')} />
               </View>
-            ) : null}
-            <AppText variant="caption" tone="muted">In Paprika: select recipes → Share/Export → Paprika Recipe Format. Links work when the page publishes structured recipe data (most recipe sites do).</AppText>
+            ) : null)}
+            <AppText variant="caption" tone="muted">Works when the page publishes structured recipe data. Some sites block automated imports.</AppText>
+          </AppCard>
+          <AppCard style={{ gap: t.space.md }}>
+            <AppText variant="cardTitle">Import Paprika file</AppText>
+            <SecondaryButton label="Import Paprika file" icon={Download} onPress={importPaprika} loading={m.importPaprika.isPending} />
+            {m.importPaprika.isPending ? <AppText variant="secondary" tone="secondary">Importing and matching ingredients… a large export can take a minute or two.</AppText> : null}
+            {noticeBox(fileNotice)}
+            <AppText variant="caption" tone="muted">In Paprika: select recipes → Share/Export → Paprika Recipe Format.</AppText>
           </AppCard>
         </View>
       }
