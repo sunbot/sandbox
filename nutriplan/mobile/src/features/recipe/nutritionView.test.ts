@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Ingredient, Nutrition } from '../../api/types';
 import {
-  availableModes, calorieShare, scaleSummary, closedEditor, syncGramsEditor, typeGrams, eatingNutrition, effectiveMode, gramsPerServing, ingredientCounts, ingredientState, logRecipeRequest,
+  availableModes, calorieShare, scaleSummary, reviewQueue, nextToReview, closedEditor, syncGramsEditor, typeGrams, eatingNutrition, effectiveMode, gramsPerServing, ingredientCounts, ingredientState, logRecipeRequest,
   macroComposition, nutritionFor, parseServings, per100gAvailable, reliabilityNote, roundedPercents, scaleNutrition, servingsWord,
 } from './nutritionView.ts';
 
@@ -216,4 +216,24 @@ test('syncing an unchanged state returns the same object (no render loop)', () =
 test('the scale summary says what changes', () => {
   assert.equal(scaleSummary(4, 2), 'Makes 4 → 8 servings · every amount ×2');
   assert.equal(scaleSummary(2, 0.5), 'Makes 2 → 1 serving · every amount ×0.5');
+});
+
+test('the review queue holds unmatched and to-check lines in order, and Next walks it', () => {
+  const ing = (position: number, status: Ingredient['status'], extra: Partial<Ingredient> = {}): Ingredient =>
+    ({ position, rawText: `line ${position}`, foodText: 'x', status, matchConfidence: 0.9, grams: 10, ...extra });
+  const lines = [ing(0, 'Confirmed'), ing(1, 'Unmatched', { grams: null }), ing(2, 'AutoMatched'), ing(3, 'AutoMatched', { matchConfidence: 0.3 }),
+    ing(4, 'Ignored', { note: 'Section header' }), ing(5, 'AutoMatched', { grams: null })];
+  const q = reviewQueue(lines);
+  assert.deepEqual(q, [1, 3, 5]);
+  assert.equal(nextToReview(q, null), 1);
+  assert.equal(nextToReview(q, 1), 3);
+  assert.equal(nextToReview(q, 5), null);
+  assert.equal(nextToReview([3, 5], 1), 3);        // line 1 was fixed and left the queue: carry on from where we were
+  assert.equal(nextToReview([], null), null);
+});
+
+test('a recipe logged in another of its measures sends that amount; servings alone otherwise', () => {
+  const base = { date: '2026-11-23', meal: 'Lunch' as const, recipeId: 'r', servings: 0.5 };
+  assert.deepEqual(logRecipeRequest({ ...base, amount: 1, unit: 'cup' }), { ...base, amount: 1, unit: 'cup' });
+  assert.deepEqual(logRecipeRequest({ ...base, amount: 0.5, unit: 'serving' }), base);
 });

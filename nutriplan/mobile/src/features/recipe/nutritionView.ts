@@ -191,10 +191,16 @@ export const typeGrams = (state: GramsEditor, text: string): GramsEditor => ({ .
 
 /* ───────── Logging ───────── */
 
-export type LogRecipeInput = { date: string; meal: Meal; recipeId: string; servings: number };
+export type LogRecipeInput = { date: string; meal: Meal; recipeId: string; servings: number; amount?: number; unit?: string };
 
-/** The request for "Log now": exactly the meal and servings the user chose, never a time-of-day guess. */
-export const logRecipeRequest = (input: LogRecipeInput): LogRecipeInput => ({ date: input.date, meal: input.meal, recipeId: input.recipeId, servings: input.servings });
+/**
+ * The request for "Log now": exactly the meal and amount the user chose, never a time-of-day guess. An amount in another of
+ * the recipe's measures ("1.5 cup") is sent as chosen, with its servings; the server converts and is authoritative.
+ */
+export const logRecipeRequest = (input: LogRecipeInput): LogRecipeInput => ({
+  date: input.date, meal: input.meal, recipeId: input.recipeId, servings: input.servings,
+  ...(input.amount !== undefined && input.unit && input.unit !== 'serving' ? { amount: input.amount, unit: input.unit } : {}),
+});
 
 export const servingsWord = (n: number) => `${Number.isInteger(n) ? n : Math.round(n * 100) / 100} serving${n === 1 ? '' : 's'}`;
 
@@ -207,4 +213,18 @@ export const SCALE_CHOICES = [0.5, 1.5, 2, 3] as const;
 export function scaleSummary(servings: number, factor: number): string {
   const after = Math.round(servings * factor * 100) / 100;
   return `Makes ${Math.round(servings * 100) / 100} → ${servingsWord(after)} · every amount ×${factor}`;
+}
+
+/* ───────── Reviewing ingredients ───────── */
+
+/** The lines that need a look, in recipe order: unmatched, and matches to check (weak or without an amount). */
+export function reviewQueue(ings: Pick<Ingredient, 'position' | 'status' | 'note' | 'grams' | 'matchConfidence'>[]): number[] {
+  return ings.filter((i) => { const s = ingredientState(i); return s === 'unmatched' || s === 'check'; }).map((i) => i.position);
+}
+
+/** The next line to review after `current` (the queue is re-read after every change, so fixed lines drop out); null when done. */
+export function nextToReview(queue: number[], current: number | null): number | null {
+  if (queue.length === 0) return null;
+  if (current === null) return queue[0];
+  return queue.find((p) => p > current) ?? null;
 }

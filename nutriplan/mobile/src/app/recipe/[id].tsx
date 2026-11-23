@@ -3,14 +3,16 @@ import { Linking, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLogRecipe, usePlanMutations, useRecipe, useRecipeMutations } from '@/api/hooks';
 import { AppCard, AppText, ConfirmationSheet, EmptyState, FilterChip, PrimaryButton, SecondaryButton, SectionHeader, Skeleton, TextButton, useSnackbar } from '@/components/ds';
-import { CalendarPlus, Check, ChefHat, ExternalLink, Layers, Plus, RefreshCw } from '@/components/ds/icons';
+import { CalendarPlus, Check, ChefHat, CircleAlert, ExternalLink, Layers, Plus, RefreshCw } from '@/components/ds/icons';
 import { IngredientNutritionRow } from '@/features/recipe/IngredientNutritionRow';
 import { IngredientSheet } from '@/features/recipe/IngredientSheet';
+import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
+import { checkQuantity, matchMeasure, parseQuantity, roundAmount, SERVING } from '@/features/quantity/quantity';
 import { NutritionSummary } from '@/features/recipe/NutritionSummary';
 import { RecipeHeader } from '@/features/recipe/RecipeHeader';
 import { ServingModeSelector } from '@/features/recipe/ServingModeSelector';
 import {
-  SCALE_CHOICES, availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nutritionFor, parseServings, reliabilityNote,
+  SCALE_CHOICES, availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nextToReview, nutritionFor, parseServings, reliabilityNote, reviewQueue,
   scaleSummary, servingsWord, type NutritionMode,
 } from '@/features/recipe/nutritionView';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
@@ -29,7 +31,8 @@ export default function RecipeScreen() {
   const m = useRecipeMutations();
   const plan = usePlanMutations();
   const logRecipe = useLogRecipe();
-  const [servings, setServings] = useState('1');
+  const [amount, setAmount] = useState<QuantityValue>({ text: '1', unit: 'serving' }); // how much I'm having, in the recipe's measures
+  const [reviewing, setReviewing] = useState(false); // stepping through lines that need a look
   const [meal, setMeal] = useState<Meal>(mealForNow);
   const [batchDays, setBatchDays] = useState('3');
   const [mode, setMode] = useState<NutritionMode>('serving');
@@ -58,8 +61,14 @@ export default function RecipeScreen() {
   const counts = ingredientCounts(r.ingredients);
   const note = reliabilityNote(s.coverage, counts);
 
-  const n = parseServings(servings);
+  const measures = r.measures?.length ? r.measures : [SERVING];
+  const amountMeasure = matchMeasure(measures, amount.unit) ?? measures[0];
+  const amountQty = parseQuantity(amount.text);
+  const amountCheck = checkQuantity(amountQty, amountMeasure, true, 'serving');
+  const n = amountCheck.ok ? amountCheck.base : null; // servings, whatever measure it was typed in
+  const asChosen = n && amountQty ? { amount: roundAmount(amountQty), unit: amountMeasure.unit } : {};
   const eating = n ? eatingNutrition(s.perServing, n) : null;
+  const queue = reviewQueue(r.ingredients);
   const logDate = today();
 
   const run = async (action: () => Promise<unknown>, done?: string) => {
@@ -67,13 +76,13 @@ export default function RecipeScreen() {
   };
 
   const addToPlan = () => n && run(async () => {
-    await plan.addRecipe.mutateAsync({ date: planDate ?? logDate, meal, recipeId: s.id, servings: n });
+    await plan.addRecipe.mutateAsync({ date: planDate ?? logDate, meal, recipeId: s.id, servings: roundAmount(n), ...asChosen });
     router.back();
   });
 
   const logNow = () => n && run(async () => {
     // The meal the user picked above, never a time-of-day guess.
-    await logRecipe.mutateAsync(logRecipeRequest({ date: logDate, meal, recipeId: s.id, servings: n }));
+    await logRecipe.mutateAsync(logRecipeRequest({ date: logDate, meal, recipeId: s.id, servings: roundAmount(n), ...asChosen }));
     snackbar({ message: `Logged ${servingsWord(n)} to ${meal.toLowerCase()} today` });
   });
 
@@ -98,6 +107,15 @@ export default function RecipeScreen() {
     setScaling(null);
     setNotice(`Scaled ×${factor}: now ${servingsWord(d.summary.servings)}. Every amount changed; per-serving numbers stay the same.`);
   });
+
+  // After an action on a line: in a review, go on to the next line that needs a look; otherwise close the sheet.
+  // (A removed line shifts the ones after it up by one.)
+  const afterLine = (position: number, removed = false) => {
+    if (!reviewing) return setOpenPos(null);
+    const next = nextToReview(queue.filter((p) => p !== position), position);
+    setOpenPos(next === null ? null : removed ? next - 1 : next);
+    if (next === null) setReviewing(false);
+  };
 
   const refreshMatches = () => run(async () => {
     const d = await m.rematch.mutateAsync(s.id);
@@ -167,13 +185,12 @@ export default function RecipeScreen() {
       <AppCard style={{ gap: t.space.lg }}>
         <SectionHeader title="Log or plan" />
         <View style={{ gap: t.space.xs }}>
-          <AppText variant="label" tone="secondary">Servings I’m having</AppText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md }}>
-            <TextInput value={servings} onChangeText={setServings} keyboardType="decimal-pad" accessibilityLabel="Servings to log or plan" style={[...input, { width: 96, textAlign: 'center' }]} />
-            <AppText variant="body" tone="secondary" numeric style={{ flex: 1 }} accessibilityLiveRegion="polite">
-              {eating ? `= ${Math.round(eating.calories)} kcal · P ${Math.round(eating.protein)} · C ${Math.round(eating.carbs)} · F ${Math.round(eating.fat)}` : 'Enter a number above zero'}
-            </AppText>
-          </View>
+          <AppText variant="label" tone="secondary">How much I’m having</AppText>
+          <QuantityPicker measures={measures} value={{ text: amount.text, unit: amountMeasure.unit }} baseUnit="serving" onChange={setAmount}
+            error={amountQty !== null && !amountCheck.ok ? amountCheck.message : null} />
+          <AppText variant="body" tone="secondary" numeric accessibilityLiveRegion="polite">
+            {eating ? `= ${Math.round(eating.calories)} kcal · P ${Math.round(eating.protein)} · C ${Math.round(eating.carbs)} · F ${Math.round(eating.fat)}` : ' '}
+          </AppText>
         </View>
         <View style={{ gap: t.space.xs }}>
           <AppText variant="label" tone="secondary">Meal</AppText>
@@ -209,6 +226,15 @@ export default function RecipeScreen() {
             {counts.counted} of {counts.total} counted{counts.unmatched ? ` · ${counts.unmatched} unmatched` : ''}{counts.check ? ` · ${counts.check} to check` : ''}{counts.excluded ? ` · ${counts.excluded} left out` : ''}. Tap one to change its food or amount.
           </AppText>
         </View>
+        {queue.length > 0 ? (
+          <View style={{ marginHorizontal: t.space.lg, marginBottom: t.space.sm, padding: t.space.md, gap: t.space.sm, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+            <CircleAlert size={20} strokeWidth={1.8} color={t.colors.warning} />
+            <AppText variant="secondary" style={{ flex: 1, minWidth: 160 }}>
+              {queue.length === 1 ? '1 ingredient needs' : `${queue.length} ingredients need`} a look: no match, or a match to check. Until then, the numbers are a minimum.
+            </AppText>
+            <PrimaryButton label="Review" onPress={() => { setReviewing(true); setOpenPos(nextToReview(queue, null)); }} />
+          </View>
+        ) : null}
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>
           {r.ingredients.map((ing) => <IngredientNutritionRow key={ing.position} ingredient={ing} onPress={() => setOpenPos(ing.position)} />)}
         </View>
@@ -235,14 +261,21 @@ export default function RecipeScreen() {
         <SecondaryButton label="Delete recipe" tone="danger" onPress={() => setConfirmDelete(true)} fullWidth />
       </View>
 
-      <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => setOpenPos(null)} busy={m.updateIngredient.isPending}
+      <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => { setOpenPos(null); setReviewing(false); }} busy={m.updateIngredient.isPending}
+        footerExtra={reviewing && openPos !== null ? (() => {
+          const next = nextToReview(queue, openPos);
+          const left = queue.filter((p) => p !== openPos).length;
+          return next !== null
+            ? <SecondaryButton label={`Next to review (${left} left)`} onPress={() => setOpenPos(next)} fullWidth />
+            : <SecondaryButton label={left > 0 ? `Back to the first (${left} left)` : 'Done reviewing'} onPress={() => { if (left > 0) setOpenPos(nextToReview(queue, null)); else { setOpenPos(null); setReviewing(false); } }} fullWidth />;
+        })() : undefined}
         onChooseFood={(ing) => { setOpenPos(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
-        onLeaveOut={(ing) => { m.updateIngredient.mutate({ id: s.id, position: ing.position, ignore: true }); setOpenPos(null); }}
+        onLeaveOut={(ing) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, ignore: true }); afterLine(ing.position); })}
         onRecipeAmount={(ing) => { setOpenPos(null); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position),
           ...(ing.amount != null && ing.servings ? { amount: String(ing.amount), unit: ing.unit ?? 'serving' } : {}) } }); }}
         onOpenRecipe={(rid) => { setOpenPos(null); router.push({ pathname: '/recipe/[id]', params: { id: rid } }); }}
-        onSetAmount={(ing, amount, unit) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, amount, unit }); setOpenPos(null); })}
-        onRemove={(ing) => run(async () => { await m.removeIngredient.mutateAsync({ id: s.id, position: ing.position }); setOpenPos(null); }, `Removed “${ing.rawText}”.`)} />
+        onSetAmount={(ing, amount, unit) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, amount, unit }); afterLine(ing.position); })}
+        onRemove={(ing) => run(async () => { await m.removeIngredient.mutateAsync({ id: s.id, position: ing.position }); afterLine(ing.position, true); }, `Removed “${ing.rawText}”.`)} />
 
       <ConfirmationSheet visible={confirmDelete} title={`Delete ${s.name}?`} message="This can’t be undone. Meals you already logged or planned from it keep their nutrition."
         confirmLabel="Delete recipe" destructive loading={m.remove.isPending} onCancel={() => setConfirmDelete(false)}
