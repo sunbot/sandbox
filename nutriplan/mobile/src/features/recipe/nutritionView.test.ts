@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Ingredient, Nutrition } from '../../api/types';
 import {
-  availableModes, calorieShare, closedEditor, syncGramsEditor, typeGrams, eatingNutrition, effectiveMode, gramsPerServing, ingredientCounts, ingredientState, logRecipeRequest,
+  availableModes, calorieShare, scaleSummary, closedEditor, syncGramsEditor, typeGrams, eatingNutrition, effectiveMode, gramsPerServing, ingredientCounts, ingredientState, logRecipeRequest,
   macroComposition, nutritionFor, parseServings, per100gAvailable, reliabilityNote, roundedPercents, scaleNutrition, servingsWord,
 } from './nutritionView.ts';
 
@@ -211,4 +211,9 @@ test('syncing an unchanged state returns the same object (no render loop)', () =
   const e = syncGramsEditor(closedEditor, { position: 1, grams: 100 });
   assert.equal(syncGramsEditor(e, { position: 1, grams: 100 }), e);
   assert.equal(syncGramsEditor(closedEditor, null), closedEditor);
+});
+
+test('the scale summary says what changes', () => {
+  assert.equal(scaleSummary(4, 2), 'Makes 4 → 8 servings · every amount ×2');
+  assert.equal(scaleSummary(2, 0.5), 'Makes 2 → 1 serving · every amount ×0.5');
 });

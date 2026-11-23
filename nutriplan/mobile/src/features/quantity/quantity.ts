@@ -1,4 +1,4 @@
-import type { Item, Measure } from '@/api/types';
+import type { Ingredient, Item, Measure } from '@/api/types';
 
 /**
  * The one quantity model for logging and editing: parse what was typed, pick and convert between the measures the server
@@ -223,4 +223,13 @@ export function switchMeasure(text: string, from: Measure, to: Measure, exact: E
   const base = exact && exact.text === text ? exact.base : qty * from.base;
   const next = formatQuantity(roundFor(to, base / to.base));
   return { text: next, exact: { text: next, base } };
+}
+
+/** Where a recipe line's amount editor starts: its own amount in its own measure, else its grams, else the food's natural item. */
+export function ingredientSelection(ing: Pick<Ingredient, 'amount' | 'unit' | 'grams'>, measures: Measure[]): { text: string; unit: string } {
+  const own = ing.amount && ing.amount > 0 ? matchMeasure(measures, ing.unit) : undefined;
+  if (own) return { text: formatQuantity(ing.amount!), unit: own.unit };
+  const grams = matchMeasure(measures, 'g');
+  if (ing.grams && ing.grams > 0 && grams) return { text: formatQuantity(Math.round(ing.grams * 10) / 10), unit: grams.unit };
+  return startingSelection(measures, 'g');
 }

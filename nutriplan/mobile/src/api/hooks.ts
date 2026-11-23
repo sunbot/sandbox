@@ -224,6 +224,19 @@ export function useRecipeMutations() {
       onSuccess: refresh,
     }),
     favorite: useMutation({ mutationFn: ({ id, favorite }: { id: string; favorite: boolean }) => post(`/recipes/${id}/favorite`, { favorite }), onSuccess: refresh }),
+    addIngredient: useMutation({
+      mutationFn: ({ id, ...r }: { id: string; foodId?: string; recipeId?: string; amount?: number; unit?: string; grams?: number; servings?: number }) =>
+        post<T.RecipeDetail>(`/recipes/${id}/ingredients`, r),
+      onSuccess: refresh,
+    }),
+    removeIngredient: useMutation({
+      mutationFn: ({ id, position }: { id: string; position: number }) => api<T.RecipeDetail>(`/recipes/${id}/ingredients/${position}`, { method: 'DELETE' }),
+      onSuccess: refresh,
+    }),
+    scale: useMutation({
+      mutationFn: ({ id, factor }: { id: string; factor: number }) => post<T.RecipeDetail>(`/recipes/${id}/scale`, { factor }),
+      onSuccess: refresh,
+    }),
     updateIngredient: useMutation({
       mutationFn: ({ id, position, ...r }: { id: string; position: number; foodId?: string; recipeId?: string; servings?: number; grams?: number; amount?: number; unit?: string; ignore?: boolean }) =>
         put<T.RecipeDetail>(`/recipes/${id}/ingredients/${position}`, r),

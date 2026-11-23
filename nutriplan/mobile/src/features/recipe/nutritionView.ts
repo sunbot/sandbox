@@ -197,3 +197,14 @@ export type LogRecipeInput = { date: string; meal: Meal; recipeId: string; servi
 export const logRecipeRequest = (input: LogRecipeInput): LogRecipeInput => ({ date: input.date, meal: input.meal, recipeId: input.recipeId, servings: input.servings });
 
 export const servingsWord = (n: number) => `${Number.isInteger(n) ? n : Math.round(n * 100) / 100} serving${n === 1 ? '' : 's'}`;
+
+/* ───────── Scaling ───────── */
+
+/** Scale choices offered on a recipe; the server allows 0–20×. */
+export const SCALE_CHOICES = [0.5, 1.5, 2, 3] as const;
+
+/** What scaling will do, in words: "Makes 4 → 8 servings · every amount ×2". */
+export function scaleSummary(servings: number, factor: number): string {
+  const after = Math.round(servings * factor * 100) / 100;
+  return `Makes ${Math.round(servings * 100) / 100} → ${servingsWord(after)} · every amount ×${factor}`;
+}

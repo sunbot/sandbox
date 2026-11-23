@@ -13,14 +13,15 @@ import { useSnackbar } from '@/components/ds';
 /** Pick an amount and a meal, then log it (or put it on the plan). */
 export default function FoodAmount() {
   const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
-  const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient'; grams?: string; recipeId?: string; position?: string }>();
+  const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient' | 'add-ingredient'; grams?: string; recipeId?: string; position?: string }>();
   const food = useFood(params.id);
   const [meal, setMeal] = useState<Meal>(params.meal ?? mealForNow());
   const [value, setValue] = useState<QuantityValue | null>(null);
   const log = useLogFood();
   const { addFood } = usePlanMutations();
-  const { updateIngredient } = useRecipeMutations();
-  const forIngredient = params.mode === 'ingredient' && params.recipeId && params.position;
+  const { updateIngredient, addIngredient } = useRecipeMutations();
+  const adding = params.mode === 'add-ingredient' && !!params.recipeId;
+  const forIngredient = (params.mode === 'ingredient' && params.recipeId && params.position) || adding;
   const date = params.date ?? today();
   const planning = params.mode === 'plan';
 
@@ -34,7 +35,7 @@ export default function FoodAmount() {
   const qty = parseQuantity(v.text);
   const check = checkQuantity(qty, measure, false, base);
   const preview = previewPer100(f.per100g, check.ok ? check.base : 0);
-  const busy = log.isPending || addFood.isPending || updateIngredient.isPending;
+  const busy = log.isPending || addFood.isPending || updateIngredient.isPending || addIngredient.isPending;
 
   const save = async () => {
     if (!check.ok) return snackbar({ message: check.message });
@@ -43,6 +44,11 @@ export default function FoodAmount() {
     try {
       // The chosen measure is sent as-is ("12 almond"), so the entry reads the way it was logged; the server converts.
       const amount = { amount: roundAmount(qty!), unit: measure!.unit };
+      if (adding) {
+        await addIngredient.mutateAsync({ id: params.recipeId!, foodId: f.id, ...amount });
+        router.dismissTo({ pathname: '/recipe/[id]', params: { id: params.recipeId! } });
+        return;
+      }
       if (forIngredient) {
         await updateIngredient.mutateAsync({ id: params.recipeId!, position: Number(params.position), foodId: f.id, ...amount });
         router.dismissTo({ pathname: '/recipe/[id]', params: { id: params.recipeId! } });
@@ -82,7 +88,7 @@ export default function FoodAmount() {
         </View>
       </View>}
 
-      <Button title={forIngredient ? 'Use for this ingredient' : planning ? 'Add to plan' : `Add · ${Math.round(preview.calories)} kcal`} onPress={save} loading={busy} disabled={!check.ok || busy} />
+      <Button title={adding ? 'Add to recipe' : forIngredient ? 'Use for this ingredient' : planning ? 'Add to plan' : `Add · ${Math.round(preview.calories)} kcal`} onPress={save} loading={busy} disabled={!check.ok || busy} />
 
       <Card>
         <Text style={[font.heading, { marginBottom: spacing.sm }]}>Per 100 {f.baseUnit ?? 'g'}</Text>

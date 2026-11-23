@@ -24,11 +24,13 @@ export default function FoodSearch() {
   const settled = useDebounced(text, 500);
   const local = useFoodSearch(text);
   const branded = useBrandedSearch(settled);
+  // Choosing an ingredient (for a line, or a new one): by weight, so no per-100 ml branded drinks; never the recipe itself.
+  const forRecipe = params.mode === 'ingredient' || params.mode === 'add-ingredient';
   // Your recipes are searched after a short pause, and only once there's something to search for.
   const recipeText = useDebounced(text.trim(), 250);
   const recipeSearch = useRecipes(recipeText, recipeText.length >= 2);
   // In a recipe's ingredient search the recipe itself isn't offered (the server refuses loops either way).
-  const recipes = recipeMatches(recipeText.length >= 2 ? recipeSearch.data ?? [] : [], recipeText, params.mode === 'ingredient' ? params.recipeId : undefined);
+  const recipes = recipeMatches(recipeText.length >= 2 ? recipeSearch.data ?? [] : [], recipeText, forRecipe ? params.recipeId : undefined);
   const RECIPES_SHOWN = 5;
   const [opening, setOpening] = useState<string | null>(null);
   // A short local list keeps the packaged-products section in view; the rest is one tap away.
@@ -36,7 +38,7 @@ export default function FoodSearch() {
   const LOCAL_SHOWN = 8;
   const [openError, setOpenError] = useState<string | null>(null);
   // Recipe ingredients are matched by weight; drinks labelled per 100 ml can't be, so branded search is for logging and planning.
-  const showBranded = params.mode !== 'ingredient';
+  const showBranded = !forRecipe;
 
   const open = (id: string) => router.push({ pathname: '/food/[id]', params: { ...params, id } });
   // The chosen recipe is `id`; in ingredient mode `recipeId` stays the recipe being edited.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Item, Measure } from '../../api/types.ts';
-import { measureWorth, checkQuantity, convert, formatQuantity, initialSelection, matchMeasure, measureText, measuresForItem, parseQuantity, scaleFactor, SERVING, volumeNote } from './quantity.ts';
+import { ingredientSelection, measureWorth, checkQuantity, convert, formatQuantity, initialSelection, matchMeasure, measureText, measuresForItem, parseQuantity, scaleFactor, SERVING, volumeNote } from './quantity.ts';
 
 const m = (unit: string, base: number, kind: Measure['kind'] = 'Count', plural = unit + 's'): Measure => ({ unit, label: unit, plural, base, kind, source: null, countable: kind === 'Count' });
 const almond = m('almond', 1.2);
@@ -206,3 +206,18 @@ test('a logged recipe converts from its own saved servings, not from the recipe\
   assert.equal(scaleFactor(entry, 1, SERVING, now), 1);   // 1 serving → same as logged
   assert.equal(scaleFactor(entry, 2, now[1], now), 2);    // same unit: ratio of amounts
 });
+
+const mm = (unit: string, base: number, kind: Measure['kind'] = 'Count'): Measure => ({ unit, label: unit, plural: `${unit}s`, base, kind, source: null, countable: kind === 'Count' });
+const oats = [mm('cup', 81, 'Volume'), mm('g', 1, 'Mass'), mm('oz', 28.35, 'Mass')];
+
+test('a line edits in its own measure when the food has it', () => {
+  assert.deepEqual(ingredientSelection({ amount: 1.5, unit: 'cups', grams: 121.5 }, oats), { text: '1.5', unit: 'cup' });
+});
+
+test('a line whose measure the food lacks starts from its grams; with neither, from the food\'s natural item (else 100 g)', () => {
+  assert.deepEqual(ingredientSelection({ amount: 2, unit: 'handful', grams: 60 }, oats), { text: '60', unit: 'g' });
+  assert.deepEqual(ingredientSelection({ amount: 2, unit: 'handful', grams: null }, oats), { text: '100', unit: 'g' });
+  assert.deepEqual(ingredientSelection({ amount: 2, unit: 'handful', grams: null }, [mm('egg', 50), mm('g', 1, 'Mass')]), { text: '1', unit: 'egg' });
+  assert.deepEqual(ingredientSelection({ amount: null, unit: null, grams: null }, [mm('g', 1, 'Mass')]), { text: '100', unit: 'g' });
+});
+

@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { View } from 'react-native';
+import { useFood } from '@/api/hooks';
 import type { Ingredient } from '@/api/types';
 import { AppText, Badge, BottomSheet, PrimaryButton, SecondaryButton, TextButton } from '@/components/ds';
-import { ChefHat } from '@/components/ds/icons';
+import { ChefHat, Trash2 } from '@/components/ds/icons';
+import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
+import { checkQuantity, ingredientSelection, matchMeasure, parseQuantity, roundAmount } from '@/features/quantity/quantity';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
 import { recipeAmount } from './IngredientNutritionRow';
-import { closedEditor, ingredientState, syncGramsEditor, typeGrams, type IngredientState } from './nutritionView';
+import { ingredientState, type IngredientState } from './nutritionView';
 
 const stateWords: Record<IngredientState, string> = {
   header: '', matched: 'Auto-matched to a USDA food', confirmed: 'Confirmed by you', check: 'Check this match',
@@ -14,48 +17,66 @@ const stateWords: Record<IngredientState, string> = {
 };
 
 /**
- * Inspect one ingredient: what the recipe said, the food it is matched to, its amount and calories, with the existing
- * actions (choose a food, change the grams, leave it out). Nothing changes until you press an action.
+ * Inspect one ingredient: what the recipe said, the food (or recipe) it is matched to, its amount and calories, with
+ * actions: change the amount in the food's own measures, choose another food or recipe, leave it out, or remove the line.
+ * Nothing changes until you press an action.
  */
-export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetGrams, onLeaveOut, onRecipeAmount, onOpenRecipe, busy }: {
+export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetAmount, onLeaveOut, onRemove, onRecipeAmount, onOpenRecipe, busy, footerExtra }: {
   ingredient: Ingredient | null;
   onClose: () => void;
   onChooseFood: (i: Ingredient) => void;
-  onSetGrams: (i: Ingredient, grams: number) => void;
+  /** A food line's new amount in one of its measures (the server converts it to grams). */
+  onSetAmount: (i: Ingredient, amount: number, unit: string) => void;
   onLeaveOut: (i: Ingredient) => void;
+  /** Removes the line for good (Leave out keeps it, uncounted). */
+  onRemove?: (i: Ingredient) => void;
   /** For a line that is one of your recipes: change how much of it (in its servings, or grams/cups when known). */
   onRecipeAmount?: (i: Ingredient) => void;
   onOpenRecipe?: (recipeId: string) => void;
   busy?: boolean;
+  /** Extra footer content (the review flow's "Next"). */
+  footerExtra?: React.ReactNode;
 }) {
   const t = useTheme();
   const [last, setLast] = useState(ingredient);
-  const [editor, setEditor] = useState(closedEditor);
   if (ingredient && ingredient !== last) setLast(ingredient);
   const ing = ingredient ?? last; // keep content while the sheet animates out
-  // Reset from the current data on every open (also reopening the same ingredient); keep typing while open.
-  const synced = syncGramsEditor(editor, ingredient);
-  if (synced !== editor) setEditor(synced);
-  const grams = synced.text;
-  const setGrams = (text: string) => setEditor((e) => typeGrams(e, text));
+  // The editor belongs to one line: reopening (or the next line in review) starts from that line's saved amount.
+  const [edit, setEdit] = useState<{ position: number; value: QuantityValue } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
+  const food = useFood(ing?.foodId ?? '', !!ingredient && !!ing?.foodId && !ing?.recipeId);
   if (!ing) return null;
 
   const state = ingredientState(ing);
-  const value = Number(grams.replace(',', '.'));
-  const validGrams = Number.isFinite(value) && value > 0;
-  const changed = validGrams && Math.abs(value - (ing.grams ?? 0)) > 0.0001;
+  const measures = food.data?.measures ?? [];
+  const value = edit?.position === ing.position ? edit.value : measures.length ? ingredientSelection(ing, measures) : null;
+  const measure = value ? matchMeasure(measures, value.unit) : undefined;
+  const qty = value ? parseQuantity(value.text) : null;
+  const check = checkQuantity(qty, measure, false, 'g');
+  const start = measures.length ? ingredientSelection(ing, measures) : null;
+  const changed = !!value && !!start && (value.text !== start.text || value.unit !== start.unit);
+  const removing = confirmRemove === ing.position;
 
   return (
-    <BottomSheet visible={!!ingredient} onClose={onClose} title="Ingredient"
+    <BottomSheet visible={!!ingredient} onClose={onClose} title="Ingredient" steadyKey={`ingredient:${ing.position}:${ing.recipeId ? 'recipe' : food.data ? 'measures' : 'loading'}`}
       footer={<>
+        {footerExtra}
         {ing.recipeId && state !== 'excluded' && onRecipeAmount ? <PrimaryButton label="Change amount" onPress={() => onRecipeAmount(ing)} fullWidth /> : null}
-        {ing.recipeId ? <SecondaryButton label="Choose a different food or recipe" onPress={() => onChooseFood(ing)} fullWidth />
+        {ing.recipeId || (ing.foodName && state !== 'excluded') ? <SecondaryButton label="Choose a different food or recipe" onPress={() => onChooseFood(ing)} fullWidth />
           : <PrimaryButton label={ing.foodName ? 'Choose a different food or recipe' : 'Choose a food or recipe'} onPress={() => onChooseFood(ing)} fullWidth />}
-        {state !== 'excluded' ? <SecondaryButton label="Leave out" onPress={() => onLeaveOut(ing)} loading={busy} fullWidth /> : null}
+        <View style={{ flexDirection: 'row', gap: t.space.sm }}>
+          {state !== 'excluded' ? <SecondaryButton label="Leave out" onPress={() => onLeaveOut(ing)} loading={busy} style={{ flex: 1 }} /> : null}
+          {onRemove ? (
+            <SecondaryButton label={removing ? 'Tap again to remove' : 'Remove line'} icon={Trash2} tone="danger" style={{ flex: 1 }}
+              onPress={() => { if (removing) { setConfirmRemove(null); onRemove(ing); } else setConfirmRemove(ing.position); }} />
+          ) : null}
+        </View>
       </>}>
       <View style={{ gap: t.space.md }}>
         <AppText variant="body">{ing.rawText}</AppText>
-        <Badge label={stateWords[state]} tone={state === 'confirmed' ? 'success' : state === 'unmatched' || state === 'check' ? 'warning' : 'neutral'} />
+        <View style={{ flexDirection: 'row' }}>
+          <Badge label={stateWords[state]} tone={state === 'confirmed' ? 'success' : state === 'unmatched' || state === 'check' ? 'warning' : 'neutral'} />
+        </View>
         {ing.recipeId ? (
           <View style={{ gap: 2 }}>
             <AppText variant="label" tone="secondary">Your recipe</AppText>
@@ -75,16 +96,22 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetGrams,
           </View>
         ) : null}
         {ing.note ? <AppText variant="secondary" tone="secondary">{ing.note}</AppText> : null}
-        {state !== 'excluded' && ing.foodName ? (
-          <View style={{ gap: t.space.xs }}>
-            <AppText variant="label" tone="secondary">Amount (grams){ing.nutrition ? ` · ${Math.round(ing.nutrition.calories)} kcal now` : ''}</AppText>
-            <View style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'center' }}>
-              <TextInput value={grams} onChangeText={setGrams} keyboardType="decimal-pad" placeholder="grams" placeholderTextColor={t.colors.textMuted}
-                accessibilityLabel="Amount in grams"
-                style={[t.type.bodyStrong, { flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: t.space.md, color: t.colors.text, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted }]} />
-              <SecondaryButton label="Save amount" disabled={!changed} loading={busy} onPress={() => onSetGrams(ing, value)} />
-            </View>
-            {grams.trim() !== '' && !validGrams ? <AppText variant="caption" tone="error" accessibilityLiveRegion="polite">Enter a number above zero.</AppText> : null}
+        {state !== 'excluded' && ing.foodName && !ing.recipeId ? (
+          <View style={{ gap: t.space.sm }}>
+            <AppText variant="label" tone="secondary">
+              Amount{ing.grams ? ` · ${Math.round(ing.grams)} g` : ''}{ing.nutrition ? ` · ${Math.round(ing.nutrition.calories)} kcal now` : ''}
+            </AppText>
+            {value && measures.length ? (
+              <>
+                <QuantityPicker measures={measures} value={{ text: value.text, unit: measure?.unit ?? value.unit }} baseUnit="g"
+                  onChange={(v) => setEdit({ position: ing.position, value: v })} error={qty !== null && !check.ok ? check.message : null}
+                  onSubmit={() => { if (check.ok && changed) onSetAmount(ing, roundAmount(qty!), measure!.unit); }} />
+                <SecondaryButton label="Save amount" disabled={!changed || !check.ok} loading={busy}
+                  onPress={() => onSetAmount(ing, roundAmount(qty!), measure!.unit)} fullWidth />
+              </>
+            ) : (
+              <AppText variant="secondary" tone="secondary">{food.isError ? 'Couldn’t load this food’s measures.' : 'Loading measures…'}</AppText>
+            )}
           </View>
         ) : null}
       </View>

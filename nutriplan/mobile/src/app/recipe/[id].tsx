@@ -3,15 +3,15 @@ import { Linking, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLogRecipe, usePlanMutations, useRecipe, useRecipeMutations } from '@/api/hooks';
 import { AppCard, AppText, ConfirmationSheet, EmptyState, FilterChip, PrimaryButton, SecondaryButton, SectionHeader, Skeleton, TextButton, useSnackbar } from '@/components/ds';
-import { CalendarPlus, Check, ChefHat, ExternalLink, Layers, RefreshCw } from '@/components/ds/icons';
+import { CalendarPlus, Check, ChefHat, ExternalLink, Layers, Plus, RefreshCw } from '@/components/ds/icons';
 import { IngredientNutritionRow } from '@/features/recipe/IngredientNutritionRow';
 import { IngredientSheet } from '@/features/recipe/IngredientSheet';
 import { NutritionSummary } from '@/features/recipe/NutritionSummary';
 import { RecipeHeader } from '@/features/recipe/RecipeHeader';
 import { ServingModeSelector } from '@/features/recipe/ServingModeSelector';
 import {
-  availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nutritionFor, parseServings, reliabilityNote,
-  servingsWord, type NutritionMode,
+  SCALE_CHOICES, availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nutritionFor, parseServings, reliabilityNote,
+  scaleSummary, servingsWord, type NutritionMode,
 } from '@/features/recipe/nutritionView';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -39,6 +39,7 @@ export default function RecipeScreen() {
   const [openPos, setOpenPos] = useState<number | null>(null);
   const [yieldText, setYieldText] = useState<string | null>(null); // non-null while editing "makes N servings"
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [scaling, setScaling] = useState<number | null>(null); // a chosen factor, waiting for Apply
 
   if (recipe.isLoading) {
     return <View style={{ padding: t.screenPadding, gap: t.space.md }}><Skeleton width="100%" height={96} radius={20} /><Skeleton width="100%" height={260} radius={20} /><Skeleton width="100%" height={200} radius={20} /></View>;
@@ -92,6 +93,12 @@ export default function RecipeScreen() {
     }, `Now ${servingsWord(v)}: per-serving numbers updated.`);
   };
 
+  const applyScale = (factor: number) => run(async () => {
+    const d = await m.scale.mutateAsync({ id: s.id, factor });
+    setScaling(null);
+    setNotice(`Scaled ×${factor}: now ${servingsWord(d.summary.servings)}. Every amount changed; per-serving numbers stay the same.`);
+  });
+
   const refreshMatches = () => run(async () => {
     const d = await m.rematch.mutateAsync(s.id);
     setNotice(`Ingredients re-matched: ${Math.round(d.summary.coverage * 100)}% now counted. Lines you chose or excluded were kept.`);
@@ -134,6 +141,23 @@ export default function RecipeScreen() {
               <TextButton label="Cancel" tone="secondary" onPress={() => setYieldText(null)} />
             </View>
           )}
+          {yieldText === null ? (
+            <View style={{ gap: t.space.xs }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
+                <AppText variant="secondary" tone="secondary">Scale recipe</AppText>
+                {SCALE_CHOICES.map((f) => (
+                  <FilterChip key={f} label={`×${f === 0.5 ? '½' : f === 1.5 ? '1½' : f}`} selected={scaling === f}
+                    accessibilityLabel={`Scale the recipe by ${f}`} onPress={() => setScaling(scaling === f ? null : f)} />
+                ))}
+              </View>
+              {scaling !== null ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
+                  <AppText variant="caption" tone="secondary" style={{ flex: 1, minWidth: 160 }}>{scaleSummary(s.servings, scaling)}</AppText>
+                  <PrimaryButton label="Apply" onPress={() => applyScale(scaling)} loading={m.scale.isPending} />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {s.servings === 1 && !r.servingDescription && yieldText === null ? (
             <AppText variant="caption" tone="warning">The recipe didn’t say how many servings it makes, so this is the whole recipe. Tap Change to set it.</AppText>
           ) : null}
@@ -176,7 +200,10 @@ export default function RecipeScreen() {
           {/* Wraps under the title when large text leaves no room beside it. */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: t.space.sm }}>
             <AppText variant="sectionTitle" accessibilityRole="header">Ingredients</AppText>
-            <TextButton label="Refresh matches" icon={RefreshCw} onPress={refreshMatches} />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: t.space.sm }}>
+              <TextButton label="Add" icon={Plus} onPress={() => router.push({ pathname: '/food/search', params: { mode: 'add-ingredient', recipeId: s.id } })} />
+              <TextButton label="Refresh matches" icon={RefreshCw} onPress={refreshMatches} />
+            </View>
           </View>
           <AppText variant="caption" tone="muted">
             {counts.counted} of {counts.total} counted{counts.unmatched ? ` · ${counts.unmatched} unmatched` : ''}{counts.check ? ` · ${counts.check} to check` : ''}{counts.excluded ? ` · ${counts.excluded} left out` : ''}. Tap one to change its food or amount.
@@ -214,7 +241,8 @@ export default function RecipeScreen() {
         onRecipeAmount={(ing) => { setOpenPos(null); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position),
           ...(ing.amount != null && ing.servings ? { amount: String(ing.amount), unit: ing.unit ?? 'serving' } : {}) } }); }}
         onOpenRecipe={(rid) => { setOpenPos(null); router.push({ pathname: '/recipe/[id]', params: { id: rid } }); }}
-        onSetGrams={(ing, grams) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, grams }); setOpenPos(null); })} />
+        onSetAmount={(ing, amount, unit) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, amount, unit }); setOpenPos(null); })}
+        onRemove={(ing) => run(async () => { await m.removeIngredient.mutateAsync({ id: s.id, position: ing.position }); setOpenPos(null); }, `Removed “${ing.rawText}”.`)} />
 
       <ConfirmationSheet visible={confirmDelete} title={`Delete ${s.name}?`} message="This can’t be undone. Meals you already logged or planned from it keep their nutrition."
         confirmLabel="Delete recipe" destructive loading={m.remove.isPending} onCancel={() => setConfirmDelete(false)}

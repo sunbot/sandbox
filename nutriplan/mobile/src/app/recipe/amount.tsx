@@ -18,14 +18,15 @@ import { useTheme } from '@/theme/ThemeProvider';
 export default function RecipeAmount() {
   const t = useTheme();
   const snackbar = useSnackbar();
-  const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient'; recipeId?: string; position?: string; amount?: string; unit?: string }>();
+  const params = useLocalSearchParams<{ id: string; date?: string; meal?: Meal; mode?: 'log' | 'plan' | 'ingredient' | 'add-ingredient'; recipeId?: string; position?: string; amount?: string; unit?: string }>();
   const recipe = useRecipe(params.id);
   const logRecipe = useLogRecipe();
   const { addRecipe } = usePlanMutations();
-  const { updateIngredient } = useRecipeMutations();
+  const { updateIngredient, addIngredient } = useRecipeMutations();
   const [meal, setMeal] = useState<Meal>(params.meal ?? mealForNow());
   const [value, setValue] = useState<QuantityValue | null>(null);
-  const forIngredient = params.mode === 'ingredient' && !!params.recipeId && !!params.position;
+  const adding = params.mode === 'add-ingredient' && !!params.recipeId;
+  const forIngredient = (params.mode === 'ingredient' && !!params.recipeId && !!params.position) || adding;
   const planning = params.mode === 'plan';
   const date = params.date ?? today();
 
@@ -46,7 +47,7 @@ export default function RecipeAmount() {
   const check = ingredientCheck(checkQuantity(qty, measure, !forIngredient, 'serving'), forIngredient);
   const servings = check.ok ? check.base : 0;
   const n = eatingNutrition(s.perServing, servings);
-  const busy = logRecipe.isPending || addRecipe.isPending || updateIngredient.isPending;
+  const busy = logRecipe.isPending || addRecipe.isPending || updateIngredient.isPending || addIngredient.isPending;
 
   const save = async () => {
     if (!check.ok) return snackbar({ message: check.message });
@@ -55,6 +56,11 @@ export default function RecipeAmount() {
     // The measure is sent as chosen ("1.5 cup"), so the entry reads the way it was given; the server converts it to servings.
     const amount = { amount: roundAmount(qty!), unit: measure.unit };
     try {
+      if (adding) {
+        await addIngredient.mutateAsync({ id: params.recipeId!, recipeId: s.id, ...amount });
+        router.dismissTo({ pathname: '/recipe/[id]', params: { id: params.recipeId! } });
+        return;
+      }
       if (forIngredient) {
         await updateIngredient.mutateAsync({ id: params.recipeId!, position: Number(params.position), recipeId: s.id, ...amount });
         router.dismissTo({ pathname: '/recipe/[id]', params: { id: params.recipeId! } });
@@ -101,7 +107,7 @@ export default function RecipeAmount() {
         </AppText>
       )}
 
-      <PrimaryButton label={forIngredient ? 'Use as this ingredient' : planning ? 'Add to plan' : `Add · ${Math.round(n.calories)} kcal`}
+      <PrimaryButton label={adding ? 'Add to recipe' : forIngredient ? 'Use as this ingredient' : planning ? 'Add to plan' : `Add · ${Math.round(n.calories)} kcal`}
         onPress={save} loading={busy} disabled={!check.ok || busy} fullWidth />
       <TextButton label="Open recipe" tone="secondary" onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: s.id } })} />
     </ScrollView>
