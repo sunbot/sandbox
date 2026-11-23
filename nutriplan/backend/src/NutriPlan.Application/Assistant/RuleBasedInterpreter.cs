@@ -28,6 +28,8 @@ public static partial class RuleBasedInterpreter
             var count = CountWord().Match(lower) is { Success: true } m ? int.Parse(m.Groups[1].Value) : (int?)null;
             var query = RecipeFiller().Replace(lower, " ");
             query = MultiSpace().Replace(query, " ").Trim();
+            // "margarita pizza" is the common misspelling of margherita; a margarita drink is left alone.
+            query = MargaritaPizza().Replace(query, "margherita $1");
             return new InterpretedRequest(AssistantIntent.FindRecipes, [], null, null, query.Length == 0 ? t : query, count, null);
         }
 
@@ -114,8 +116,11 @@ public static partial class RuleBasedInterpreter
     [GeneratedRegex(@"\b(\d+)\b")]
     private static partial Regex CountWord();
 
-    [GeneratedRegex(@"\b(show|give|find|me|some|list|of|a|an|the|recipes?|ideas?|i|can|could|make|please|for|\d+)\b")]
+    [GeneratedRegex(@"\b(show|give|find|me|some|list|of|a|an|the|recipes?|ideas?|i|can|could|make|please|for|would|really|like|love|want|need|to|get|\d+)\b")]
     private static partial Regex RecipeFiller();
+
+    [GeneratedRegex(@"\bmargarita (pizzas?)\b")]
+    private static partial Regex MargaritaPizza();
 
     [GeneratedRegex(@"^(i\s+(had|ate|drank|just)|log|add|track|ate|had)\b")]
     private static partial Regex LogVerbs();

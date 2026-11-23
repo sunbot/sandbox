@@ -8,6 +8,7 @@ import { AppCard, AppText, FilterChip, SecondaryButton, Skeleton } from '@/compo
 import { Composer } from '@/features/ask/Composer';
 import { OtherResults } from '@/features/ask/OtherResults';
 import { ReviewCard } from '@/features/ask/ReviewCard';
+import { pendingLabel } from '@/features/ask/loading';
 import { today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -73,7 +74,7 @@ export default function AskScreen() {
             <View style={{ alignSelf: 'flex-end', maxWidth: '85%', backgroundColor: t.colors.primaryLight, borderRadius: t.radii.card, borderBottomRightRadius: 6, paddingHorizontal: t.space.lg, paddingVertical: t.space.sm }}>
               <AppText variant="body">{turn.text}</AppText>
             </View>
-            {!turn.response && !turn.error ? <Thinking /> : null}
+            {!turn.response && !turn.error ? <Thinking text={turn.text} /> : null}
             {turn.error ? (
               <AppCard style={{ gap: t.space.sm }}>
                 <AppText variant="body" tone="error" accessibilityLiveRegion="polite">{turn.error}</AppText>
@@ -109,12 +110,13 @@ function Response({ r }: { r: AssistantResponse }) {
   );
 }
 
-function Thinking() {
+function Thinking({ text }: { text: string }) {
+  const label = pendingLabel(text);
   const t = useTheme();
   return (
     <AppCard style={{ gap: t.space.sm }} >
-      <View accessible accessibilityLabel="Finding foods" accessibilityLiveRegion="polite" style={{ gap: t.space.sm }}>
-        <AppText variant="secondary" tone="muted">Finding foods…</AppText>
+      <View accessible accessibilityLabel={label} accessibilityLiveRegion="polite" style={{ gap: t.space.sm }}>
+        <AppText variant="secondary" tone="muted">{label}</AppText>
         <Skeleton width="70%" height={14} />
         <Skeleton width="45%" height={14} />
       </View>

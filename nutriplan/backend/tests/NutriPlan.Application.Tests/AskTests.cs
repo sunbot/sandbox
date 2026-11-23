@@ -110,8 +110,20 @@ public class AskTests
     [InlineData("what could I eat to hit my protein?", AssistantIntent.FillGaps)]
     [InlineData("what can I make with what I have", AssistantIntent.WhatCanIMake)]
     [InlineData("chicken soup recipes", AssistantIntent.FindRecipes)]
+    [InlineData("I would really like a margarita pizza recipe", AssistantIntent.FindRecipes)]
+    [InlineData("margherita pizza recipe", AssistantIntent.FindRecipes)]
+    [InlineData("give me a pizza recipe", AssistantIntent.FindRecipes)]
+    [InlineData("I ate pizza", AssistantIntent.LogFood)]
+    [InlineData("I would really like a margarita", AssistantIntent.FindFood)]
     public void Intent_follows_what_you_said(string text, AssistantIntent intent) =>
         Assert.Equal(intent, Assistant.RuleBasedInterpreter.Interpret(text, new DateOnly(2026, 11, 21)).Intent);
+
+    [Theory]
+    [InlineData("I would really like a margarita pizza recipe", "margherita pizza")]
+    [InlineData("margherita pizza recipe", "margherita pizza")]
+    [InlineData("give me a pizza recipe", "pizza")]
+    public void Recipe_requests_keep_only_the_dish_and_fix_margherita(string text, string query) =>
+        Assert.Equal(query, Assistant.RuleBasedInterpreter.Interpret(text, new DateOnly(2026, 11, 21)).RecipeQuery);
 
     [Fact]
     public void Several_foods_in_one_sentence_become_separate_items()
