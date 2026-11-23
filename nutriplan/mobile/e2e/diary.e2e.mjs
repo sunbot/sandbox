@@ -204,7 +204,8 @@ test('bulk move needs a selection, cancellation is harmless, and errors retain t
   await move.click();
   await p.getByRole('radio', { name: 'Snacks' }).click();
   await p.getByRole('button', { name: 'Move 1 entry' }).click();
-  await p.getByText('Could not move entries').waitFor();
+  await p.getByRole('alert').waitFor();
+  assert.equal(await p.getByTestId('bottom-sheet').isVisible(), true, 'the error is visible inside the open sheet');
   assert.equal(await p.getByRole('checkbox', { name: /Almonds/ }).count(), 1, 'failed moves keep the selection for retry');
   assert.equal(calls.filter((c) => c.method === 'POST' && c.path === '/api/diary/move').length, 1);
   assert.deepEqual(errors, []);

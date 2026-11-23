@@ -41,6 +41,7 @@ export default function TodayScreen() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(() => new Set());
   const [showMoveSheet, setShowMoveSheet] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [moveDestination, setMoveDestination] = useState<Meal>(quickMeal);
   const [editing, setEditing] = useState<DiaryEntry | null>(null);
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({}); // kept if a sheet is dismissed by accident
@@ -53,6 +54,7 @@ export default function TodayScreen() {
     setSelectedEntryIds(new Set());
     setSelectionMode(false);
     setShowMoveSheet(false);
+    setMoveError(null);
   }, []);
   const changeDate = useCallback((next: string) => {
     setDate(next);
@@ -125,7 +127,7 @@ export default function TodayScreen() {
       clearSelection();
       snackbar({ message: `Moved ${count} ${count === 1 ? 'entry' : 'entries'} to ${moveDestination}` });
     } catch (e) {
-      snackbar({ message: errorText(e, "Couldn't move those entries") });
+      setMoveError(errorText(e, "Couldn't move those entries"));
     }
   }, [selectedEntryIds, moveEntries, date, moveDestination, clearSelection, snackbar]);
 
@@ -223,6 +225,7 @@ export default function TodayScreen() {
                 <PrimaryButton label="Move" onPress={() => {
                   const firstSelected = day.meals.flatMap((m) => m.entries).find((e) => selectedEntryIds.has(e.id));
                   setMoveDestination(firstSelected?.meal ?? quickMeal);
+                  setMoveError(null);
                   setShowMoveSheet(true);
                 }} disabled={selectedEntryIds.size === 0} />
                 <SecondaryButton label="Cancel selection" onPress={clearSelection} />
@@ -263,7 +266,8 @@ export default function TodayScreen() {
       <NutrientsSheet visible={showNutrients} onClose={() => setShowNutrients(false)} progress={day.progress} mode={nutrientMode} />
       <MealPickerSheet visible={pickingMeal} meal={recentMeal} onClose={() => setPickingMeal(false)}
         onPick={(m) => { setRecentMeal(m); setPickingMeal(false); }} />
-      <BulkMoveSheet visible={showMoveSheet} count={selectedEntryIds.size} meal={moveDestination} onPick={setMoveDestination}
+      <BulkMoveSheet visible={showMoveSheet} count={selectedEntryIds.size} meal={moveDestination} error={moveError}
+        onPick={(meal) => { setMoveDestination(meal); setMoveError(null); }}
         onConfirm={() => { void moveSelectedEntries(); }} onClose={() => setShowMoveSheet(false)} loading={moveEntries.isPending} />
     </View>
   );

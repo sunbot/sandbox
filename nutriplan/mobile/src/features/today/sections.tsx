@@ -136,8 +136,8 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
   );
 }
 
-export function BulkMoveSheet({ visible, count, meal, onPick, onConfirm, onClose, loading }: {
-  visible: boolean; count: number; meal: Meal; onPick: (m: Meal) => void; onConfirm: () => void; onClose: () => void; loading: boolean;
+export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, onClose, loading }: {
+  visible: boolean; count: number; meal: Meal; error?: string | null; onPick: (m: Meal) => void; onConfirm: () => void; onClose: () => void; loading: boolean;
 }) {
   const t = useTheme();
   return (
@@ -155,6 +155,7 @@ export function BulkMoveSheet({ visible, count, meal, onPick, onConfirm, onClose
           );
         })}
       </View>
+      {error ? <AppText variant="secondary" tone="error" accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</AppText> : null}
       <View style={{ gap: t.space.sm, paddingBottom: t.space.md }}>
         <PrimaryButton label={`Move ${count} ${count === 1 ? 'entry' : 'entries'}`} onPress={onConfirm} loading={loading} fullWidth disabled={count === 0} />
         <SecondaryButton label="Cancel" onPress={onClose} fullWidth />
