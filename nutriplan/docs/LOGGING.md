@@ -164,4 +164,8 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
 5. Recipes: search a recipe's name in Add food: it's listed under "Your recipes" with a "Your recipe" badge; log 1 serving
    and, on a recipe with a finished volume, 1 cup; edit the logged entry between cups and servings. On a recipe, choose an
    ingredient → pick another recipe → Use as this ingredient; the line reads "Your recipe: …".
-6. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
+6. Today bulk move: choose **Select entries**, select foods from at least two different meals with TalkBack and touch, choose a
+   destination meal, then confirm. All selected entries should move together without changing their date, quantity, or saved
+   nutrition; cancel the destination sheet and verify nothing moves; try again after refreshing. Verify Move is unavailable with
+   no selection, a failed request leaves the selection available to retry, and TalkBack announces each row's checked state.
+7. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.

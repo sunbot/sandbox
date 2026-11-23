@@ -178,6 +178,7 @@ public sealed class DiaryService(
         if (r.EntryIds is null || r.EntryIds.Count == 0) throw new ValidationException("Select at least one diary entry.");
         if (r.EntryIds.Count > 100) throw new ValidationException("Move no more than 100 diary entries at once.");
         if (r.EntryIds.Distinct().Count() != r.EntryIds.Count) throw new ValidationException("Each diary entry can only be selected once.");
+        if (!Enum.IsDefined(r.Meal)) throw new ValidationException("Choose a valid meal.");
 
         var requested = r.EntryIds.ToHashSet();
         var entries = (await diary.GetRangeAsync(r.Date, r.Date, ct)).Where(e => requested.Contains(e.Id)).ToList();

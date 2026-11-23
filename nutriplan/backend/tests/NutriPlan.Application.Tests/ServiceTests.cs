@@ -86,6 +86,8 @@ public class ServiceTests
             Diary().MoveManyAsync(new(_store.Today, [], MealSlot.Dinner)));
         await Assert.ThrowsAsync<Common.ValidationException>(() =>
             Diary().MoveManyAsync(new(_store.Today, [entry.Id, entry.Id], MealSlot.Dinner)));
+        await Assert.ThrowsAsync<Common.ValidationException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [entry.Id], (MealSlot)99)));
         await Assert.ThrowsAsync<Common.NotFoundException>(() =>
             Diary().MoveManyAsync(new(_store.Today, [entry.Id, Guid.NewGuid()], MealSlot.Dinner)));
 
