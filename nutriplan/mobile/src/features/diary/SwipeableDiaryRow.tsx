@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Animated, PanResponder, Pressable, View } from 'react-native';
 import { AppText, FoodRow } from '@/components/ds';
 import { Square, SquareCheck, Trash2 } from '@/components/ds/icons';
+import { haptic } from '@/lib/haptics';
 import { useReducedMotion, useTheme } from '@/theme/ThemeProvider';
 import { createOpenRowTracker, type OpenRowTracker } from './openRow';
 import { DELETE_WIDTH, claimsSwipe, dragPosition, settle as settleSwipe } from './swipe';
@@ -32,7 +33,7 @@ export function SwipeGroup({ children }: { children: (closeOpen: () => void) => 
  * worked. Here a tap is an ordinary press, and the row only claims a touch once it moves clearly sideways, so vertical
  * scrolling and taps are untouched.
  */
-export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDelete, accessibilityHint, selectionMode = false, selected = false, onToggleSelect }: {
+export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDelete, accessibilityHint, selectionMode = false, selected = false, onToggleSelect, onStartSelection }: {
   name: string;
   badge?: ReactNode;
   detail?: string;
@@ -43,6 +44,8 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
+  /** Press and hold (or the screen reader's "Select to move"): start selecting entries, with this one selected. */
+  onStartSelection?: () => void;
 }) {
   const t = useTheme();
   const reduced = useReducedMotion();
@@ -95,7 +98,16 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
     onDelete();
   }, [close, onDelete]);
 
-  const actions = useMemo(() => [{ name: 'delete', label: 'Delete' }], []);
+  // Press and hold starts selecting (with this row ticked); while selecting, it just ticks like a tap.
+  const longPress = useCallback(() => {
+    if (selectionMode) { onToggleSelect?.(); return; }
+    if (!onStartSelection) return;
+    group?.closeOpen();
+    haptic.select();
+    onStartSelection();
+  }, [selectionMode, onToggleSelect, onStartSelection, group]);
+
+  const actions = useMemo(() => [{ name: 'delete', label: 'Delete' }, ...(onStartSelection ? [{ name: 'longpress', label: 'Select to move' }] : [])], [onStartSelection]);
 
   return (
     <View style={{ overflow: 'hidden' }}>
@@ -110,10 +122,10 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
         </Pressable>
       </View> : null}
       <Animated.View {...(selectionMode ? {} : pan.panHandlers)} style={{ transform: [{ translateX: x }], backgroundColor: t.colors.surface }}>
-        <FoodRow name={name} detail={detail} calories={calories} badge={badge} onPress={press}
-          accessibilityActions={selectionMode ? undefined : actions} onAccessibilityAction={selectionMode ? undefined : (e) => { if (e.nativeEvent.actionName === 'delete') onDelete(); }}
+        <FoodRow name={name} detail={detail} calories={calories} badge={badge} onPress={press} onLongPress={onStartSelection || selectionMode ? longPress : undefined}
+          accessibilityActions={selectionMode ? undefined : actions} onAccessibilityAction={selectionMode ? undefined : (e) => { if (e.nativeEvent.actionName === 'delete') onDelete(); else if (e.nativeEvent.actionName === 'longpress') longPress(); }}
           accessibilityRole={selectionMode ? 'checkbox' : 'button'} accessibilityState={selectionMode ? { checked: selected } : undefined}
-          accessibilityHint={selectionMode ? 'Selects this diary entry to move it to another meal' : accessibilityHint}
+          accessibilityHint={selectionMode ? 'Selects this diary entry to move it to another meal' : `${accessibilityHint ?? ''}${onStartSelection ? '. Press and hold to select entries to move' : ''}`}
           trailing={selectionMode ? (selected ? <SquareCheck size={20} color={t.colors.primary} /> : <Square size={20} color={t.colors.textSecondary} />) : undefined} />
       </Animated.View>
     </View>

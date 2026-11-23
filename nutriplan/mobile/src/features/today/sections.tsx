@@ -169,7 +169,7 @@ export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, 
 
 /* ───────────────────────── Meal section ───────────────────────── */
 
-export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onClear, onLogPlanned, loggingId, selectionMode, selectedEntryIds, onToggleSelect }: {
+export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onClear, onLogPlanned, loggingId, selectionMode, selectedEntryIds, onToggleSelect, onStartSelection }: {
   meal: Meal;
   totals: number;
   entries: DiaryEntry[];
@@ -185,6 +185,8 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   selectionMode: boolean;
   selectedEntryIds: ReadonlySet<string>;
   onToggleSelect: (id: string) => void;
+  /** Press and hold an entry: start selecting, with it selected. */
+  onStartSelection: (id: string) => void;
 }) {
   const t = useTheme();
   const count = entries.length + planned.length;
@@ -224,7 +226,8 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
           {entries.map((e) => (
             <SwipeableDiaryRow key={e.id} name={displayName(e.item)} detail={detailFor(e.item)} calories={e.item.nutrition.calories}
               onPress={() => onEntry(e)} onDelete={() => onDeleteEntry(e)} accessibilityHint="Edit amount or meal. Swipe left to delete"
-              selectionMode={selectionMode} selected={selectedEntryIds.has(e.id)} onToggleSelect={() => onToggleSelect(e.id)} />
+              selectionMode={selectionMode} selected={selectedEntryIds.has(e.id)} onToggleSelect={() => onToggleSelect(e.id)}
+              onStartSelection={() => onStartSelection(e.id)} />
           ))}
           {planned.map((p) => (
             <FoodRow key={p.id} name={displayName(p.item)} detail={detailFor(p.item)} calories={p.item.nutrition.calories}

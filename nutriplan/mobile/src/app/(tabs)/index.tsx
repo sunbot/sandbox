@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import { ScrollView as PlainScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, ScrollView as PlainScrollView, StyleSheet, View } from 'react-native';
 import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/ds/icons';
 import { useClearMeal, useDeleteEntry, useLogFood, useLogRecipe, useMoveDiaryEntries, usePlanMutations, useUpdateEntry } from '@/api/hooks';
@@ -59,6 +59,12 @@ export default function TodayScreen() {
     setShowMoveSheet(false);
     setMoveError(null);
   }, []);
+  // While selecting, Android's back gesture ends the selection instead of leaving the screen.
+  useFocusEffect(useCallback(() => {
+    if (!selectionMode) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { clearSelection(); return true; });
+    return () => sub.remove();
+  }, [selectionMode, clearSelection]));
   const changeDate = useCallback((next: string) => {
     setDate(next);
     clearSelection();
@@ -70,8 +76,9 @@ export default function TodayScreen() {
       return next;
     });
   }, []);
-  const startSelection = useCallback(() => {
-    setSelectedEntryIds(new Set());
+  // Press and hold a food: selection starts with that food ticked (no separate "Select" button).
+  const startSelection = useCallback((firstId: string) => {
+    setSelectedEntryIds(new Set([firstId]));
     setSelectionMode(true);
     setExpanded(Object.fromEntries(meals.map((m) => [m, true])) as Partial<Record<Meal, boolean>>);
   }, []);
@@ -256,10 +263,6 @@ export default function TodayScreen() {
         <View style={{ gap: t.space.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: t.space.sm, flexWrap: 'wrap' }}>
             <AppText variant="sectionTitle" accessibilityRole="header">Meals</AppText>
-            {selectionMode ? null : (
-              <SecondaryButton label="Select entries" onPress={() => { closeOpenRow(); startSelection(); }}
-                accessibilityHint="Select entries from one or more meals to move them together" disabled={!anythingLogged} />
-            )}
           </View>
           {meals.map((m) => {
             const md = day.meals.find((x) => x.meal === m);
@@ -272,7 +275,7 @@ export default function TodayScreen() {
                 onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry}
                 onClear={() => setClearing({ date, meal: m, entryIds: entries.map((e) => e.id) })}
                 onLogPlanned={logPlanned} loggingId={loggingId}
-                selectionMode={selectionMode} selectedEntryIds={selectedEntryIds} onToggleSelect={toggleSelectedEntry} />
+                selectionMode={selectionMode} selectedEntryIds={selectedEntryIds} onToggleSelect={toggleSelectedEntry} onStartSelection={startSelection} />
             );
           })}
         </View>

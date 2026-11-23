@@ -48,6 +48,8 @@ async function openToday(totals, food = almonds, clear = () => [204], initialEnt
   await row.waitFor({ timeout: 15000 });
   return { ctx, p, calls, row, errors, getEntries: () => currentEntries };
 }
+/** Press and hold a diary row: starts selecting entries to move, with that row ticked. */
+const holdRow = (p, name) => p.getByRole('button', { name }).first().click({ delay: 800 });
 const deletes = (calls) => calls.filter((c) => c.method === 'DELETE').length;
 
 test('clear meal confirms the count, supports cancel and undo, and sends only confirmed entries', async () => {
@@ -200,9 +202,10 @@ test('a short drag or a vertical scroll never opens a row', async () => {
 test('selecting entries from different meals moves them together and refreshes the diary', async () => {
   const entries = [{ ...almondsEntry, meal: 'Breakfast' }, { ...yogurtEntry, meal: 'Lunch' }];
   const { ctx, p, calls, errors, getEntries } = await openToday(undefined, almonds, undefined, entries);
-  await p.getByRole('button', { name: 'Select entries' }).click();
-  await p.getByRole('checkbox', { name: /Almonds/ }).tap();
+  await holdRow(p, /^Almonds/);
+  await p.getByRole('checkbox', { name: /Almonds/ }).waitFor();
   await p.getByRole('checkbox', { name: /Yogurt/ }).tap();
+  await p.getByText('2 selected').waitFor();
   await p.getByRole('button', { name: 'Move' }).click();
   await p.getByRole('radio', { name: 'Snacks' }).click();
   await p.getByRole('button', { name: 'Move 2 entries' }).click();
@@ -213,7 +216,7 @@ test('selecting entries from different meals moves them together and refreshes t
   assert.deepEqual(JSON.parse(move.body), { date: today(), entryIds: ['e1', 'e2'], meal: 'Snack' });
   assert.ok(getEntries().every((e) => e.meal === 'Snack'), 'entries now belong to the destination meal');
   assert.ok(calls.filter((c) => c.method === 'GET' && c.path === '/api/diary/' + today()).length >= 2, 'successful move refreshes the diary');
-  await p.getByRole('button', { name: 'Select entries' }).waitFor();
+  await p.getByText('2 selected').waitFor({ state: 'detached' });
   assert.equal(await p.getByRole('checkbox').count(), 0, 'selection mode clears after success');
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -221,10 +224,12 @@ test('selecting entries from different meals moves them together and refreshes t
 
 test('bulk move needs a selection, cancellation is harmless, and errors retain the selection', async () => {
   const { ctx, p, calls, errors } = await openToday(undefined, almonds, undefined, undefined, 500);
-  await p.getByRole('button', { name: 'Select entries' }).click();
+  await holdRow(p, /^Almonds/);
   const move = p.getByRole('button', { name: 'Move', exact: true });
-  assert.equal(await move.isEnabled(), false, 'empty selection cannot be submitted');
   const almondsRow = p.getByRole('checkbox', { name: /Almonds/ });
+  await almondsRow.tap();                                                  // untick the held row: nothing selected
+  await p.getByText('0 selected').waitFor();
+  assert.equal(await move.isEnabled(), false, 'empty selection cannot be submitted');
   await almondsRow.tap();
   await move.click();
   await p.getByTestId('bottom-sheet').getByRole('button', { name: 'Cancel' }).click();
@@ -253,7 +258,7 @@ test('over a macro target the summary says how far over (the bar itself stops at
 test('while selecting entries to move, a meal cannot be cleared (the two would act on the same rows)', async () => {
   const { ctx, p, errors } = await openToday();
   await p.getByRole('button', { name: 'Clear breakfast' }).waitFor();
-  await p.getByRole('button', { name: 'Select entries' }).click();
+  await holdRow(p, /^Almonds/);
   await p.getByRole('checkbox', { name: /^Almonds/ }).first().waitFor();
   assert.equal(await p.getByRole('button', { name: 'Clear breakfast' }).count(), 0);
   assert.deepEqual(errors, []);
@@ -263,8 +268,8 @@ test('while selecting entries to move, a meal cannot be cleared (the two would a
 test('moving never defaults to a move that changes nothing, and Undo sends each entry back to its own meal', async () => {
   const lunchEntry = { ...yogurtEntry, id: 'e3', meal: 'Lunch' };
   const { ctx, p, calls, errors, getEntries } = await openToday(undefined, almonds, undefined, [almondsEntry, lunchEntry]);
-  await p.getByRole('button', { name: 'Select entries' }).click();
-  await p.getByRole('checkbox', { name: /^Almonds/ }).first().click();
+  await holdRow(p, /^Almonds/);                                           // held row starts ticked
+  await p.getByText('1 selected').waitFor();
   await p.getByRole('button', { name: 'Move', exact: true }).click();
   // Almonds are in Breakfast: whatever the default is, it isn't Breakfast.
   assert.equal(await p.getByRole('radio', { name: 'Breakfast' }).getAttribute('aria-checked') === 'true'
@@ -288,6 +293,23 @@ test('moving never defaults to a move that changes nothing, and Undo sends each 
   const moves = calls.filter((c) => c.method === 'POST' && c.path === '/api/diary/move').map((c) => JSON.parse(c.body));
   assert.deepEqual(moves.slice(1).map((m) => [m.meal, m.entryIds]), [['Breakfast', ['e1']], ['Lunch', ['e3']]]);
   assert.deepEqual(getEntries().map((x) => x.meal), ['Breakfast', 'Lunch']);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('press and hold starts selecting with that food ticked; a short tap still opens the editor; there is no Select button', async () => {
+  const { ctx, p, errors } = await openToday();
+  assert.equal(await p.getByRole('button', { name: 'Select entries' }).count(), 0);
+  await p.getByRole('button', { name: /^Almonds/ }).first().click();          // ordinary tap: the editor
+  await p.getByRole('textbox', { name: 'Amount' }).waitFor();
+  await p.getByRole('button', { name: 'Close' }).last().click();
+  await p.waitForTimeout(500);
+  await holdRow(p, /^Almonds/);
+  await p.getByText('1 selected').waitFor();
+  assert.ok(await p.getByRole('checkbox', { name: /^Almonds/ }).first().isChecked(), 'the held food is ticked');
+  assert.equal(await p.getByRole('textbox', { name: 'Amount' }).count(), 0, 'holding does not also open the editor');
+  await p.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await p.getByText('1 selected').waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
   await ctx.close();
 });

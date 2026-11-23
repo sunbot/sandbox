@@ -55,3 +55,4 @@ stands right now.
 - 2026-11-23 — End-of-phase Copilot review: #65 and #67 merged after local backend (Postgres), unit and browser runs; #66 left open (WIP).
 - 2026-11-23 — Copilot #66 merged into master (`bff4a51`) after resolving conflicts with #65; all suites pass (backend with Postgres, unit, browser 38).
 - 2026-11-23 — UX review of #66 on master (`de30230`): no-op default destination fixed, Undo added, action bar pinned, stale selections dropped; unit 157, browser 39.
+- 2026-11-23 — Owner feedback: no "Select entries" button; press and hold a food starts selecting (ticked), back gesture ends it, TalkBack "Select to move"; web now publishes checked state. Unit 157, browser 40.

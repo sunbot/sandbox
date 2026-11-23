@@ -177,7 +177,9 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    entries and totals return unchanged. Confirm again and wait; refresh and check only that date and meal were cleared,
    planned items remain, and a logged planned item returns to the plan. Empty meals have no Clear action. Repeat offline:
    the error is shown and entries return or refresh when connectivity is restored.
-8. Today bulk move: choose **Select entries**; a bar pinned at the bottom shows "N selected · Cancel · Move" while you scroll.
+8. Today bulk move: **press and hold** a food (a short vibration): selection starts with it ticked, and a bar pinned at the
+   bottom shows "N selected · Cancel · Move" while you scroll. A short tap still opens the editor; Android back ends selection.
+   TalkBack: the row's actions include "Select to move".
    Select foods from at least two different meals (touch and TalkBack: rows read as checkboxes), tap Move: the sheet never
    starts on the meal they're all already in, and choosing that meal disables Move ("already in …"). Move them: date, amounts
    and nutrition unchanged; "Moved N entries to dinner" with **Undo** puts each back in its own meal. Clear is hidden while
