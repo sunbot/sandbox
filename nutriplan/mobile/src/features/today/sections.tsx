@@ -136,8 +136,10 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
   );
 }
 
-export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, onClose, loading }: {
+export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, onClose, loading, alreadyThere = false }: {
   visible: boolean; count: number; meal: Meal; error?: string | null; onPick: (m: Meal) => void; onConfirm: () => void; onClose: () => void; loading: boolean;
+  /** Every selected entry is already in the chosen meal: nothing to move. */
+  alreadyThere?: boolean;
 }) {
   const t = useTheme();
   return (
@@ -155,9 +157,10 @@ export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, 
           );
         })}
       </View>
+      {alreadyThere ? <AppText variant="secondary" tone="secondary" accessibilityLiveRegion="polite">{count === 1 ? 'It’s' : 'They’re all'} already in {mealLabel(meal).toLowerCase()}. Pick another meal.</AppText> : null}
       {error ? <AppText variant="secondary" tone="error" accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</AppText> : null}
       <View style={{ gap: t.space.sm, paddingBottom: t.space.md }}>
-        <PrimaryButton label={`Move ${count} ${count === 1 ? 'entry' : 'entries'}`} onPress={onConfirm} loading={loading} fullWidth disabled={count === 0} />
+        <PrimaryButton label={`Move ${count} ${count === 1 ? 'entry' : 'entries'}`} onPress={onConfirm} loading={loading} fullWidth disabled={count === 0 || alreadyThere} />
         <SecondaryButton label="Cancel" onPress={onClose} fullWidth />
       </View>
     </BottomSheet>

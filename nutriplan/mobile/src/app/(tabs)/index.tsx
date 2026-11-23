@@ -11,6 +11,7 @@ import { AppText, ConfirmationSheet, EmptyState, FilterChip, IconButton, Primary
 import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { BulkMoveSheet, MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
+import { defaultDestination, isNoOpMove, liveSelection, mealInSentence, undoGroups } from '@/features/today/bulkMove';
 import { SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -121,17 +122,35 @@ export default function TodayScreen() {
     }
   }, [update, snackbar]);
 
+  // Only entries still on the day count (one deleted elsewhere or refreshed away drops out of the selection).
+  const selectedEntries = liveSelection(selectedEntryIds, data.view?.meals.flatMap((m) => m.entries) ?? []);
+
+  const openMoveSheet = useCallback(() => {
+    setMoveDestination(defaultDestination(selectedEntries, quickMeal)); // never a move that changes nothing
+    setMoveError(null);
+    setShowMoveSheet(true);
+  }, [selectedEntries, quickMeal]);
+
   const moveSelectedEntries = useCallback(async () => {
-    if (!selectedEntryIds.size || moveEntries.isPending) return;
-    const count = selectedEntryIds.size;
+    if (!selectedEntries.length || moveEntries.isPending || isNoOpMove(selectedEntries, moveDestination)) return;
+    const to = moveDestination;
+    const back = undoGroups(selectedEntries, to); // where each entry came from, for Undo
+    const count = back.reduce((n, g) => n + g.entryIds.length, 0);
     try {
-      await moveEntries.mutateAsync({ date, entryIds: [...selectedEntryIds], meal: moveDestination });
+      await moveEntries.mutateAsync({ date, entryIds: selectedEntries.map((e) => e.id), meal: to });
       clearSelection();
-      snackbar({ message: `Moved ${count} ${count === 1 ? 'entry' : 'entries'} to ${moveDestination}` });
+      snackbar({
+        message: `Moved ${count} ${count === 1 ? 'entry' : 'entries'} to ${mealInSentence(to)}`,
+        actionLabel: 'Undo',
+        onAction: async () => {
+          try { for (const g of back) await moveEntries.mutateAsync({ date, entryIds: g.entryIds, meal: g.meal }); }
+          catch (e) { snackbar({ message: errorText(e, "Couldn't move them back. Refresh and check the meals.") }); }
+        },
+      });
     } catch (e) {
       setMoveError(errorText(e, "Couldn't move those entries"));
     }
-  }, [selectedEntryIds, moveEntries, date, moveDestination, clearSelection, snackbar]);
+  }, [selectedEntries, moveEntries, date, moveDestination, clearSelection, snackbar]);
 
   const deleteEntry = useCallback((e: DiaryEntry) => {
     setDrafts(({ [e.id]: _, ...rest }) => rest);
@@ -187,7 +206,7 @@ export default function TodayScreen() {
     </View>
   );
 
-  const page = { paddingTop: insets.top + t.space.sm, paddingHorizontal: t.screenPadding, paddingBottom: t.space.huge * 2, gap: t.space.lg };
+  const page = { paddingTop: insets.top + t.space.sm, paddingHorizontal: t.screenPadding, paddingBottom: t.space.huge * 2 + (selectionMode ? 72 : 0), gap: t.space.lg };
 
   if (data.day.isLoading || data.targets.isLoading) {
     return <PlainScrollView style={{ flex: 1, backgroundColor: t.colors.background }} contentContainerStyle={page}>{header}<TodaySkeleton /></PlainScrollView>;
@@ -237,18 +256,7 @@ export default function TodayScreen() {
         <View style={{ gap: t.space.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: t.space.sm, flexWrap: 'wrap' }}>
             <AppText variant="sectionTitle" accessibilityRole="header">Meals</AppText>
-            {selectionMode ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
-                <AppText variant="secondary" tone="secondary" accessibilityLiveRegion="polite">{selectedEntryIds.size} selected</AppText>
-                <PrimaryButton label="Move" onPress={() => {
-                  const firstSelected = day.meals.flatMap((m) => m.entries).find((e) => selectedEntryIds.has(e.id));
-                  setMoveDestination(firstSelected?.meal ?? quickMeal);
-                  setMoveError(null);
-                  setShowMoveSheet(true);
-                }} disabled={selectedEntryIds.size === 0} />
-                <SecondaryButton label="Cancel selection" onPress={clearSelection} />
-              </View>
-            ) : (
+            {selectionMode ? null : (
               <SecondaryButton label="Select entries" onPress={() => { closeOpenRow(); startSelection(); }}
                 accessibilityHint="Select entries from one or more meals to move them together" disabled={!anythingLogged} />
             )}
@@ -289,7 +297,17 @@ export default function TodayScreen() {
       <ConfirmationSheet visible={clearing !== null} title={`Clear ${clearing?.meal ?? 'meal'}?`}
         message={clearing ? `Remove ${clearing.entryIds.length} logged ${clearing.entryIds.length === 1 ? 'entry' : 'entries'} from ${clearing.meal} on ${clearing.date}? Planned items are not removed.` : undefined}
         confirmLabel="Clear entries" destructive onConfirm={confirmClear} onCancel={() => setClearing(null)} />
-      <BulkMoveSheet visible={showMoveSheet} count={selectedEntryIds.size} meal={moveDestination} error={moveError}
+      {selectionMode ? (
+        // Pinned while selecting, so Move is always in reach after scrolling down to tick entries in later meals.
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap',
+          paddingHorizontal: t.screenPadding, paddingVertical: t.space.sm, backgroundColor: t.colors.surfaceRaised, borderTopWidth: 1, borderTopColor: t.colors.border }}>
+          <AppText variant="bodyStrong" accessibilityLiveRegion="polite" style={{ flex: 1, minWidth: 90 }}>{selectedEntries.length} selected</AppText>
+          <SecondaryButton label="Cancel" onPress={clearSelection} />
+          <PrimaryButton label="Move" onPress={openMoveSheet} disabled={selectedEntries.length === 0} />
+        </View>
+      ) : null}
+      <BulkMoveSheet visible={showMoveSheet} count={selectedEntries.length} meal={moveDestination} error={moveError}
+        alreadyThere={isNoOpMove(selectedEntries, moveDestination)}
         onPick={(meal) => { setMoveDestination(meal); setMoveError(null); }}
         onConfirm={() => { void moveSelectedEntries(); }} onClose={() => setShowMoveSheet(false)} loading={moveEntries.isPending} />
     </View>

@@ -259,3 +259,35 @@ test('while selecting entries to move, a meal cannot be cleared (the two would a
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('moving never defaults to a move that changes nothing, and Undo sends each entry back to its own meal', async () => {
+  const lunchEntry = { ...yogurtEntry, id: 'e3', meal: 'Lunch' };
+  const { ctx, p, calls, errors, getEntries } = await openToday(undefined, almonds, undefined, [almondsEntry, lunchEntry]);
+  await p.getByRole('button', { name: 'Select entries' }).click();
+  await p.getByRole('checkbox', { name: /^Almonds/ }).first().click();
+  await p.getByRole('button', { name: 'Move', exact: true }).click();
+  // Almonds are in Breakfast: whatever the default is, it isn't Breakfast.
+  assert.equal(await p.getByRole('radio', { name: 'Breakfast' }).getAttribute('aria-checked') === 'true'
+    || await p.getByRole('radio', { name: 'Breakfast' }).getAttribute('aria-selected') === 'true', false);
+  await p.getByRole('radio', { name: 'Breakfast' }).click();
+  await p.getByText('It’s already in breakfast. Pick another meal.').waitFor();
+  assert.ok(await p.getByRole('button', { name: 'Move 1 entry' }).isDisabled());
+  await p.getByRole('button', { name: 'Close' }).last().click();
+  await p.waitForTimeout(400);
+
+  // Add the Lunch yogurt and move both to Dinner, then Undo.
+  await p.getByRole('checkbox', { name: /^Yogurt/ }).first().click();
+  await p.getByText('2 selected').waitFor();
+  await p.getByRole('button', { name: 'Move', exact: true }).click();
+  await p.getByRole('radio', { name: 'Dinner' }).click();
+  await p.getByRole('button', { name: 'Move 2 entries' }).click();
+  await p.getByText('Moved 2 entries to dinner').waitFor();
+  assert.deepEqual(getEntries().map((x) => x.meal), ['Dinner', 'Dinner']);
+  await p.getByRole('button', { name: 'Undo' }).click();
+  for (let i = 0; i < 40 && calls.filter((c) => c.path === '/api/diary/move').length < 3; i++) await p.waitForTimeout(100);
+  const moves = calls.filter((c) => c.method === 'POST' && c.path === '/api/diary/move').map((c) => JSON.parse(c.body));
+  assert.deepEqual(moves.slice(1).map((m) => [m.meal, m.entryIds]), [['Breakfast', ['e1']], ['Lunch', ['e3']]]);
+  assert.deepEqual(getEntries().map((x) => x.meal), ['Breakfast', 'Lunch']);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
