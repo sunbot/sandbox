@@ -9,7 +9,8 @@ import { useClearMeal, useDeleteEntry, useLogFood, useLogRecipe, usePlanMutation
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
 import { AppText, ConfirmationSheet, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
 import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
-import { MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
+import { allSelected, countText, liveSelection, startSelection, toggleAll, toggleSelected, type MealSelection } from '@/features/today/mealSelection';
+import { MealMenuSheet, MealPickerSheet, MealSection, MoveSheet, SelectionBar, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
 import { SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
@@ -42,7 +43,12 @@ export default function TodayScreen() {
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({}); // kept if a sheet is dismissed by accident
   const [showNutrients, setShowNutrients] = useState(false);
   const [loggingId, setLoggingId] = useState<string | null>(null);
-  const [clearing, setClearing] = useState<{ date: string; meal: Meal; entryIds: string[] } | null>(null);
+  const [clearing, setClearing] = useState<{ date: string; meal: Meal; entryIds: string[]; selected?: boolean } | null>(null);
+  const [menuMeal, setMenuMeal] = useState<Meal | null>(null);
+  const [pickedSelection, setSelection] = useState<(MealSelection & { date: string }) | null>(null);
+  const selection = pickedSelection && pickedSelection.date === date ? pickedSelection : null; // never follows you to another day
+  const [movePicking, setMovePicking] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const isToday = date === today();
   const go = (pathname: '/food/search' | '/scan', meal: Meal = quickMeal) => router.push({ pathname, params: { date, meal, mode: 'log' } });
@@ -110,17 +116,35 @@ export default function TodayScreen() {
 
   const confirmClear = () => {
     if (!clearing) return;
-    const request = clearing;
+    const { selected, ...request } = clearing;
     setClearing(null);
+    if (selected) setSelection(null);
     data.hideMany(request.entryIds);
     snackbar({
-      message: `Removing ${request.entryIds.length} ${request.entryIds.length === 1 ? 'entry' : 'entries'} from ${request.meal} — Undo?`,
+      message: `Removing ${countText(request.entryIds.length)} from ${request.meal} — Undo?`,
       actionLabel: 'Undo',
       onAction: () => data.unhideMany(request.entryIds),
       onTimeout: () => clearMeal.mutate(request, {
         onSettled: () => data.unhideMany(request.entryIds),
         onError: (err) => snackbar({ message: errorText(err, "Couldn't clear that meal. Refresh and try again.") }),
       }),
+    });
+  };
+
+  const moveSelected = async (to: Meal, from: Meal, ids: string[]) => {
+    if (moving || ids.length === 0) return;
+    setMovePicking(false);
+    setMoving(true);
+    const results = await Promise.allSettled(ids.map((id) => update.mutateAsync({ id, meal: to })));
+    setMoving(false);
+    const moved = ids.filter((_, i) => results[i].status === 'fulfilled');
+    const failed = ids.length - moved.length;
+    setSelection(failed ? { date, meal: from, ids: ids.filter((_, i) => results[i].status === 'rejected') } : null); // keep what failed ticked to retry
+    if (moved.length === 0) { snackbar({ message: "Couldn't move those entries. Try again." }); return; }
+    snackbar({
+      message: `Moved ${countText(moved.length)} to ${to === 'Snack' ? 'snacks' : to.toLowerCase()}${failed ? `; ${failed} couldn't be moved` : ''}`,
+      actionLabel: 'Undo',
+      onAction: () => { moved.forEach((id) => update.mutate({ id, meal: from })); },
     });
   };
 
@@ -174,6 +198,9 @@ export default function TodayScreen() {
   const targets = data.targets.data;
   // Today (or a future day) is still under way: nutrients are judged against the calories eaten so far, not the full day.
   const nutrientMode: NutrientMode = { inProgress: date >= today(), dayProgress: targets.calories > 0 ? day.totals.calories / targets.calories : 0 };
+  const menuEntries = day.meals.find((x) => x.meal === menuMeal)?.entries ?? [];
+  const selectionEntryIds = (day.meals.find((x) => x.meal === selection?.meal)?.entries ?? []).map((e) => e.id);
+  const selectedIds = selection ? liveSelection(selection, selectionEntryIds) : [];
   const anythingLogged = day.meals.some((m) => m.entries.length > 0);
 
   return (
@@ -200,12 +227,14 @@ export default function TodayScreen() {
             const md = day.meals.find((x) => x.meal === m);
             const entries = md?.entries ?? [];
             const planned = data.planned.filter((p) => p.meal === m);
-            const isExpanded = expanded[m] ?? (entries.length + planned.length > 0);
+            const selecting = selection?.meal === m;
+            const isExpanded = selecting || (expanded[m] ?? (entries.length + planned.length > 0));
             return (
               <MealSection key={m} meal={m} totals={md?.totals.calories ?? 0} entries={entries} planned={planned}
                 expanded={isExpanded} onToggle={() => setExpanded((x) => ({ ...x, [m]: !isExpanded }))}
                 onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry}
-                onClear={() => setClearing({ date, meal: m, entryIds: entries.map((e) => e.id) })}
+                onMenu={() => setMenuMeal(m)} selection={selecting ? liveSelection(selection, entries.map((e) => e.id)) : undefined}
+                onToggleSelect={(e) => setSelection((x) => (x ? { ...toggleSelected(x, e.id), date: x.date } : x))}
                 onLogPlanned={logPlanned} loggingId={loggingId} />
             );
           })}
@@ -228,9 +257,23 @@ export default function TodayScreen() {
       <NutrientsSheet visible={showNutrients} onClose={() => setShowNutrients(false)} progress={day.progress} mode={nutrientMode} />
       <MealPickerSheet visible={pickingMeal} meal={recentMeal} onClose={() => setPickingMeal(false)}
         onPick={(m) => { setRecentMeal(m); setPickingMeal(false); }} />
-      <ConfirmationSheet visible={clearing !== null} title={`Clear ${clearing?.meal ?? 'meal'}?`}
+      <MealMenuSheet meal={menuMeal} count={menuEntries.length} onClose={() => setMenuMeal(null)}
+        onSelect={() => { if (menuMeal) setSelection({ ...startSelection(menuMeal), date }); setMenuMeal(null); }}
+        onClear={() => { if (menuMeal) setClearing({ date, meal: menuMeal, entryIds: menuEntries.map((e) => e.id) }); setMenuMeal(null); }} />
+      {selection ? (
+        <>
+          <SelectionBar count={selectedIds.length} allChecked={allSelected(selection, selectionEntryIds)} busy={moving} bottomInset={insets.bottom}
+            onToggleAll={() => setSelection((x) => (x ? { ...toggleAll(x, selectionEntryIds), date: x.date } : x))}
+            onMove={() => setMovePicking(true)}
+            onDelete={() => setClearing({ date, meal: selection.meal, entryIds: selectedIds, selected: true })}
+            onCancel={() => setSelection(null)} />
+          <MoveSheet visible={movePicking} from={selection.meal} count={selectedIds.length} onClose={() => setMovePicking(false)}
+            onPick={(m) => { void moveSelected(m, selection.meal, selectedIds); }} />
+        </>
+      ) : null}
+      <ConfirmationSheet visible={clearing !== null} title={clearing?.selected ? 'Delete selected entries?' : `Clear ${clearing?.meal ?? 'meal'}?`}
         message={clearing ? `Remove ${clearing.entryIds.length} logged ${clearing.entryIds.length === 1 ? 'entry' : 'entries'} from ${clearing.meal} on ${clearing.date}? Planned items are not removed.` : undefined}
-        confirmLabel="Clear entries" destructive onConfirm={confirmClear} onCancel={() => setClearing(null)} />
+        confirmLabel={clearing?.selected ? 'Delete selected' : 'Clear entries'} destructive onConfirm={confirmClear} onCancel={() => setClearing(null)} />
     </View>
   );
 }

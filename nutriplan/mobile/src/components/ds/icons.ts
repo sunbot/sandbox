@@ -68,3 +68,4 @@ export { default as ZoomIn } from 'lucide-react-native/icons/zoom-in';
 export { default as ZoomOut } from 'lucide-react-native/icons/zoom-out';
 export { default as Keyboard } from 'lucide-react-native/icons/keyboard';
 export { default as CameraOff } from 'lucide-react-native/icons/camera-off';
+export { default as Ellipsis } from 'lucide-react-native/icons/ellipsis';

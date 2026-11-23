@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, View } from 'react-native';
-import { CalendarClock, Check, ChevronDown, ChevronUp, Mic, Plus, ScanBarcode, Search, Sparkles } from '@/components/ds/icons';
+import { CalendarClock, Check, ChevronDown, ChevronUp, Ellipsis, Mic, Square, SquareCheck, Trash2, Plus, ScanBarcode, Search, Sparkles } from '@/components/ds/icons';
 import type { Day, DiaryEntry, NutrientProgress as NP, PlanEntry, QuickLogItem, Targets } from '@/api/types';
 import {
   AppCard, AppText, Badge, BottomSheet, CalorieRing, FilterChip, FoodRow, IconButton, MacroProgress, NutrientProgress,
@@ -9,6 +9,7 @@ import { meals, type Meal } from '@/lib/format';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useLargeText, useTheme } from '@/theme/ThemeProvider';
 import { SwipeableDiaryRow } from '@/features/diary/SwipeableDiaryRow';
+import { countText, moveTargets, selectedText } from '@/features/today/mealSelection';
 import { amountText } from '@/features/quantity/quantity';
 
 const mealLabel = (m: Meal) => (m === 'Snack' ? 'Snacks' : m);
@@ -138,7 +139,7 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
 
 /* ───────────────────────── Meal section ───────────────────────── */
 
-export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onClear, onLogPlanned, loggingId }: {
+export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onMenu, selection, onToggleSelect, onLogPlanned, loggingId }: {
   meal: Meal;
   totals: number;
   entries: DiaryEntry[];
@@ -148,7 +149,11 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   onAdd: () => void;
   onEntry: (e: DiaryEntry) => void;
   onDeleteEntry: (e: DiaryEntry) => void;
-  onClear: () => void;
+  /** Opens the meal's overflow menu (Select entries / Clear meal). */
+  onMenu: () => void;
+  /** Set while this meal is in "Select entries" mode: the ticked entry ids. */
+  selection?: string[];
+  onToggleSelect: (e: DiaryEntry) => void;
   onLogPlanned: (p: PlanEntry) => void;
   loggingId?: string | null;
 }) {
@@ -169,25 +174,30 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   const plannedKcal = planned.reduce((s, p) => s + p.item.nutrition.calories, 0);
   return (
     <AppCard padded={false}>
-      <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded }}
-        accessibilityLabel={`${mealLabel(meal)}, ${Math.round(totals)} calories${planned.length ? `, ${planned.length} planned` : ''}`}
-        accessibilityHint={expanded ? 'Collapses the meal' : 'Shows the foods in this meal'}
-        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingLeft: t.space.lg, paddingRight: t.space.sm, gap: t.space.sm, borderRadius: t.radii.card }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
-        <View style={{ flex: 1, paddingVertical: t.space.sm }}>
-          <AppText variant="cardTitle">{mealLabel(meal)}</AppText>
-          <AppText variant="secondary" tone="secondary" numeric>
-            <AppText variant="secondary" numeric style={{ fontWeight: '600' }}>{Math.round(totals)} kcal</AppText>
-            {planned.length ? ` · +${Math.round(plannedKcal)} planned` : ''}
-          </AppText>
-        </View>
-        <View style={{ width: t.sizes.touch, height: t.sizes.touch, alignItems: 'center', justifyContent: 'center' }}>
-          {expanded ? <ChevronUp size={20} color={t.colors.textSecondary} /> : <ChevronDown size={20} color={t.colors.textSecondary} />}
-        </View>
-      </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: t.space.xs }}>
+        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded }}
+          accessibilityLabel={`${mealLabel(meal)}, ${Math.round(totals)} calories${planned.length ? `, ${planned.length} planned` : ''}`}
+          accessibilityHint={expanded ? 'Collapses the meal' : 'Shows the foods in this meal'}
+          style={({ pressed }) => [{ flex: 1, flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingLeft: t.space.lg, gap: t.space.sm, borderRadius: t.radii.card }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+          <View style={{ flex: 1, paddingVertical: t.space.sm }}>
+            <AppText variant="cardTitle">{mealLabel(meal)}</AppText>
+            <AppText variant="secondary" tone="secondary" numeric>
+              <AppText variant="secondary" numeric style={{ fontWeight: '600' }}>{Math.round(totals)} kcal</AppText>
+              {planned.length ? ` · +${Math.round(plannedKcal)} planned` : ''}
+            </AppText>
+          </View>
+          <View style={{ width: t.sizes.touch, height: t.sizes.touch, alignItems: 'center', justifyContent: 'center' }}>
+            {expanded ? <ChevronUp size={20} color={t.colors.textSecondary} /> : <ChevronDown size={20} color={t.colors.textSecondary} />}
+          </View>
+        </Pressable>
+        {entries.length && !selection ? <IconButton icon={Ellipsis} label={`${mealLabel(meal)} actions`} onPress={onMenu} /> : null}
+      </View>
 
       {expanded ? (
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.xs }}>
-          {entries.map((e) => (
+          {entries.map((e) => selection ? (
+            <SelectableEntryRow key={e.id} entry={e} checked={selection.includes(e.id)} onToggle={() => onToggleSelect(e)} />
+          ) : (
             <SwipeableDiaryRow key={e.id} name={displayName(e.item)} detail={detailFor(e.item)} calories={e.item.nutrition.calories}
               onPress={() => onEntry(e)} onDelete={() => onDeleteEntry(e)} accessibilityHint="Edit amount or meal. Swipe left to delete" />
           ))}
@@ -197,13 +207,98 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
               trailing={<SecondaryButton label="Log" onPress={() => onLogPlanned(p)} loading={loggingId === p.id} style={{ paddingHorizontal: t.space.md }}
                 accessibilityHint={`Marks ${displayName(p.item)} as eaten`} />} />
           ))}
-          <View style={{ flexDirection: 'row' }}>
-            <TextButton label={`Add to ${mealLabel(meal).toLowerCase()}`} icon={Plus} onPress={onAdd} />
-            {entries.length ? <TextButton label={`Clear ${mealLabel(meal).toLowerCase()}`} onPress={onClear} /> : null}
-          </View>
+          {selection ? null : (
+            <View style={{ flexDirection: 'row' }}>
+              <TextButton label={`Add to ${mealLabel(meal).toLowerCase()}`} icon={Plus} onPress={onAdd} />
+            </View>
+          )}
         </View>
       ) : null}
     </AppCard>
+  );
+}
+
+/** A diary entry in "Select entries" mode: one checkbox row; tapping anywhere on it ticks it. */
+function SelectableEntryRow({ entry, checked, onToggle }: { entry: DiaryEntry; checked: boolean; onToggle: () => void }) {
+  const t = useTheme();
+  const name = displayName(entry.item);
+  const Box = checked ? SquareCheck : Square;
+  return (
+    <Pressable onPress={onToggle} accessibilityRole="checkbox" accessibilityState={{ checked }}
+      accessibilityLabel={`${name}, ${detailFor(entry.item)}, ${Math.round(entry.item.nutrition.calories)} calories`}
+      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', minHeight: t.sizes.touch }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+      <View style={{ width: t.sizes.touch, height: t.sizes.touch, alignItems: 'center', justifyContent: 'center' }}>
+        <Box size={22} color={checked ? t.colors.primary : t.colors.textSecondary} />
+      </View>
+      <View style={{ flex: 1 }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden pointerEvents="none">
+        <FoodRow name={name} detail={detailFor(entry.item)} calories={entry.item.nutrition.calories} />
+      </View>
+    </Pressable>
+  );
+}
+
+/** The meal's overflow menu: Select entries, and (last, destructive) Clear meal. */
+export function MealMenuSheet({ meal, count, onSelect, onClear, onClose }: { meal: Meal | null; count: number; onSelect: () => void; onClear: () => void; onClose: () => void }) {
+  const t = useTheme();
+  const label = meal ? mealLabel(meal) : 'Meal';
+  const item = (text: string, Icon: typeof Check, onPress: () => void, danger?: boolean) => (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={text} disabled={count === 0} accessibilityState={{ disabled: count === 0 }}
+      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: t.space.md, borderRadius: t.radii.button, gap: t.space.md, opacity: count === 0 ? 0.5 : 1 },
+        pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+      <Icon size={20} color={danger ? t.colors.errorText : t.colors.textSecondary} />
+      <AppText variant="body" style={danger ? { color: t.colors.errorText } : undefined}>{text}</AppText>
+    </Pressable>
+  );
+  return (
+    <BottomSheet visible={meal !== null} onClose={onClose} title={label}>
+      <View style={{ paddingBottom: t.space.md }}>
+        {item('Select entries', SquareCheck, onSelect)}
+        {item(`Clear ${label.toLowerCase()}`, Trash2, onClear, true)}
+      </View>
+    </BottomSheet>
+  );
+}
+
+/** Bottom bar while selecting: count, Select all, Move, Delete selected, Done. Actions are disabled until something is ticked. */
+export function SelectionBar({ count, allChecked, busy, bottomInset, onToggleAll, onMove, onDelete, onCancel }: {
+  count: number; allChecked: boolean; busy?: boolean; bottomInset: number;
+  onToggleAll: () => void; onMove: () => void; onDelete: () => void; onCancel: () => void;
+}) {
+  const t = useTheme();
+  const none = count === 0;
+  return (
+    <View accessibilityViewIsModal={false}
+      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, gap: t.space.sm, padding: t.space.md, paddingBottom: t.space.md + bottomInset,
+        backgroundColor: t.colors.surface, borderTopWidth: 1, borderTopColor: t.colors.border }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <AppText variant="bodyStrong" accessibilityLiveRegion="polite">{selectedText(count)}</AppText>
+        <View style={{ flexDirection: 'row' }}>
+          <TextButton label={allChecked ? 'Clear selection' : 'Select all'} onPress={onToggleAll} />
+          <TextButton label="Cancel" onPress={onCancel} />
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: t.space.sm }}>
+        <SecondaryButton label="Move" onPress={onMove} disabled={none || busy} style={{ flex: 1 }} accessibilityHint={none ? 'Select entries first' : undefined} />
+        <SecondaryButton label="Delete selected" tone="danger" onPress={onDelete} disabled={none || busy} loading={busy} style={{ flex: 1 }} accessibilityHint={none ? 'Select entries first' : undefined} />
+      </View>
+    </View>
+  );
+}
+
+/** Choose the meal the ticked entries move to (same day). */
+export function MoveSheet({ visible, from, count, onPick, onClose }: { visible: boolean; from: Meal; count: number; onPick: (m: Meal) => void; onClose: () => void }) {
+  const t = useTheme();
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={`Move ${countText(count)} to`}>
+      <View style={{ paddingBottom: t.space.md }}>
+        {moveTargets(meals, from).map((m) => (
+          <Pressable key={m} onPress={() => onPick(m)} accessibilityRole="button" accessibilityLabel={`Move to ${mealLabel(m)}`}
+            style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: t.space.md, borderRadius: t.radii.button }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+            <AppText variant="body">{mealLabel(m)}</AppText>
+          </Pressable>
+        ))}
+      </View>
+    </BottomSheet>
   );
 }
 

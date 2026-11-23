@@ -102,10 +102,22 @@ starting to scroll closes it (that tap doesn't open the editor). A drag has to b
 vertical scrolling are untouched. Screen readers get a "Delete" action on the row, and Delete is also in
 the editor. Long press is reserved (not used).
 
-On Today, expand a nonempty meal and choose **Clear breakfast/lunch/dinner/snack**. The confirmation names the date and
+On Today, a meal with logged entries has a **⋯ actions** menu in its header (separate from the expand/collapse chevron). Its
+last item, **Clear breakfast/lunch/dinner/snacks**, is the only way to clear a whole meal (there is no inline Clear link beside
+Add). The confirmation names the date and
 number of logged entries; planned items are not removed. Undo cancels the clear before the five-second window closes.
 Only the confirmed entries are sent to the server, so entries added later are left alone. If a confirmed entry was moved
 or removed meanwhile, the clear fails as a whole and the diary refreshes. Clearing a logged planned item reopens its plan.
+
+The same menu's **Select entries** turns the meal into a checklist (checkbox rows, count, Select all, Cancel) with a bottom
+bar: **Move** (to another meal, same day, via the normal entry update; Undo moves them back) and **Delete selected**
+(confirmation, then the same scoped clear request with only the ticked ids and the same Undo window). Both are disabled until
+something is ticked; a partly failed move keeps the failed entries ticked and says how many moved. Copy meal is not offered
+here (follow-up). Pure selection rules: `features/today/mealSelection.ts`.
+
+Android check: tap ⋯ on a populated meal (≥48 dp target, TalkBack says "Breakfast actions"); the card doesn't collapse and rows
+don't open. Select entries → tick rows (TalkBack announces checked state and "N selected"); Move and Delete selected; Cancel
+leaves everything untouched; Clear meal confirms, shows Undo.
 
 - Implementation: `features/diary/SwipeableDiaryRow.tsx`: React Native's own `PanResponder` + `Pressable` (not a gesture-handler
   swipe component: inside `ReanimatedSwipeable` taps on the row and on the revealed Delete button never arrived on an Android phone,

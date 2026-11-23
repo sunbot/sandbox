@@ -41,21 +41,25 @@ async function openToday(totals, food = almonds, clear = () => [204]) {
   await row.waitFor({ timeout: 15000 });
   return { ctx, p, calls, row, errors };
 }
+const chooseClear = async (p) => {
+  await p.getByRole('button', { name: 'Breakfast actions' }).click();
+  await p.getByRole('button', { name: 'Clear breakfast' }).click();
+};
 const deletes = (calls) => calls.filter((c) => c.method === 'DELETE').length;
 
 test('clear meal confirms the count, supports cancel and undo, and sends only confirmed entries', async () => {
   const { ctx, p, calls } = await openToday();
-  const clear = p.getByRole('button', { name: 'Clear breakfast' });
-  await clear.click();
+  assert.equal(await p.getByRole('button', { name: 'Clear breakfast' }).count(), 0); // no inline Clear next to Add
+  await chooseClear(p);
   await p.getByText(`Remove 2 logged entries from Breakfast on ${today()}? Planned items are not removed.`).waitFor();
   await p.getByRole('button', { name: 'Cancel' }).click();
   assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
-  await clear.click();
+  await chooseClear(p);
   await p.getByRole('button', { name: 'Clear entries' }).click();
   await p.getByRole('button', { name: 'Undo' }).click();
   assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
   assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
-  await clear.click();
+  await chooseClear(p);
   await p.getByRole('button', { name: 'Clear entries' }).click();
   await p.waitForTimeout(6000);
   const request = calls.find((c) => c.path.includes('clear-meal'));
@@ -65,10 +69,31 @@ test('clear meal confirms the count, supports cancel and undo, and sends only co
 
 test('clear failure restores entries and shows an error', async () => {
   const { ctx, p } = await openToday(undefined, almonds, () => [500, { detail: 'Clear failed' }]);
-  await p.getByRole('button', { name: 'Clear breakfast' }).click();
+  await chooseClear(p);
   await p.getByRole('button', { name: 'Clear entries' }).click();
   await p.getByText('Clear failed').waitFor({ timeout: 10000 });
   assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
+  await ctx.close();
+});
+
+test('select entries: Move and Delete selected act only on ticked entries, with confirmation and disabled empty state', async () => {
+  const { ctx, p, calls } = await openToday();
+  await p.getByRole('button', { name: 'Breakfast actions' }).click();
+  await p.getByRole('button', { name: 'Select entries' }).click();
+  await p.getByText('None selected').waitFor();
+  assert.equal(await p.getByRole('button', { name: 'Delete selected' }).isDisabled(), true);
+  await p.getByRole('checkbox', { name: /^Almonds, 28 g/ }).click();
+  await p.getByText('1 selected').waitFor();
+  await p.getByRole('button', { name: 'Delete selected' }).click();
+  await p.getByText(`Remove 1 logged entry from Breakfast on ${today()}? Planned items are not removed.`).waitFor();
+  await p.getByRole('button', { name: 'Cancel' }).last().click();
+  assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
+  await p.getByRole('button', { name: 'Move' }).click();
+  await p.getByRole('button', { name: 'Move to Lunch' }).click();
+  await p.waitForTimeout(500);
+  const patch = calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/e1'));
+  assert.deepEqual(JSON.parse(patch.body), { meal: 'Lunch' });
+  assert.equal(calls.filter((c) => c.method === 'PATCH').length, 1);
   await ctx.close();
 });
 
