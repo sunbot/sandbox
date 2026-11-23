@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, PanResponder, Pressable, View } from 'react-native';
 import { AppText, FoodRow } from '@/components/ds';
-import { Trash2 } from '@/components/ds/icons';
+import { Square, SquareCheck, Trash2 } from '@/components/ds/icons';
 import { useReducedMotion, useTheme } from '@/theme/ThemeProvider';
 import { createOpenRowTracker, type OpenRowTracker } from './openRow';
 import { DELETE_WIDTH, claimsSwipe, dragPosition, settle as settleSwipe } from './swipe';
@@ -32,7 +32,7 @@ export function SwipeGroup({ children }: { children: (closeOpen: () => void) => 
  * worked. Here a tap is an ordinary press, and the row only claims a touch once it moves clearly sideways, so vertical
  * scrolling and taps are untouched.
  */
-export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDelete, accessibilityHint }: {
+export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDelete, accessibilityHint, selectionMode = false, selected = false, onToggleSelect }: {
   name: string;
   badge?: ReactNode;
   detail?: string;
@@ -40,6 +40,9 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
   onPress: () => void;
   onDelete: () => void;
   accessibilityHint?: string;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const t = useTheme();
   const reduced = useReducedMotion();
@@ -82,9 +85,10 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
 
   // A tap while some row is swiped open just closes it (it doesn't also open the editor).
   const press = useCallback(() => {
+    if (selectionMode) { onToggleSelect?.(); return; }
     if (group?.closeOpen()) return;
     onPress();
-  }, [group, onPress]);
+  }, [group, onPress, onToggleSelect, selectionMode]);
 
   const remove = useCallback(() => {
     close();
@@ -96,7 +100,7 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
   return (
     <View style={{ overflow: 'hidden' }}>
       {/* Under the row; the row covers it until swiped. Hidden from screen readers while covered (they have the Delete action). */}
-      <View importantForAccessibility={revealed ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!revealed}
+      {!selectionMode ? <View importantForAccessibility={revealed ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!revealed}
         style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: DELETE_WIDTH, paddingLeft: t.space.sm, justifyContent: 'center' }}>
         <Pressable onPress={remove} accessibilityRole="button" accessibilityLabel={`Delete ${name}`}
           style={({ pressed }) => ({ flex: 1, minHeight: t.sizes.touch, borderRadius: t.radii.sm, alignItems: 'center', justifyContent: 'center', gap: 2,
@@ -104,10 +108,13 @@ export function SwipeableDiaryRow({ name, detail, calories, badge, onPress, onDe
           <Trash2 size={20} color={t.colors.textOnPrimary} />
           <AppText variant="label" style={{ color: t.colors.textOnPrimary }}>Delete</AppText>
         </Pressable>
-      </View>
-      <Animated.View {...pan.panHandlers} style={{ transform: [{ translateX: x }], backgroundColor: t.colors.surface }}>
-        <FoodRow name={name} detail={detail} calories={calories} badge={badge} onPress={press} accessibilityHint={accessibilityHint}
-          accessibilityActions={actions} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'delete') onDelete(); }} />
+      </View> : null}
+      <Animated.View {...(selectionMode ? {} : pan.panHandlers)} style={{ transform: [{ translateX: x }], backgroundColor: t.colors.surface }}>
+        <FoodRow name={name} detail={detail} calories={calories} badge={badge} onPress={press}
+          accessibilityActions={selectionMode ? undefined : actions} onAccessibilityAction={selectionMode ? undefined : (e) => { if (e.nativeEvent.actionName === 'delete') onDelete(); }}
+          accessibilityRole={selectionMode ? 'checkbox' : 'button'} accessibilityState={selectionMode ? { checked: selected } : undefined}
+          accessibilityHint={selectionMode ? 'Selects this diary entry to move it to another meal' : accessibilityHint}
+          trailing={selectionMode ? (selected ? <SquareCheck size={20} color={t.colors.primary} /> : <Square size={20} color={t.colors.textSecondary} />) : undefined} />
       </Animated.View>
     </View>
   );

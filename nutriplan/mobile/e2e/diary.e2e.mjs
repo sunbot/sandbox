@@ -15,14 +15,15 @@ const almonds = { id: 'f1', name: 'Nuts, almonds', source: 'UsdaSrLegacy', quali
   measures: [{ unit: 'almond', label: 'almond', plural: 'almonds', base: 1.2, kind: 'Count', source: 'almond', countable: true }, { unit: 'cup', label: 'cup', plural: 'cups', base: 143, kind: 'Volume', source: 'cup, whole', countable: false },
     { unit: 'g', label: 'g', plural: 'g', base: 1, kind: 'Mass', source: null, countable: false }, { unit: 'oz', label: 'oz', plural: 'oz', base: 28.349523, kind: 'Mass', source: null, countable: false }] };
 
-async function openToday(totals, food = almonds, clear = () => [204]) {
+async function openToday(totals, food = almonds, clear = () => [204], initialEntries = [almondsEntry, yogurtEntry], moveStatus = 200) {
   const ctx = await phone(b);
   const p = await ctx.newPage();
+  let currentEntries = initialEntries.map((e) => ({ ...e }));
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   const calls = await mockApi(p, {
     'GET /api/diary/quick-log': () => [],
-    'GET /api/diary/': () => day([almondsEntry, yogurtEntry], totals),
+    'GET /api/diary/': () => day(currentEntries, totals),
     'GET /api/targets': () => TARGETS,
     'GET /api/foods/f1': () => food,
     'GET /api/nutrients': () => [200, [
@@ -33,13 +34,19 @@ async function openToday(totals, food = almonds, clear = () => [204]) {
       { id: 1114, name: 'Vitamin D', unit: 'µg', group: 'Vitamin', displayOrder: 72 },
     ]],
     'PATCH /api/diary/e1': (c) => { const body = JSON.parse(c.body); return { ...almondsEntry, item: { ...almondsEntry.item, quantity: body.amount, unit: body.unit } }; },
+    'POST /api/diary/move': (c) => {
+      if (moveStatus !== 200) return [moveStatus, { title: 'Could not move entries' }];
+      const request = JSON.parse(c.body);
+      currentEntries = currentEntries.map((e) => request.entryIds.includes(e.id) ? { ...e, meal: request.meal } : e);
+      return [200, currentEntries.filter((e) => request.entryIds.includes(e.id))];
+    },
     'DELETE /api/diary/': () => [204],
     'POST /api/diary/clear-meal': clear,
   });
   await p.goto(server.url + '/');
   const row = p.getByRole('button', { name: /^Almonds, 28 g/ }).first();
   await row.waitFor({ timeout: 15000 });
-  return { ctx, p, calls, row, errors };
+  return { ctx, p, calls, row, errors, getEntries: () => currentEntries };
 }
 const deletes = (calls) => calls.filter((c) => c.method === 'DELETE').length;
 
@@ -190,10 +197,65 @@ test('a short drag or a vertical scroll never opens a row', async () => {
   await ctx.close();
 });
 
+test('selecting entries from different meals moves them together and refreshes the diary', async () => {
+  const entries = [{ ...almondsEntry, meal: 'Breakfast' }, { ...yogurtEntry, meal: 'Lunch' }];
+  const { ctx, p, calls, errors, getEntries } = await openToday(undefined, almonds, undefined, entries);
+  await p.getByRole('button', { name: 'Select entries' }).click();
+  await p.getByRole('checkbox', { name: /Almonds/ }).tap();
+  await p.getByRole('checkbox', { name: /Yogurt/ }).tap();
+  await p.getByRole('button', { name: 'Move' }).click();
+  await p.getByRole('radio', { name: 'Snacks' }).click();
+  await p.getByRole('button', { name: 'Move 2 entries' }).click();
+  await p.getByRole('button', { name: /^Snacks, 262 calories/ }).waitFor();
+
+  const move = calls.find((c) => c.method === 'POST' && c.path === '/api/diary/move');
+  assert.ok(move);
+  assert.deepEqual(JSON.parse(move.body), { date: today(), entryIds: ['e1', 'e2'], meal: 'Snack' });
+  assert.ok(getEntries().every((e) => e.meal === 'Snack'), 'entries now belong to the destination meal');
+  assert.ok(calls.filter((c) => c.method === 'GET' && c.path === '/api/diary/' + today()).length >= 2, 'successful move refreshes the diary');
+  await p.getByRole('button', { name: 'Select entries' }).waitFor();
+  assert.equal(await p.getByRole('checkbox').count(), 0, 'selection mode clears after success');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('bulk move needs a selection, cancellation is harmless, and errors retain the selection', async () => {
+  const { ctx, p, calls, errors } = await openToday(undefined, almonds, undefined, undefined, 500);
+  await p.getByRole('button', { name: 'Select entries' }).click();
+  const move = p.getByRole('button', { name: 'Move', exact: true });
+  assert.equal(await move.isEnabled(), false, 'empty selection cannot be submitted');
+  const almondsRow = p.getByRole('checkbox', { name: /Almonds/ });
+  await almondsRow.tap();
+  await move.click();
+  await p.getByTestId('bottom-sheet').getByRole('button', { name: 'Cancel' }).click();
+  assert.equal(await p.getByRole('checkbox', { name: /Almonds/ }).count(), 1, 'closing the destination sheet keeps selection');
+  assert.equal(calls.filter((c) => c.method === 'POST' && c.path === '/api/diary/move').length, 0, 'cancel does not send a request');
+
+  await move.click();
+  await p.getByRole('radio', { name: 'Snacks' }).click();
+  await p.getByRole('button', { name: 'Move 1 entry' }).click();
+  await p.getByRole('alert').waitFor();
+  assert.equal(await p.getByTestId('bottom-sheet').isVisible(), true, 'the error is visible inside the open sheet');
+  assert.equal(await p.getByRole('checkbox', { name: /Almonds/ }).count(), 1, 'failed moves keep the selection for retry');
+  assert.equal(calls.filter((c) => c.method === 'POST' && c.path === '/api/diary/move').length, 1);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('over a macro target the summary says how far over (the bar itself stops at full)', async () => {
   const { ctx, p } = await openToday(N(1262, 23, 12, 95));
   await p.getByText('25 g over').waitFor({ timeout: 5000 });
   assert.equal(await p.getByText(/g over/).count(), 1, 'only fat is over');
   assert.equal(await p.getByLabel(/^Fat: 95 of 70 grams, 25 grams over target/).count(), 1, 'screen readers hear it too');
+  await ctx.close();
+});
+
+test('while selecting entries to move, a meal cannot be cleared (the two would act on the same rows)', async () => {
+  const { ctx, p, errors } = await openToday();
+  await p.getByRole('button', { name: 'Clear breakfast' }).waitFor();
+  await p.getByRole('button', { name: 'Select entries' }).click();
+  await p.getByRole('checkbox', { name: /^Almonds/ }).first().waitFor();
+  assert.equal(await p.getByRole('button', { name: 'Clear breakfast' }).count(), 0);
+  assert.deepEqual(errors, []);
   await ctx.close();
 });

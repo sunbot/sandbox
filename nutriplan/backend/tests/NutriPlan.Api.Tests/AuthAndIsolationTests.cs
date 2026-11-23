@@ -426,6 +426,7 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
         }));
         var foodId = (string)food["id"]!;
         var entry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Snack", foodId, grams = 40.0 }));
+        var secondEntry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Lunch", foodId, grams = 20.0 }));
         var plan = await Json(await a.PostAsJsonAsync("/api/plan/food", new { date = Day.AddDays(1), meal = "Snack", foodId, grams = 40.0 }));
 
         // The owner sees the food's measures and can change an amount in them.
@@ -433,13 +434,50 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
         Assert.Contains(mine["measures"]!.AsArray(), m => (string?)m!["unit"] == "g");
         var changed = await Json(await a.PatchAsJsonAsync($"/api/diary/{entry["id"]}", new { amount = 1.5, unit = "oz" }));
         Assert.Equal("oz", (string?)changed["item"]!["unit"]);
+        var moveResponse = await a.PostAsJsonAsync("/api/diary/move", new
+        {
+            date = Day, entryIds = new[] { (string)entry["id"]!, (string)secondEntry["id"]! }, meal = "Dinner",
+        });
+        Assert.True(moveResponse.IsSuccessStatusCode, await moveResponse.Content.ReadAsStringAsync());
+        var moved = (await moveResponse.Content.ReadFromJsonAsync<JsonArray>())!;
+        Assert.All(moved.AsArray(), e =>
+        {
+            Assert.Equal("Dinner", (string?)e!["meal"]);
+            Assert.Equal(Day.ToString("yyyy-MM-dd"), (string?)e["date"]);
+        });
+        var callerEntry = await Json(await a.PostAsJsonAsync("/api/diary/food", new { date = Day, meal = "Lunch", foodId, grams = 10.0 }));
+        var otherFood = await Json(await b.PostAsJsonAsync("/api/foods", new
+        {
+            name = "Qwzx other member bar", brand = (string?)null, barcode = (string?)null, servingGrams = 40.0, servingDescription = "1 bar",
+            nutrientsPerServing = new Dictionary<string, double> { ["1008"] = 150 },
+        }));
+        var otherEntry = await Json(await b.PostAsJsonAsync("/api/diary/food", new
+        {
+            date = Day, meal = "Breakfast", foodId = (string)otherFood["id"]!, grams = 40.0,
+        }));
+        Assert.Equal(HttpStatusCode.NotFound, (await a.PostAsJsonAsync("/api/diary/move", new
+        {
+            date = Day, entryIds = new[] { (string)callerEntry["id"]!, (string)otherEntry["id"]! }, meal = "Snack",
+        })).StatusCode);
+        var afterMixedOwnerMove = await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        var callerEntryAfter = afterMixedOwnerMove["meals"]!.AsArray()
+            .SelectMany(m => m!["entries"]!.AsArray())
+            .Single(e => (string?)e!["id"] == (string)callerEntry["id"]!)!;
+        Assert.Equal("Lunch", (string?)callerEntryAfter!["meal"]);
 
         // Another user can neither read the food nor change the entry or the planned item.
         Assert.Equal(HttpStatusCode.NotFound, (await b.GetAsync($"/api/foods/{foodId}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PatchAsJsonAsync($"/api/diary/{entry["id"]}", new { amount = 99.0, unit = "g" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/diary/move", new
+        {
+            date = Day, entryIds = new[] { (string)entry["id"]! }, meal = "Breakfast",
+        })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync($"/api/plan/{plan["id"]}/amount", new { amount = 99.0, unit = "g" })).StatusCode);
-        var still = (await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"))).ToJsonString();
-        Assert.Contains("\"unit\":\"oz\"", still);
+        var stillDay = await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        Assert.Contains("\"unit\":\"oz\"", stillDay.ToJsonString());
+        // Count entries, not text: the day's meal sections also carry their own "meal" label.
+        var dinnerEntries = stillDay["meals"]!.AsArray().SelectMany(m => m!["entries"]!.AsArray()).Count(e => (string?)e!["meal"] == "Dinner");
+        Assert.Equal(2, dinnerEntries);
     }
 
     [PostgresFact]

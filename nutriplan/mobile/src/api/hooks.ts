@@ -113,6 +113,14 @@ export function useUpdateEntry() {
   });
 }
 
+export function useMoveDiaryEntries() {
+  const invalidate = useInvalidateNutrition();
+  return useMutation({
+    mutationFn: (r: { date: string; entryIds: string[]; meal: Meal }) => post<T.DiaryEntry[]>('/diary/move', r),
+    onSuccess: invalidate,
+  });
+}
+
 export function useDeleteEntry() {
   const invalidate = useInvalidateNutrition();
   return useMutation({ mutationFn: (id: string) => del(`/diary/${id}`), onSuccess: invalidate });

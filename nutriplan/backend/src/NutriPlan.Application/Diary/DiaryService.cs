@@ -40,6 +40,8 @@ public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeI
 
 public sealed record LogQuickRequest(DateOnly Date, MealSlot Meal, string Name, double Calories, double? Protein, double? Carbs, double? Fat);
 
+public sealed record MoveDiaryEntriesRequest(DateOnly Date, IReadOnlyList<Guid>? EntryIds, MealSlot Meal);
+
 public sealed record QuickLogItemDto(ItemDto Item, string UsualMeal, int TimesLogged, DateTimeOffset LastLogged);
 
 /// <summary>
@@ -170,6 +172,24 @@ public sealed class DiaryService(
         if (note is not null) entry.Note = note.Length == 0 ? null : note;
         await uow.SaveChangesAsync(ct);
         return DiaryEntryDto.From(entry);
+    }
+
+    /// <summary>Moves a bounded set of entries from one date in one save, without changing their item snapshots.</summary>
+    public async Task<IReadOnlyList<DiaryEntryDto>> MoveManyAsync(MoveDiaryEntriesRequest r, CancellationToken ct = default)
+    {
+        if (r.EntryIds is null || r.EntryIds.Count == 0) throw new ValidationException("Select at least one diary entry.");
+        if (r.EntryIds.Count > 100) throw new ValidationException("Move no more than 100 diary entries at once.");
+        if (r.EntryIds.Distinct().Count() != r.EntryIds.Count) throw new ValidationException("Each diary entry can only be selected once.");
+        if (!Enum.IsDefined(r.Meal)) throw new ValidationException("Choose a valid meal.");
+
+        var requested = r.EntryIds.ToHashSet();
+        var entries = (await diary.GetRangeAsync(r.Date, r.Date, ct)).Where(e => requested.Contains(e.Id)).ToList();
+        if (entries.Count != requested.Count) throw new NotFoundException("One or more diary entries were not found for that date.");
+
+        foreach (var entry in entries) entry.Move(r.Date, r.Meal);
+        await uow.SaveChangesAsync(ct);
+        var byId = entries.ToDictionary(e => e.Id);
+        return r.EntryIds.Select(id => DiaryEntryDto.From(byId[id])).ToList();
     }
 
     /// <summary>The same item in a new amount and/or measure (see <see cref="ItemAmounts"/>); used for logged and planned items.</summary>

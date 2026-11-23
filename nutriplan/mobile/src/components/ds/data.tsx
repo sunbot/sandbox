@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { type AccessibilityActionEvent, type AccessibilityActionInfo, Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
+import { type AccessibilityActionEvent, type AccessibilityActionInfo, type AccessibilityState, Animated, Image, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { CircleAlert, CircleCheck, CircleDashed, Clock, TriangleAlert, type LucideIcon } from '@/components/ds/icons';
 import { useLargeText, useReducedMotion, useStyles, useTheme } from '@/theme/ThemeProvider';
@@ -191,7 +191,7 @@ export function CalorieRing({ eaten, target, size = 96 }: { eaten: number; targe
 
 /* ───────────────────────── Food row ───────────────────────── */
 
-export function FoodRow({ name, detail, calories, badge, onPress, trailing, accessibilityHint, accessibilityActions, onAccessibilityAction }: {
+export function FoodRow({ name, detail, calories, badge, onPress, trailing, accessibilityHint, accessibilityActions, onAccessibilityAction, accessibilityRole, accessibilityState }: {
   name: string;
   detail?: string;
   calories: number;
@@ -202,6 +202,8 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
   /** Extra screen-reader actions on the row (e.g. Delete for a swipeable diary row). */
   accessibilityActions?: AccessibilityActionInfo[];
   onAccessibilityAction?: (e: AccessibilityActionEvent) => void;
+  accessibilityRole?: 'button' | 'checkbox';
+  accessibilityState?: AccessibilityState;
 }) {
   const a11y = { actions: accessibilityActions, onAction: onAccessibilityAction };
   const t = useTheme();
@@ -211,6 +213,7 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
     // Large text: name gets the full width; calories, badge and actions go underneath.
     return (
       <Row onPress={onPress} label={`${name}, ${detail ? detail + ', ' : ''}${Math.round(calories)} calories`} hint={accessibilityHint} a11y={a11y}
+        accessibilityRole={accessibilityRole} accessibilityState={accessibilityState}
         style={[s.row, { flexDirection: 'column', alignItems: 'stretch', gap: 4 }]} pressedStyle={{ backgroundColor: t.colors.surfaceMuted }}>
         <AppText variant="body" numberOfLines={4}>{name}</AppText>
         <AppText variant="secondary" tone="secondary" numeric>
@@ -222,6 +225,7 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
   }
   return (
     <Row onPress={onPress} label={`${name}, ${detail ? detail + ', ' : ''}${Math.round(calories)} calories`} hint={accessibilityHint} a11y={a11y}
+      accessibilityRole={accessibilityRole} accessibilityState={accessibilityState}
       style={s.row} pressedStyle={{ backgroundColor: t.colors.surfaceMuted }}>
       <View style={{ flex: 1, gap: 2 }}>
         <AppText variant="body" numberOfLines={2}>{name}</AppText>
@@ -240,13 +244,14 @@ export function FoodRow({ name, detail, calories, badge, onPress, trailing, acce
  * A row is only a button when it has an action. A row without one (e.g. a planned food whose action is its own
  * Log button) is a plain View, so it doesn't mark its children as disabled for screen readers.
  */
-function Row({ onPress, label, hint, style, pressedStyle, children, a11y }: {
+function Row({ onPress, label, hint, style, pressedStyle, children, a11y, accessibilityRole = 'button', accessibilityState }: {
   onPress?: () => void; label: string; hint?: string; style: StyleProp<ViewStyle>; pressedStyle: ViewStyle; children: ReactNode;
   a11y?: { actions?: AccessibilityActionInfo[]; onAction?: (e: AccessibilityActionEvent) => void };
+  accessibilityRole?: 'button' | 'checkbox'; accessibilityState?: AccessibilityState;
 }) {
   if (!onPress) return <View style={style} accessibilityLabel={label}>{children}</View>;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint}
+    <Pressable onPress={onPress} accessibilityRole={accessibilityRole} accessibilityState={accessibilityState} accessibilityLabel={label} accessibilityHint={hint}
       accessibilityActions={a11y?.actions} onAccessibilityAction={a11y?.onAction}
       style={({ pressed }) => [style, pressed && pressedStyle]}>
       {children}

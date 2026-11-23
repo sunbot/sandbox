@@ -136,9 +136,37 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
   );
 }
 
+export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, onClose, loading }: {
+  visible: boolean; count: number; meal: Meal; error?: string | null; onPick: (m: Meal) => void; onConfirm: () => void; onClose: () => void; loading: boolean;
+}) {
+  const t = useTheme();
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={`Move ${count} ${count === 1 ? 'entry' : 'entries'} to`}>
+      <View style={{ paddingBottom: t.space.md }}>
+        {meals.map((m) => {
+          const selected = m === meal;
+          return (
+            <Pressable key={m} onPress={() => onPick(m)} accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={mealLabel(m)}
+              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: t.space.md, borderRadius: t.radii.button, gap: t.space.md },
+                selected && { backgroundColor: t.colors.primaryLight }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
+              <AppText variant="body" style={[{ flex: 1 }, selected && { color: t.colors.primary, fontWeight: '600' }]}>{mealLabel(m)}</AppText>
+              {selected ? <Check size={20} color={t.colors.primary} strokeWidth={2.4} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      {error ? <AppText variant="secondary" tone="error" accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</AppText> : null}
+      <View style={{ gap: t.space.sm, paddingBottom: t.space.md }}>
+        <PrimaryButton label={`Move ${count} ${count === 1 ? 'entry' : 'entries'}`} onPress={onConfirm} loading={loading} fullWidth disabled={count === 0} />
+        <SecondaryButton label="Cancel" onPress={onClose} fullWidth />
+      </View>
+    </BottomSheet>
+  );
+}
+
 /* ───────────────────────── Meal section ───────────────────────── */
 
-export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onClear, onLogPlanned, loggingId }: {
+export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onClear, onLogPlanned, loggingId, selectionMode, selectedEntryIds, onToggleSelect }: {
   meal: Meal;
   totals: number;
   entries: DiaryEntry[];
@@ -151,6 +179,9 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   onClear: () => void;
   onLogPlanned: (p: PlanEntry) => void;
   loggingId?: string | null;
+  selectionMode: boolean;
+  selectedEntryIds: ReadonlySet<string>;
+  onToggleSelect: (id: string) => void;
 }) {
   const t = useTheme();
   const count = entries.length + planned.length;
@@ -189,7 +220,8 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
         <View style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.xs }}>
           {entries.map((e) => (
             <SwipeableDiaryRow key={e.id} name={displayName(e.item)} detail={detailFor(e.item)} calories={e.item.nutrition.calories}
-              onPress={() => onEntry(e)} onDelete={() => onDeleteEntry(e)} accessibilityHint="Edit amount or meal. Swipe left to delete" />
+              onPress={() => onEntry(e)} onDelete={() => onDeleteEntry(e)} accessibilityHint="Edit amount or meal. Swipe left to delete"
+              selectionMode={selectionMode} selected={selectedEntryIds.has(e.id)} onToggleSelect={() => onToggleSelect(e.id)} />
           ))}
           {planned.map((p) => (
             <FoodRow key={p.id} name={displayName(p.item)} detail={detailFor(p.item)} calories={p.item.nutrition.calories}
@@ -199,7 +231,8 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
           ))}
           <View style={{ flexDirection: 'row' }}>
             <TextButton label={`Add to ${mealLabel(meal).toLowerCase()}`} icon={Plus} onPress={onAdd} />
-            {entries.length ? <TextButton label={`Clear ${mealLabel(meal).toLowerCase()}`} onPress={onClear} /> : null}
+            {/* Not while selecting entries to move: the two would act on the same rows. */}
+            {entries.length && !selectionMode ? <TextButton label={`Clear ${mealLabel(meal).toLowerCase()}`} onPress={onClear} /> : null}
           </View>
         </View>
       ) : null}

@@ -177,7 +177,11 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    entries and totals return unchanged. Confirm again and wait; refresh and check only that date and meal were cleared,
    planned items remain, and a logged planned item returns to the plan. Empty meals have no Clear action. Repeat offline:
    the error is shown and entries return or refresh when connectivity is restored.
-8. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
+8. Today bulk move: choose **Select entries**, select foods from at least two different meals with TalkBack and touch, choose a
+   destination meal, then confirm. All selected entries should move together without changing their date, quantity, or saved
+   nutrition; cancel the destination sheet and verify nothing moves; try again after refreshing. Verify Move is unavailable with
+   no selection, a failed request leaves the selection available to retry, and TalkBack announces each row's checked state.
+9. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
 
 ## Removing items from the grocery list
 

@@ -43,6 +43,96 @@ public class ServiceTests
     }
 
     [Fact]
+    public async Task Bulk_move_keeps_mixed_meal_entries_and_their_snapshots_intact()
+    {
+        var foodId = Guid.NewGuid();
+        var recipeId = Guid.NewGuid();
+        var linkedPlanId = Guid.NewGuid();
+        var foodSnapshot = ItemSnapshot.ForFood(foodId, "Food from snapshot", 40,
+            new Domain.Nutrients.NutrientProfile(new Dictionary<int, double> { [1008] = 123, [1162] = 1.234 }));
+        var recipeSnapshot = ItemSnapshot.ForRecipe(recipeId, "Recipe from snapshot", 2,
+            new Domain.Nutrients.NutrientProfile(new Dictionary<int, double> { [1008] = 456, [1003] = 22 }));
+        var breakfast = new DiaryEntry(_store.Today, MealSlot.Breakfast, foodSnapshot, linkedPlanId) { Note = "keep this" };
+        var lunch = new DiaryEntry(_store.Today, MealSlot.Lunch, recipeSnapshot);
+        ((IDiaryRepository)_store).Add(breakfast);
+        ((IDiaryRepository)_store).Add(lunch);
+
+        var moved = await Diary().MoveManyAsync(new(_store.Today, [lunch.Id, breakfast.Id], MealSlot.Dinner));
+
+        Assert.Equal(1, _store.Saves);
+        Assert.Equal(new[] { lunch.Id, breakfast.Id }, moved.Select(e => e.Id));
+        Assert.All(new[] { breakfast, lunch }, e =>
+        {
+            Assert.Equal(_store.Today, e.Date);
+            Assert.Equal(MealSlot.Dinner, e.Meal);
+        });
+        Assert.Same(foodSnapshot, breakfast.Item);
+        Assert.Same(recipeSnapshot, lunch.Item);
+        Assert.Equal(foodId, breakfast.Item.FoodId);
+        Assert.Equal(recipeId, lunch.Item.RecipeId);
+        Assert.Equal(linkedPlanId, breakfast.PlanEntryId);
+        Assert.Equal("keep this", breakfast.Note);
+        Assert.Equal(40, breakfast.Item.Grams);
+        Assert.Equal(40, breakfast.Item.Quantity);
+        Assert.Equal("g", breakfast.Item.QuantityUnit);
+        Assert.Equal(2, lunch.Item.Quantity);
+        Assert.Equal("servings", lunch.Item.QuantityUnit);
+        Assert.Equal(foodSnapshot.Nutrients.Amounts, breakfast.Item.Nutrients.Amounts);
+        Assert.Equal(recipeSnapshot.Nutrients.Amounts, lunch.Item.Nutrients.Amounts);
+    }
+
+    [Fact]
+    public async Task Bulk_move_rejects_empty_duplicate_or_missing_entries_without_writing()
+    {
+        var entry = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Snack", 100));
+        ((IDiaryRepository)_store).Add(entry);
+
+        await Assert.ThrowsAsync<Common.ValidationException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [], MealSlot.Dinner)));
+        await Assert.ThrowsAsync<Common.ValidationException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [entry.Id, entry.Id], MealSlot.Dinner)));
+        await Assert.ThrowsAsync<Common.ValidationException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [entry.Id], (MealSlot)99)));
+        await Assert.ThrowsAsync<Common.NotFoundException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [entry.Id, Guid.NewGuid()], MealSlot.Dinner)));
+
+        Assert.Equal(0, _store.Saves);
+        Assert.Equal(MealSlot.Breakfast, entry.Meal);
+    }
+
+    [Fact]
+    public async Task Bulk_move_rejects_more_than_100_entries_before_writing()
+    {
+        var entry = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Snack", 100));
+        ((IDiaryRepository)_store).Add(entry);
+        var ids = Enumerable.Range(0, 101).Select(_ => Guid.NewGuid()).ToArray();
+
+        await Assert.ThrowsAsync<Common.ValidationException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, ids, MealSlot.Dinner)));
+
+        Assert.Equal(0, _store.Saves);
+        Assert.Equal(MealSlot.Breakfast, entry.Meal);
+    }
+
+    [Fact]
+    public async Task Bulk_move_rejects_mixed_dates_without_moving_any_entry()
+    {
+        var current = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Today", 100));
+        var previous = new DiaryEntry(_store.Today.AddDays(-1), MealSlot.Lunch, ItemSnapshot.QuickCalories("Yesterday", 200));
+        ((IDiaryRepository)_store).Add(current);
+        ((IDiaryRepository)_store).Add(previous);
+
+        await Assert.ThrowsAsync<Common.NotFoundException>(() =>
+            Diary().MoveManyAsync(new(_store.Today, [current.Id, previous.Id], MealSlot.Dinner)));
+
+        Assert.Equal(0, _store.Saves);
+        Assert.Equal(_store.Today, current.Date);
+        Assert.Equal(MealSlot.Breakfast, current.Meal);
+        Assert.Equal(_store.Today.AddDays(-1), previous.Date);
+        Assert.Equal(MealSlot.Lunch, previous.Meal);
+    }
+
+    [Fact]
     public async Task Marking_a_planned_meal_eaten_logs_it_and_week_view_reflects_both()
     {
         var oats = _store.AddFood("Oats", 379, 13, 68, 6.5, portions: new FoodPortion("cup", 81));
