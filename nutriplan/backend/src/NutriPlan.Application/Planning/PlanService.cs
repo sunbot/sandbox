@@ -41,7 +41,7 @@ public sealed record AddPlanFoodRequest(DateOnly Date, MealSlot Meal, Guid FoodI
 /// <summary>Several foods planned for one meal (Ask's "Plan all"): all are planned, or none.</summary>
 public sealed record AddPlanFoodsRequest(DateOnly Date, MealSlot Meal, IReadOnlyList<Diary.FoodAmount> Items);
 
-public sealed record AddPlanRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings);
+public sealed record AddPlanRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings, double? Amount = null, string? Unit = null);
 
 /// <summary>Cook once, eat several times: one portion per (date, meal) slot, all linked by a batch id.</summary>
 public sealed record AddBatchRequest(Guid RecipeId, double ServingsPerPortion, IReadOnlyList<BatchSlot> Slots);
@@ -114,7 +114,7 @@ public sealed class PlanService(
 
     public async Task<PlanEntryDto> AddRecipeAsync(AddPlanRecipeRequest r, CancellationToken ct = default)
     {
-        var item = await diaryService.BuildRecipeItemAsync(r.RecipeId, r.Servings, ct);
+        var item = await diaryService.BuildRecipeItemAsync(r.RecipeId, r.Amount ?? r.Servings, ct, r.Amount is null ? null : r.Unit);
         return await AddAsync(new PlanEntry(r.Date, r.Meal, item), ct);
     }
 

@@ -28,9 +28,14 @@ public sealed record ItemSnapshot(
     public static ItemSnapshot ForVolumeFood(Guid foodId, string name, double ml, NutrientProfile nutrients, double? quantity = null, string? unit = null) =>
         new(ItemKind.Food, foodId, null, name, quantity ?? Math.Round(ml, 1), unit ?? "ml", null, nutrients.Rounded());
 
-    public static ItemSnapshot ForRecipe(Guid recipeId, string name, double servings, NutrientProfile nutrientsPerServing) =>
-        new(ItemKind.Recipe, null, recipeId, name, servings, servings == 1 ? "serving" : "servings", null,
-            nutrientsPerServing.Scale(servings).Rounded());
+    /// <summary>
+    /// <paramref name="servings"/> of a recipe. It can be shown in another measure the recipe really has (<paramref name="quantity"/>
+    /// <paramref name="unit"/>, e.g. "250 g" when its finished weight is known); nutrition is always servings × per-serving.
+    /// </summary>
+    public static ItemSnapshot ForRecipe(Guid recipeId, string name, double servings, NutrientProfile nutrientsPerServing,
+        double? quantity = null, string? unit = null, double? grams = null) =>
+        new(ItemKind.Recipe, null, recipeId, name, Math.Round(quantity ?? servings, 3), unit ?? (servings == 1 ? "serving" : "servings"),
+            grams is { } g ? Math.Round(g, 2) : null, nutrientsPerServing.Scale(servings).Rounded());
 
     public static ItemSnapshot QuickCalories(string name, double calories, double? protein = null, double? carbs = null, double? fat = null)
     {

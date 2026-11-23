@@ -1,6 +1,7 @@
 using NutriPlan.Application.Abstractions;
 using NutriPlan.Application.Common;
 using NutriPlan.Domain.Diary;
+using NutriPlan.Domain.Recipes;
 using NutriPlan.Domain.Units;
 
 namespace NutriPlan.Application.Diary;
@@ -25,7 +26,8 @@ public static class ItemAmounts
     /// Optional weight for the amount, used only when the unit itself can't be converted (an older entry's own unit such
     /// as "oz (23 whole kernels)", restored by Undo). Never used for a drink measured by volume.
     /// </param>
-    public static async Task<ItemSnapshot> ChangeAsync(ItemSnapshot item, double amount, string? unit, IFoodRepository foods, CancellationToken ct, double? grams = null)
+    public static async Task<ItemSnapshot> ChangeAsync(ItemSnapshot item, double amount, string? unit, IFoodRepository foods, CancellationToken ct, double? grams = null,
+        IRecipeRepository? recipes = null)
     {
         if (!double.IsFinite(amount) || amount <= 0) throw new ValidationException("Enter an amount greater than zero.");
         if (amount < MinQuantity) throw new ValidationException("That amount is too small to log.");
@@ -36,12 +38,28 @@ public static class ItemAmounts
 
             case ItemKind.Recipe:
             {
-                if (!string.IsNullOrWhiteSpace(unit) && !unit.Trim().StartsWith("serving", StringComparison.OrdinalIgnoreCase))
-                    throw new ValidationException("Recipes are measured in servings.");
-                if (amount > MaxServings) throw new ValidationException($"That's more than {MaxServings} servings. Check the amount.");
-                if (amount < MinBase) throw new ValidationException("That amount is too small to log.");
                 if (item.Quantity <= 0) throw new ValidationException("This entry has no amount to scale from.");
-                return item.WithAmount(amount / item.Quantity, amount, amount == 1 ? "serving" : "servings", null);
+                var itemIsServings = RecipeMeasures.IsServing(item.QuantityUnit);
+                var sameUnit = string.IsNullOrWhiteSpace(unit) || (RecipeMeasures.IsServing(unit) ? itemIsServings
+                    : !itemIsServings && Units.Find(unit) is { } u1 && u1 == Units.Find(item.QuantityUnit));
+                if (sameUnit)
+                {
+                    // Same measure: scale by the ratio of amounts, from the entry's own snapshot.
+                    var f = amount / item.Quantity;
+                    if (itemIsServings) CheckServings(amount);
+                    var newUnit = itemIsServings ? (amount == 1 ? "serving" : "servings") : item.QuantityUnit;
+                    return Bounded(item.WithAmount(f, amount, newUnit, item.Grams is { } g0 ? g0 * f : null), false, null);
+                }
+                // Another measure (servings ↔ grams/cups): both amounts are read as servings through the recipe's finished weight/volume.
+                var recipe = item.RecipeId is { } rid && recipes is not null ? await recipes.GetAsync(rid, ct) : null;
+                if (recipe is null) throw new ValidationException("This recipe is no longer available, so only its amount in the same measure can change.");
+                var to = RecipeMeasures.Resolve(recipe, amount, unit);
+                if (!to.IsResolved) throw new ValidationException(to.Explanation);
+                var fromServings = itemIsServings ? item.Quantity : RecipeMeasures.Resolve(recipe, item.Quantity, item.QuantityUnit).Servings;
+                if (fromServings is not > 0) throw new ValidationException("This entry's original amount can't be converted, so change it in its own measure.");
+                CheckServings(to.Servings!.Value);
+                var (q, label) = RecipeLabel(to.Servings!.Value, amount, unit);
+                return Bounded(item.WithAmount(to.Servings!.Value / fromServings.Value, q, label, to.Grams), false, null);
             }
         }
 
@@ -75,6 +93,29 @@ public static class ItemAmounts
         var canonical = resolved.Grams is > 0 ? FoodMeasures.Match(measures, unitText)?.Unit ?? unitText : unitText;
         return Bounded(item.WithAmount(factor, amount, canonical, food.IsVolume ? null : newBase), food.IsVolume, food.IsVolume ? newBase : null);
     }
+
+    /// <summary>A new recipe item: <paramref name="amount"/> servings, or <paramref name="amount"/> in one of the recipe's measures.</summary>
+    public static ItemSnapshot RecipeItem(Recipe recipe, double amount, string? unit)
+    {
+        var a = RecipeMeasures.Resolve(recipe, amount, unit);
+        if (!a.IsResolved) throw new ValidationException(a.Explanation);
+        CheckServings(a.Servings!.Value);
+        if (a.Grams is { } g) CheckBase(g, false);
+        var (q, label) = RecipeLabel(a.Servings!.Value, amount, unit);
+        return ItemSnapshot.ForRecipe(recipe.Id, recipe.Name, a.Servings!.Value, recipe.NutritionPerServing, q, label, a.Grams);
+    }
+
+    private static void CheckServings(double servings)
+    {
+        if (servings > MaxServings) throw new ValidationException($"That's more than {MaxServings} servings. Check the amount.");
+        if (servings < MinBase) throw new ValidationException("That amount is too small to log.");
+    }
+
+    /// <summary>How a recipe amount is shown: in servings, or in the measure it was given in ("250 g", "1.5 cup").</summary>
+    private static (double Quantity, string Unit) RecipeLabel(double servings, double amount, string? unit) =>
+        string.IsNullOrWhiteSpace(unit) || RecipeMeasures.IsServing(unit)
+            ? (servings, servings == 1 ? "serving" : "servings")
+            : (amount, Units.Find(unit)?.Name ?? unit.Trim());
 
     /// <summary>Refuses an amount over the typo limit: 5 kg, or 5 litres for a drink measured by volume.</summary>
     public static void CheckBase(double baseAmount, bool isVolume)

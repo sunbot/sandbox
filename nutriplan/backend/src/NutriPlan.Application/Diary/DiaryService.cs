@@ -33,7 +33,8 @@ public sealed record FoodAmount(Guid FoodId, double? Grams, double? Amount, stri
 /// <summary>Several foods for one meal (Ask's "Log all"): every item is saved, or none is.</summary>
 public sealed record LogFoodsRequest(DateOnly Date, MealSlot Meal, IReadOnlyList<FoodAmount> Items);
 
-public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings, Guid? PlanEntryId = null);
+/// <summary>Log a recipe: <c>Servings</c>, or <c>Amount</c> in <c>Unit</c> (one of the recipe's measures: servings, or g/cups when its finished weight/volume is set).</summary>
+public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeId, double Servings, Guid? PlanEntryId = null, double? Amount = null, string? Unit = null);
 
 public sealed record LogQuickRequest(DateOnly Date, MealSlot Meal, string Name, double Calories, double? Protein, double? Carbs, double? Fat);
 
@@ -70,11 +71,12 @@ public sealed class DiaryService(
             amount ?? grams, amount is null ? "g" : unit ?? "serving");
     }
 
-    public async Task<ItemSnapshot> BuildRecipeItemAsync(Guid recipeId, double servings, CancellationToken ct)
+    /// <summary>A recipe item: <paramref name="amount"/> servings, or <paramref name="amount"/> <paramref name="unit"/> in one of the recipe's measures.</summary>
+    public async Task<ItemSnapshot> BuildRecipeItemAsync(Guid recipeId, double amount, CancellationToken ct, string? unit = null)
     {
-        if (servings <= 0) throw new ValidationException("Servings must be greater than zero.");
+        if (!double.IsFinite(amount) || amount <= 0) throw new ValidationException("Servings must be greater than zero.");
         var recipe = await recipes.GetAsync(recipeId, ct) ?? throw new NotFoundException($"Recipe {recipeId} not found.");
-        return ItemSnapshot.ForRecipe(recipe.Id, recipe.Name, servings, recipe.NutritionPerServing);
+        return ItemAmounts.RecipeItem(recipe, amount, unit);
     }
 
     public async Task<DiaryEntryDto> LogFoodAsync(LogFoodRequest r, CancellationToken ct = default)
@@ -117,7 +119,7 @@ public sealed class DiaryService(
     public async Task<DiaryEntryDto> LogRecipeAsync(LogRecipeRequest r, CancellationToken ct = default)
     {
         await RequireOwnPlanEntryAsync(r.PlanEntryId, ct);
-        var item = await BuildRecipeItemAsync(r.RecipeId, r.Servings, ct);
+        var item = await BuildRecipeItemAsync(r.RecipeId, r.Amount ?? r.Servings, ct, r.Amount is null ? null : r.Unit);
         return await AddAsync(new DiaryEntry(r.Date, r.Meal, item, r.PlanEntryId), ct);
     }
 
@@ -155,7 +157,7 @@ public sealed class DiaryService(
         if (amount is not null)
         {
             if (scale is not null) throw new ValidationException("Send an amount or a scale, not both.");
-            entry.Replace(await ItemAmounts.ChangeAsync(entry.Item, amount.Value, unit, foods, ct, grams));
+            entry.Replace(await ItemAmounts.ChangeAsync(entry.Item, amount.Value, unit, foods, ct, grams, recipes));
         }
         else if (scale is not null)
         {
@@ -170,7 +172,7 @@ public sealed class DiaryService(
 
     /// <summary>The same item in a new amount and/or measure (see <see cref="ItemAmounts"/>); used for logged and planned items.</summary>
     public Task<ItemSnapshot> ChangeAmountAsync(ItemSnapshot item, double amount, string? unit, CancellationToken ct = default, double? grams = null) =>
-        ItemAmounts.ChangeAsync(item, amount, unit, foods, ct, grams);
+        ItemAmounts.ChangeAsync(item, amount, unit, foods, ct, grams, recipes);
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {

@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using NutriPlan.Application.Diary;
 using NutriPlan.Application.Foods;
+using NutriPlan.Application.Recipes;
+using NutriPlan.Domain.Recipes;
 using NutriPlan.Domain.Diary;
 using NutriPlan.Domain.Foods;
 using NutriPlan.Infrastructure.Persistence;
@@ -96,6 +98,47 @@ public sealed class PostgresIntegrationTests : IAsyncLifetime
 
             var frequent = await new DiaryRepository(db).GetFrequentItemsAsync(36500, 10);
             Assert.Equal(2, frequent.Single().Count);
+        }
+    }
+
+    private sealed class NoWeb : NutriPlan.Application.Abstractions.IWebPageFetcher
+    {
+        public Task<string> GetHtmlAsync(Uri url, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    [PostgresFact]
+    public async Task A_recipe_used_inside_another_is_saved_reloaded_and_updates_its_parent()
+    {
+        Guid sauceId, pastaId;
+        await using (var db = NewContext())
+        {
+            var food = new Food("Tomato base", FoodSource.User, new Domain.Nutrients.NutrientProfile(new Dictionary<int, double> { [Domain.Nutrients.NutrientIds.Energy] = 100 }));
+            db.Foods.Add(food);
+            await db.SaveChangesAsync();
+            var svc = new RecipeService(new RecipeRepository(db), new FoodRepository(db), new FoodService(new FoodRepository(db), [], db), new NoWeb(), db);
+            sauceId = (await svc.CreateAsync(new SaveRecipeRequest("Sauce", 4, ["400 g tomato base"], null, null, null, null, 800, 950))).Summary.Id;
+            await svc.UpdateIngredientAsync(sauceId, 0, new UpdateIngredientRequest(food.Id, 400, null, null, null));
+            pastaId = (await svc.CreateAsync(new SaveRecipeRequest("Pasta bake", 2, ["200 g sauce"], null, null, null, null, null))).Summary.Id;
+            await svc.UpdateIngredientAsync(pastaId, 0, new UpdateIngredientRequest(null, null, 200, "g", null, sauceId));
+        }
+        await using (var db = NewContext())
+        {
+            var pasta = await db.Recipes.SingleAsync(r => r.Id == pastaId);
+            var line = pasta.Ingredients.Single();
+            Assert.Equal(sauceId, line.RecipeId);
+            Assert.Equal(1, line.Servings!.Value, 3);
+            Assert.Equal(50, pasta.NutritionPerServing.Calories, 1);   // a quarter of 400 kcal over 2 servings
+            Assert.Equal(950, (await db.Recipes.SingleAsync(r => r.Id == sauceId)).FinishedVolumeMl);
+
+            var svc = new RecipeService(new RecipeRepository(db), new FoodRepository(db), new FoodService(new FoodRepository(db), [], db), new NoWeb(), db);
+            await svc.SetServingsAsync(sauceId, 2);                          // the 200 g is now 0.5 of 2 servings: same food, same calories
+            await svc.UpdateAsync(sauceId, new SaveRecipeRequest("Sauce", 2, ["400 g tomato base"], null, null, null, null, 400));
+        }
+        await using (var db = NewContext())
+        {
+            var pasta = await db.Recipes.SingleAsync(r => r.Id == pastaId);
+            Assert.Equal(100, pasta.NutritionPerServing.Calories, 1);  // 200 of 400 g now: half of 400 kcal over 2 servings
+            Assert.Equal(1, pasta.Ingredients.Single().Servings!.Value, 3);
         }
     }
 

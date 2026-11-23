@@ -8,9 +8,14 @@ using NutriPlan.Domain.Units;
 
 namespace NutriPlan.Application.Recipes;
 
+/// <summary>
+/// One ingredient line. It is either a food (<c>FoodId</c>, with its <c>FoodSource</c>/<c>FoodQuality</c>) or another of your
+/// recipes (<c>RecipeId</c>, <c>Servings</c> of it), or not matched yet.
+/// </summary>
 public sealed record IngredientDto(
     int Position, string RawText, double? Amount, string? Unit, string FoodText, string? Preparation,
-    Guid? FoodId, string? FoodName, double? Grams, string Status, double MatchConfidence, string? Note, NutritionDto? Nutrition);
+    Guid? FoodId, string? FoodName, double? Grams, string Status, double MatchConfidence, string? Note, NutritionDto? Nutrition,
+    Guid? RecipeId = null, string? RecipeName = null, double? Servings = null, string? FoodSource = null, string? FoodQuality = null);
 
 public sealed record RecipeSummaryDto(
     Guid Id, string Name, double Servings, string Origin, IReadOnlyList<string> Categories, bool IsFavorite,
@@ -24,15 +29,23 @@ public sealed record RecipeSummaryDto(
 public sealed record RecipeDetailDto(
     RecipeSummaryDto Summary, string? Description, string? Directions, string? Notes, string? PrepTime, string? CookTime,
     string? SourceName, string? SourceUrl, string? ServingDescription, double? CookedWeightGrams, string? SourceNutritionText,
-    IReadOnlyList<IngredientDto> Ingredients, IReadOnlyList<string> Warnings);
+    IReadOnlyList<IngredientDto> Ingredients, IReadOnlyList<string> Warnings,
+    double? FinishedVolumeMl = null, IReadOnlyList<MeasureDto>? Measures = null, NutritionDto? Total = null, IReadOnlyList<RecipeUseDto>? UsedIn = null);
+
+/// <summary>A recipe that uses this one as an ingredient.</summary>
+public sealed record RecipeUseDto(Guid Id, string Name);
 
 public sealed record ImportResultDto(int Imported, int Updated, IReadOnlyList<RecipeSummaryDto> Recipes, IReadOnlyList<string> Errors);
 
 public sealed record SaveRecipeRequest(
     string Name, double Servings, IReadOnlyList<string> Ingredients, string? Directions, string? Description,
-    IReadOnlyList<string>? Categories, string? Notes, double? CookedWeightGrams);
+    IReadOnlyList<string>? Categories, string? Notes, double? CookedWeightGrams, double? FinishedVolumeMl = null);
 
-public sealed record UpdateIngredientRequest(Guid? FoodId, double? Grams, double? Amount, string? Unit, bool? Ignore);
+/// <summary>
+/// Point an ingredient at a food (<c>FoodId</c>, amount as <c>Grams</c> or <c>Amount</c>+<c>Unit</c>), at another of your recipes
+/// (<c>RecipeId</c>, amount as <c>Servings</c> or <c>Amount</c>+<c>Unit</c> in its measures), or exclude it (<c>Ignore</c>).
+/// </summary>
+public sealed record UpdateIngredientRequest(Guid? FoodId, double? Grams, double? Amount, string? Unit, bool? Ignore, Guid? RecipeId = null, double? Servings = null);
 
 public sealed partial class RecipeService(
     IRecipeRepository recipes,
@@ -41,6 +54,9 @@ public sealed partial class RecipeService(
     IWebPageFetcher fetcher,
     IUnitOfWork uow)
 {
+    /// <summary>Catches a typo (a misplaced zero) in how many servings of a recipe go into another.</summary>
+    public const double MaxIngredientServings = 500;
+
     /// <summary>Below this ranker score an ingredient is left for you to match by hand.</summary>
     public const double MinAutoMatchScore = 45;
 
@@ -72,7 +88,8 @@ public sealed partial class RecipeService(
         recipe.Directions = request.Directions;
         recipe.Description = request.Description;
         recipe.Notes = request.Notes;
-        recipe.CookedWeightGrams = request.CookedWeightGrams;
+        recipe.CookedWeightGrams = Positive(request.CookedWeightGrams, "finished weight");
+        recipe.FinishedVolumeMl = Positive(request.FinishedVolumeMl, "finished volume");
         if (request.Categories is not null) recipe.SetCategories(request.Categories);
         if (!oldLines.SequenceEqual(request.Ingredients.Select(l => l.Trim()).Where(l => l.Length > 0)))
         {
@@ -81,13 +98,19 @@ public sealed partial class RecipeService(
             await MatchIngredientsAsync(recipe, onlyUnmatched: true, ct);
         }
         await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
         await uow.SaveChangesAsync(ct);
         return await ToDetailAsync(recipe, ct);
     }
 
+    /// <summary>A recipe used inside another can't be deleted (that one's nutrition would silently lose it): remove it there first.</summary>
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        recipes.Remove(await Get(id, ct));
+        var recipe = await Get(id, ct);
+        var users = (await recipes.ListAsync(ct: ct)).Where(r => r.Id != id && r.SubRecipeIds.Contains(id)).Select(r => $"“{r.Name}”").ToList();
+        if (users.Count > 0)
+            throw new ValidationException($"“{recipe.Name}” is an ingredient of {string.Join(", ", users)}. Remove it there first.");
+        recipes.Remove(recipe);
         await uow.SaveChangesAsync(ct);
     }
 
@@ -99,7 +122,7 @@ public sealed partial class RecipeService(
         return RecipeSummaryDto.From(recipe);
     }
 
-    /// <summary>Point an ingredient at a different food and/or amount, or exclude it.</summary>
+    /// <summary>Point an ingredient at a different food or one of your recipes and/or amount, or exclude it.</summary>
     public async Task<RecipeDetailDto> UpdateIngredientAsync(Guid id, int position, UpdateIngredientRequest r, CancellationToken ct = default)
     {
         var recipe = await Get(id, ct);
@@ -108,6 +131,27 @@ public sealed partial class RecipeService(
         {
             ing.Status = IngredientMatchStatus.Ignored;
             ing.ResolutionNote = "Excluded by you";
+        }
+        else if ((r.RecipeId ?? (r.FoodId is null ? ing.RecipeId : null)) is { } subId)
+        {
+            var sub = await recipes.GetAsync(subId, ct) ?? throw new NotFoundException($"Recipe {subId} not found.");
+            if (subId == recipe.Id) throw new ValidationException("A recipe can't be an ingredient of itself.");
+            var all = (await recipes.ListAsync(ct: ct)).ToDictionary(x => x.Id);
+            all[recipe.Id] = recipe;
+            if (RecipeGraph.PathTo(subId, recipe.Id, x => all.TryGetValue(x, out var rr) ? rr.SubRecipeIds : []) is { } loop)
+                throw new ValidationException($"“{sub.Name}” already uses “{recipe.Name}” ({string.Join(" → ", loop.Select(x => $"“{all[x].Name}”"))}), so it can't also be an ingredient of it.");
+            RecipeAmount amount;
+            if (r.Servings is { } sv) amount = sv > 0 ? new RecipeAmount(sv, sub.GramsPerServing is { } gps ? sv * gps : null, $"{sv:0.##} servings of {sub.Servings:0.##}") : new RecipeAmount(null, null, "Enter an amount greater than zero.");
+            else amount = RecipeMeasures.Resolve(sub, r.Amount ?? (ing.IsRecipe || ing.Amount is null ? ing.Servings ?? ing.Amount ?? 1 : ing.Amount.Value),
+                r.Amount is not null ? r.Unit : ing.IsRecipe && ing.Amount is null ? RecipeMeasures.Serving : ing.Unit);
+            if (!amount.IsResolved) throw new ValidationException(amount.Explanation);
+            if (amount.Servings > MaxIngredientServings) throw new ValidationException("That's a lot of servings for one ingredient. Check the amount.");
+            ing.UseRecipe(sub.Id, sub.Name, Math.Round(amount.Servings!.Value, 4), amount.Grams is { } gg ? Math.Round(gg, 2) : null);
+            if (r.Servings is { } s2) (ing.Amount, ing.Unit) = (s2, RecipeMeasures.Serving);
+            else if (r.Amount is not null) (ing.Amount, ing.Unit) = (r.Amount, r.Unit);
+            ing.Status = IngredientMatchStatus.Confirmed;
+            ing.MatchConfidence = 1;
+            ing.ResolutionNote = $"Your recipe: {amount.Explanation}";
         }
         else
         {
@@ -121,13 +165,14 @@ public sealed partial class RecipeService(
                 grams = q.Grams;
                 note = q.Explanation;
             }
-            (ing.FoodId, ing.FoodName, ing.Grams) = (food.Id, food.DisplayName, grams);
+            ing.UseFood(food.Id, food.DisplayName, grams);
             if (r.Amount is not null) (ing.Amount, ing.Unit) = (r.Amount, r.Unit);
             ing.Status = grams is null ? IngredientMatchStatus.AutoMatched : IngredientMatchStatus.Confirmed;
             ing.MatchConfidence = 1;
             ing.ResolutionNote = r.Grams is not null ? $"{r.Grams:0.#} g entered by you" : note;
         }
         await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
         await uow.SaveChangesAsync(ct);
         return await ToDetailAsync(recipe, ct);
     }
@@ -137,6 +182,7 @@ public sealed partial class RecipeService(
         var recipe = await Get(id, ct);
         recipe.ReparseIngredients(); // latest parsing rules; your confirmed/excluded lines are kept
         await MatchIngredientsAsync(recipe, onlyUnmatched: false, ct);
+        await PropagateAsync([recipe], ct);
         await uow.SaveChangesAsync(ct);
         return await ToDetailAsync(recipe, ct);
     }
@@ -149,6 +195,7 @@ public sealed partial class RecipeService(
         recipe.SetServings(servings);
         recipe.ServingDescription = $"{servings:0.##} (set by you)";
         await RecalculateAsync(recipe, ct);
+        await PropagateAsync([recipe], ct);
         await uow.SaveChangesAsync(ct);
         return await ToDetailAsync(recipe, ct);
     }
@@ -237,6 +284,7 @@ public sealed partial class RecipeService(
             }
         }
 
+        await PropagateAsync(saved, ct);
         await uow.SaveChangesAsync(ct);
         return new ImportResultDto(created, updated, saved.Select(RecipeSummaryDto.From).ToList(), errors);
     }
@@ -385,8 +433,47 @@ public sealed partial class RecipeService(
     private async Task RecalculateAsync(Recipe recipe, CancellationToken ct)
     {
         var foodMap = await foods.GetManyAsync(recipe.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
-        recipe.ApplyNutrition(RecipeNutritionCalculator.Calculate(recipe, foodMap));
+        var subs = await recipes.GetManyAsync(recipe.SubRecipeIds, ct);
+        recipe.ApplyNutrition(RecipeNutritionCalculator.Calculate(recipe, foodMap, subs));
     }
+
+    /// <summary>
+    /// After recipes change, recalculates every recipe that uses them (directly or through others), innermost first, so
+    /// an edit to a sauce shows up in the lasagne that uses it and in the meal plan entry made from that lasagne next time.
+    /// A nested amount given by weight or volume is converted again through the changed recipe's finished weight or volume.
+    /// Diary and plan entries already made keep their own snapshot.
+    /// </summary>
+    private async Task PropagateAsync(IReadOnlyCollection<Recipe> changed, CancellationToken ct)
+    {
+        if (changed.Count == 0) return;
+        var byId = (await recipes.ListAsync(ct: ct)).ToDictionary(r => r.Id);
+        foreach (var c in changed) byId[c.Id] = c;
+        var uses = byId.ToDictionary(kv => kv.Key, kv => (IReadOnlyCollection<Guid>)kv.Value.SubRecipeIds.ToList());
+        if (uses.Values.All(u => u.Count == 0)) return;
+        foreach (var id in RecipeGraph.DependentsInOrder(changed.Select(c => c.Id), uses))
+        {
+            var parent = byId[id];
+            foreach (var ing in parent.Ingredients.Where(i => i.IsRecipe && i.Status != IngredientMatchStatus.Ignored))
+            {
+                if (!byId.TryGetValue(ing.RecipeId!.Value, out var sub)) continue;
+                ing.RecipeName = sub.Name;
+                var a = ing.Amount is { } amt ? RecipeMeasures.Resolve(sub, amt, ing.Unit) : null;
+                if (a is { IsResolved: true }) (ing.Servings, ing.Grams) = (Math.Round(a.Servings!.Value, 4), a.Grams is { } g ? Math.Round(g, 2) : null);
+                else ing.Grams = ing.Servings is { } sv && sub.GramsPerServing is { } gps ? Math.Round(sv * gps, 2) : null;
+            }
+            var foodMap = await foods.GetManyAsync(parent.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
+            parent.ReplaceIngredients(parent.Ingredients.ToList()); // marks the changed ingredient list for saving
+            parent.ApplyNutrition(RecipeNutritionCalculator.Calculate(parent, foodMap, byId));
+        }
+    }
+
+    private static double? Positive(double? value, string what) => value switch
+    {
+        null => null,
+        <= 0 => null,
+        > 1_000_000 => throw new ValidationException($"That {what} is too large. Check the amount."),
+        _ => value,
+    };
 
     private static void Apply(Recipe recipe, SaveRecipeRequest r)
     {
@@ -394,7 +481,8 @@ public sealed partial class RecipeService(
         recipe.Directions = r.Directions;
         recipe.Description = r.Description;
         recipe.Notes = r.Notes;
-        recipe.CookedWeightGrams = r.CookedWeightGrams;
+        recipe.CookedWeightGrams = Positive(r.CookedWeightGrams, "finished weight");
+        recipe.FinishedVolumeMl = Positive(r.FinishedVolumeMl, "finished volume");
         if (r.Categories is not null) recipe.SetCategories(r.Categories);
     }
 
@@ -404,13 +492,28 @@ public sealed partial class RecipeService(
     private async Task<RecipeDetailDto> ToDetailAsync(Recipe r, CancellationToken ct)
     {
         var foodMap = await foods.GetManyAsync(r.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
-        var nutrition = RecipeNutritionCalculator.Calculate(r, foodMap);
-        var ingredients = r.Ingredients.Select(i => new IngredientDto(
-            i.Position, i.RawText, i.Amount, i.Unit, i.FoodText, i.Preparation, i.FoodId, i.FoodName, i.Grams,
-            i.Status.ToString(), i.MatchConfidence, i.ResolutionNote,
-            i.CountsTowardNutrition && foodMap.TryGetValue(i.FoodId!.Value, out var f) ? NutritionDto.From(f.NutrientsFor(i.Grams!.Value)) : null)).ToList();
+        var all = await recipes.ListAsync(ct: ct);
+        var subs = all.Where(x => r.SubRecipeIds.Contains(x.Id)).ToDictionary(x => x.Id);
+        var nutrition = RecipeNutritionCalculator.Calculate(r, foodMap, subs);
+        var ingredients = r.Ingredients.Select(i =>
+        {
+            Food? f = i.FoodId is { } fid ? foodMap.GetValueOrDefault(fid) : null;
+            Recipe? sub = i.RecipeId is { } rid ? subs.GetValueOrDefault(rid) : null;
+            NutritionDto? n = !i.CountsTowardNutrition ? null
+                : sub is not null ? NutritionDto.From(sub.NutritionPerServing.Scale(i.Servings!.Value))
+                : f is not null && i.Grams is { } g ? NutritionDto.From(f.NutrientsFor(g)) : null;
+            return new IngredientDto(
+                i.Position, i.RawText, i.Amount, i.Unit, i.FoodText, i.Preparation, i.FoodId, i.FoodName, i.Grams,
+                i.Status.ToString(), i.MatchConfidence, i.ResolutionNote, n,
+                i.RecipeId, sub?.Name ?? i.RecipeName, i.Servings, f?.Source.ToString(), f?.Quality.ToString());
+        }).ToList();
+        var usedIn = all.Where(x => x.Id != r.Id && x.SubRecipeIds.Contains(r.Id)).Select(x => new RecipeUseDto(x.Id, x.Name)).ToList();
 
         return new RecipeDetailDto(RecipeSummaryDto.From(r), r.Description, r.Directions, r.Notes, r.PrepTime, r.CookTime,
-            r.SourceName, r.SourceUrl, r.ServingDescription, r.CookedWeightGrams, r.SourceNutritionText, ingredients, nutrition.Warnings);
+            r.SourceName, r.SourceUrl, r.ServingDescription, r.CookedWeightGrams, r.SourceNutritionText, ingredients, nutrition.Warnings,
+            r.FinishedVolumeMl, RecipeMeasuresDto(r), NutritionDto.From(nutrition.Total.Rounded()), usedIn);
     }
+
+    public static IReadOnlyList<MeasureDto> RecipeMeasuresDto(Recipe r) =>
+        RecipeMeasures.For(r).Select(m => new MeasureDto(m.Unit, m.Label, m.Plural, m.BasePerUnit, m.Kind.ToString(), m.Source, m.Countable)).ToList();
 }

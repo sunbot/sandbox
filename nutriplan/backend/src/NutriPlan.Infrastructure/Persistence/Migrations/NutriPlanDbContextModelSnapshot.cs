@@ -369,6 +369,10 @@ namespace NutriPlan.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("external_id");
 
+                    b.Property<double?>("FinishedVolumeMl")
+                        .HasColumnType("double precision")
+                        .HasColumnName("finished_volume_ml");
+
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text")
                         .HasColumnName("image_url");

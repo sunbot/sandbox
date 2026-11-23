@@ -29,8 +29,40 @@ public sealed class RecipeIngredient
     public double MatchConfidence { get; set; }
     public string? ResolutionNote { get; set; }
 
+    /// <summary>
+    /// Set when this ingredient is another of your recipes (then <see cref="FoodId"/> is null): <see cref="Servings"/> of it,
+    /// counted with that recipe's current per-serving nutrition. <see cref="Grams"/> is filled in only when that recipe's
+    /// finished weight is known.
+    /// </summary>
+    public Guid? RecipeId { get; set; }
+    public string? RecipeName { get; set; }
+    public double? Servings { get; set; }
+
+    public bool IsRecipe => RecipeId is not null;
+
     public bool CountsTowardNutrition => Status is IngredientMatchStatus.AutoMatched or IngredientMatchStatus.Confirmed
-                                         && FoodId is not null && Grams is not null;
+                                         && (IsRecipe ? Servings is > 0 : FoodId is not null && Grams is not null);
+
+    /// <summary>Points this line at a food (clearing any recipe it pointed at).</summary>
+    public void UseFood(Guid foodId, string name, double? grams)
+    {
+        (FoodId, FoodName, Grams) = (foodId, name, grams);
+        (RecipeId, RecipeName, Servings) = (null, null, null);
+    }
+
+    /// <summary>Points this line at one of your recipes (clearing any food it pointed at).</summary>
+    public void UseRecipe(Guid recipeId, string name, double servings, double? grams)
+    {
+        (RecipeId, RecipeName, Servings) = (recipeId, name, servings);
+        (FoodId, FoodName, Grams) = (null, null, grams);
+    }
+
+    /// <summary>Points this line at nothing.</summary>
+    public void ClearMatch()
+    {
+        (FoodId, FoodName, Grams) = (null, null, null);
+        (RecipeId, RecipeName, Servings) = (null, null, null);
+    }
 
     public static RecipeIngredient FromText(string line, int position)
     {
@@ -105,6 +137,8 @@ public sealed class Recipe : Users.IOwned
     public int? Rating { get; set; }
     /// <summary>Weight of the finished dish. When set, a "serving" can be logged by weight accurately.</summary>
     public double? CookedWeightGrams { get; set; }
+    /// <summary>Volume of the finished dish (soups, sauces, smoothies), as measured by you. When set it can be logged in cups or ml.</summary>
+    public double? FinishedVolumeMl { get; set; }
     /// <summary>Nutrition as stated by the source (Paprika's free-text field). Shown for comparison only.</summary>
     public string? SourceNutritionText { get; set; }
     public bool IsFavorite { get; set; }
@@ -184,6 +218,12 @@ public sealed class Recipe : Users.IOwned
 
     /// <summary>Grams of the finished dish in one serving, when the cooked weight is known.</summary>
     public double? GramsPerServing => CookedWeightGrams is > 0 ? CookedWeightGrams / Servings : null;
+
+    /// <summary>Millilitres of the finished dish in one serving, when its volume is known.</summary>
+    public double? MlPerServing => FinishedVolumeMl is > 0 ? FinishedVolumeMl / Servings : null;
+
+    /// <summary>The recipes this one uses as ingredients (directly).</summary>
+    public IEnumerable<Guid> SubRecipeIds => _ingredients.Where(i => i.RecipeId is not null && i.Status != IngredientMatchStatus.Ignored).Select(i => i.RecipeId!.Value).Distinct();
 
     private void Touch() => UpdatedAt = DateTimeOffset.UtcNow;
 }
