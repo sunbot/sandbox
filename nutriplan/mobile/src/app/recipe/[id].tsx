@@ -42,9 +42,10 @@ export default function RecipeScreen() {
   const [openPos, setOpenPos] = useState<number | null>(null);
   const [yieldText, setYieldText] = useState<string | null>(null); // non-null while editing "makes N servings"
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleted, setDeleted] = useState(false); // set once the delete succeeded, so the refetch 404 never shows
   const [scaling, setScaling] = useState<number | null>(null); // a chosen factor, waiting for Apply
 
-  if (recipe.isLoading) {
+  if (recipe.isLoading || deleted) {
     return <View style={{ padding: t.screenPadding, gap: t.space.md }}><Skeleton width="100%" height={96} radius={20} /><Skeleton width="100%" height={260} radius={20} /><Skeleton width="100%" height={200} radius={20} /></View>;
   }
   if (recipe.error || !recipe.data) {
@@ -279,7 +280,19 @@ export default function RecipeScreen() {
 
       <ConfirmationSheet visible={confirmDelete} title={`Delete ${s.name}?`} message="This can’t be undone. Meals you already logged or planned from it keep their nutrition."
         confirmLabel="Delete recipe" destructive loading={m.remove.isPending} onCancel={() => setConfirmDelete(false)}
-        onConfirm={() => run(async () => { await m.remove.mutateAsync(s.id); router.back(); })} />
+        onConfirm={async () => {
+          try {
+            setDeleted(true);
+            await m.remove.mutateAsync(s.id);
+            setConfirmDelete(false);
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/recipes');
+            snackbar({ message: `Deleted ${s.name}` });
+          } catch (e) {
+            setDeleted(false);
+            setNotice(e instanceof Error ? e.message : String(e));
+          }
+        }} />
     </ScrollView>
   );
 }
