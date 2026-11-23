@@ -114,15 +114,49 @@ public class RecipeEditorTests
     }
 
     [Theory]
-    [InlineData("1 1/2 cups flour", 3, "3 cups flour")]
-    [InlineData("3/4 cup sugar", 1.5, "1½ cup sugar")]
-    [InlineData("½ tsp salt", 1, "1 tsp salt")]
-    [InlineData("1½ lb beef", 0.75, "¾ lb beef")]
-    [InlineData("2.5 oz cheese", 5, "5 oz cheese")]
+    [InlineData("1 1/2 cups flour", 2, "3 cups flour")]
+    [InlineData("3/4 cup sugar", 2, "1½ cup sugar")]
+    [InlineData("½ tsp salt", 2, "1 tsp salt")]
+    [InlineData("1½ lb beef", 0.5, "¾ lb beef")]
+    [InlineData("2.5 oz cheese", 2, "5 oz cheese")]
     [InlineData("1 can (15 oz) black beans", 2, "2 can (15 oz) black beans")]
-    [InlineData("- 2 eggs", 4, "- 4 eggs")]
+    [InlineData("1 cup (220 g) brown sugar", 2, "2 cup (220 g) brown sugar")]    // the text's own number, not the parsed 220 g
+    [InlineData("2 (14.5 oz) cans tomatoes", 2, "4 (14.5 oz) cans tomatoes")]
+    [InlineData("2-3 cloves garlic", 2, "4-6 cloves garlic")]
+    [InlineData("2 to 3 cloves garlic", 0.5, "1 to 1½ cloves garlic")]
+    [InlineData("- 2 eggs", 2, "- 4 eggs")]
     [InlineData("1 cup rice", 0.4, "0.4 cup rice")]
+    [InlineData("1. 1/4 cup sugar", 2, "1. 1/4 cup sugar")]                    // a list marker isn't an amount
     [InlineData("Salt to taste", 2, "Salt to taste")]
-    public void The_leading_amount_of_a_line_is_rewritten_and_the_rest_kept(string line, double amount, string expected) =>
-        Assert.Equal(expected, RecipeScaling.ScaleLeadingAmount(line, amount));
+    [InlineData("4 chicken breasts (about 1½ pounds)", 2, "8 chicken breasts (about 1½ pounds)")]
+    public void Scaling_multiplies_the_number_the_line_starts_with_and_keeps_the_rest(string line, double factor, string expected) =>
+        Assert.Equal(expected, RecipeScaling.ScaleLeadingAmount(line, factor).Text);
+
+    [Fact]
+    public async Task A_scaled_line_whose_text_cannot_follow_keeps_its_scaled_amount_through_refresh()
+    {
+        var oil = _store.AddFood("Oil, olive", 884, 0, 0, 100, FoodSource.UsdaSrLegacy, new FoodPortion("tbsp", 13.5));
+        var id = (await Recipes().CreateAsync(new SaveRecipeRequest("Sear", 4, ["Olive oil (about 2 tbsp for searing)"], null, null, null, null, null))).Summary.Id;
+        var line = R(id).Ingredients[0];
+        (line.FoodId, line.FoodName, line.Amount, line.Unit, line.Grams, line.Status, line.MatchConfidence) = (oil.Id, oil.Name, 2, "tbsp", 27, IngredientMatchStatus.AutoMatched, 0.9);
+        var perServing = (await Recipes().ScaleAsync(id, 2)).Summary.PerServing.Calories;
+
+        var after = await Recipes().RematchAsync(id);
+        Assert.Equal(54, after.Ingredients[0].Grams!.Value, 1);          // still scaled
+        Assert.Equal(perServing, after.Summary.PerServing.Calories, 1);
+        Assert.Contains("Scaled ×2", after.Ingredients[0].Note);
+    }
+
+    [Theory]
+    [InlineData(-500)]
+    [InlineData(0)]
+    [InlineData(60_000)]
+    [InlineData(double.NaN)]
+    public async Task Impossible_weights_are_refused(double grams)
+    {
+        var oats = _store.AddFood("Oats", 380, 13, 68, 7);
+        var id = await EmptyAsync("Porridge");
+        await Assert.ThrowsAsync<ValidationException>(() => Recipes().AddIngredientAsync(id, new AddIngredientRequest(oats.Id, null, null, null, grams)));
+        Assert.Empty(R(id).Ingredients);
+    }
 }

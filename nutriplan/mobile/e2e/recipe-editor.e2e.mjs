@@ -125,3 +125,27 @@ test('the recipe screen logs in the recipe\'s own measures: 1 cup is half a serv
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('closing the sheet forgets a half-confirmed Remove, and leaving a review through search ends it', async () => {
+  const { ctx, p, calls, errors } = await open('/recipe/porridge');
+  await p.getByRole('button', { name: /^pinch of magic\./ }).click({ timeout: 15000 });
+  await p.getByRole('button', { name: 'Remove line' }).click();
+  await p.getByRole('button', { name: 'Tap again to remove' }).waitFor();
+  await p.getByRole('button', { name: 'Close' }).last().click();
+  await p.waitForTimeout(500);
+  await p.getByRole('button', { name: /^pinch of magic\./ }).click();
+  await p.getByRole('button', { name: 'Remove line' }).waitFor();        // asks again: one tap can't delete
+  assert.equal(calls.filter((c) => c.method === 'DELETE').length, 0);
+  await p.getByRole('button', { name: 'Close' }).last().click();
+  await p.waitForTimeout(500);
+
+  await p.getByRole('button', { name: 'Review', exact: true }).click();
+  await p.getByRole('button', { name: 'Choose a food or recipe' }).click();
+  await p.getByRole('textbox', { name: 'Search foods and recipes' }).waitFor({ timeout: 15000 });
+  await p.goBack();
+  await p.getByRole('button', { name: /^1 cup oats\./ }).click({ timeout: 15000 });
+  await p.getByRole('button', { name: 'Save amount' }).waitFor();
+  assert.equal(await p.getByRole('button', { name: /Next to review/ }).count(), 0, 'no longer reviewing');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

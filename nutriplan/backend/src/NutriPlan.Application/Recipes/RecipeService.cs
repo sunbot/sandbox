@@ -41,16 +41,16 @@ public sealed record SaveRecipeRequest(
     string Name, double Servings, IReadOnlyList<string> Ingredients, string? Directions, string? Description,
     IReadOnlyList<string>? Categories, string? Notes, double? CookedWeightGrams, double? FinishedVolumeMl = null);
 
+/// <summary>Make more or less of a whole recipe (2 = double, 0.5 = half).</summary>
+public sealed record ScaleRecipeRequest(double Factor);
+
+/// <summary>Add a line from search: exactly one of <c>FoodId</c>/<c>RecipeId</c>, with an amount as for <see cref="UpdateIngredientRequest"/>.</summary>
+public sealed record AddIngredientRequest(Guid? FoodId, Guid? RecipeId, double? Amount, string? Unit, double? Grams = null, double? Servings = null);
+
 /// <summary>
 /// Point an ingredient at a food (<c>FoodId</c>, amount as <c>Grams</c> or <c>Amount</c>+<c>Unit</c>), at another of your recipes
 /// (<c>RecipeId</c>, amount as <c>Servings</c> or <c>Amount</c>+<c>Unit</c> in its measures), or exclude it (<c>Ignore</c>).
 /// </summary>
-/// <summary>Add a line from search: exactly one of <c>FoodId</c>/<c>RecipeId</c>, with an amount as for <see cref="UpdateIngredientRequest"/>.</summary>
-/// <summary>Make more or less of a whole recipe (2 = double, 0.5 = half).</summary>
-public sealed record ScaleRecipeRequest(double Factor);
-
-public sealed record AddIngredientRequest(Guid? FoodId, Guid? RecipeId, double? Amount, string? Unit, double? Grams = null, double? Servings = null);
-
 public sealed record UpdateIngredientRequest(Guid? FoodId, double? Grams, double? Amount, string? Unit, bool? Ignore, Guid? RecipeId = null, double? Servings = null);
 
 public sealed partial class RecipeService(
@@ -60,6 +60,9 @@ public sealed partial class RecipeService(
     IWebPageFetcher fetcher,
     IUnitOfWork uow)
 {
+    /// <summary>Upper bound on one ingredient's weight (a misplaced zero, not a real batch).</summary>
+    public const double MaxIngredientGrams = 50_000;
+
     /// <summary>Upper bound on lines in one recipe (a pasted list gone wrong, not a real recipe).</summary>
     public const int MaxIngredients = 200;
 
@@ -201,13 +204,20 @@ public sealed partial class RecipeService(
         var lines = recipe.Ingredients.OrderBy(i => i.Position).ToList();
         foreach (var ing in lines.Where(i => i.ResolutionNote != "Section header"))
         {
-            if (ing.Amount is { } a)
-            {
-                ing.Amount = Math.Round(a * factor, 3);
-                ing.RawText = RecipeScaling.ScaleLeadingAmount(ing.RawText, ing.Amount.Value);
-            }
+            // The text's own leading number is scaled (not replaced by the parsed amount, which may be another quantity in
+            // another unit: "1 cup (220 g) sugar" is parsed as 220 g).
+            var (text, rewritten) = RecipeScaling.ScaleLeadingAmount(ing.RawText, factor);
+            ing.RawText = text;
+            if (ing.Amount is { } a) ing.Amount = Math.Round(a * factor, 3);
             if (ing.Grams is { } g) ing.Grams = Math.Round(g * factor, 2);
             if (ing.Servings is { } sv) ing.Servings = Math.Round(sv * factor, 4);
+            // A matched line whose text couldn't follow ("Olive oil (about 2 tbsp)") would be re-read at its old amount by
+            // Refresh matches or an edit, silently undoing the scaling: keep its scaled amount as chosen, and say so.
+            if (!rewritten && ing.Amount is not null && ing.Status == IngredientMatchStatus.AutoMatched && ing.CountsTowardNutrition)
+            {
+                ing.Status = IngredientMatchStatus.Confirmed;
+                ing.ResolutionNote = $"Scaled ×{Fmt(factor)} to {Fmt(ing.Amount!.Value)} {ing.Unit}; the line's text still shows the original amount. {ing.ResolutionNote}".Trim();
+            }
         }
         recipe.ReplaceIngredients(lines);
         recipe.SetServings(Math.Round(recipe.Servings * factor, 3));
@@ -251,6 +261,9 @@ public sealed partial class RecipeService(
         }
         else
         {
+            if (r.Grams is { } gIn && (!double.IsFinite(gIn) || gIn <= 0 || gIn > MaxIngredientGrams))
+                throw new ValidationException($"Enter a weight between 0 and {MaxIngredientGrams / 1000:0} kg.");
+            if (r.Amount is { } aIn && (!double.IsFinite(aIn) || aIn <= 0)) throw new ValidationException("Enter an amount greater than zero.");
             var foodId = r.FoodId ?? ing.FoodId ?? throw new ValidationException("Choose a food for this ingredient.");
             var food = await foods.GetAsync(foodId, ct) ?? throw new NotFoundException($"Food {foodId} not found.");
             double? grams = r.Grams;
@@ -261,6 +274,7 @@ public sealed partial class RecipeService(
                 grams = q.Grams;
                 note = q.Explanation;
             }
+            if (grams is > MaxIngredientGrams) throw new ValidationException($"That's more than {MaxIngredientGrams / 1000:0} kg for one ingredient. Check the amount.");
             ing.UseFood(food.Id, food.DisplayName, grams);
             if (r.Amount is not null) (ing.Amount, ing.Unit) = (r.Amount, r.Unit);
             ing.Status = grams is null ? IngredientMatchStatus.AutoMatched : IngredientMatchStatus.Confirmed;

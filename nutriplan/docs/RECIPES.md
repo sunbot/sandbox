@@ -41,6 +41,22 @@ ingredients. Each measure's `base` is servings per unit, so the app's `QuantityP
 exactly as it does foods. Logging, planning (`Amount` + `Unit`), editing a logged/planned recipe, and nesting all resolve
 through the same `RecipeMeasures.Resolve`.
 
+## Editing (Phase 2)
+
+- **Add** (Ingredients → Add): search foods and your recipes; the chosen item is added in the measure picked, as a confirmed
+  line that reads the way it was chosen ("1.5 cup Oats"). The choice is validated first (loops, measures); a measure the food
+  doesn't have is left to check, never guessed. API: `POST /recipes/{id}/ingredients`.
+- **Amounts**: a food line is edited in the food's own measures with the shared `QuantityPicker` (server converts through
+  `QuantityResolver`); up to 50 kg a line (`RecipeService.MaxIngredientGrams`). Nested recipes: Change amount.
+- **Remove** a line for good (two taps; Leave out keeps it, uncounted). `DELETE /recipes/{id}/ingredients/{position}`;
+  positions renumber, so the app blocks other actions while a removal is in flight.
+- **Scale** (`POST /recipes/{id}/scale`, 0–20×): every amount, gram weight and nested servings, the yield and the finished
+  weight/volume are multiplied, so per-serving nutrition is unchanged. The number a line's text starts with is multiplied
+  (`RecipeScaling`: "1 1/2 cups" ×2 → "3 cups", ranges "2-3" → "4-6"); numbers in parentheses (package sizes) are left alone.
+  A matched line whose text doesn't start with a number keeps its text but is marked confirmed with a note, so Refresh
+  matches can't put back the old amount.
+- **Review**: lines with no match or a match to check are counted in a banner; Review steps through only those lines.
+
 ## Grocery list
 
 A planned recipe's ingredients are scaled by its saved servings (a recipe planned as "250 g" of a 1 kg pot is a quarter of

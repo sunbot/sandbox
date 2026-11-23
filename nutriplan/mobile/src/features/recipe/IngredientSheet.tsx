@@ -5,7 +5,7 @@ import type { Ingredient } from '@/api/types';
 import { AppText, Badge, BottomSheet, PrimaryButton, SecondaryButton, TextButton } from '@/components/ds';
 import { ChefHat, Trash2 } from '@/components/ds/icons';
 import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
-import { checkQuantity, ingredientSelection, matchMeasure, parseQuantity, roundAmount } from '@/features/quantity/quantity';
+import { checkQuantity, ingredientSelection, MAX_INGREDIENT_GRAMS, matchMeasure, parseQuantity, roundAmount } from '@/features/quantity/quantity';
 import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
 import { recipeAmount } from './IngredientNutritionRow';
@@ -44,6 +44,11 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetAmount
   // The editor belongs to one line: reopening (or the next line in review) starts from that line's saved amount.
   const [edit, setEdit] = useState<{ position: number; value: QuantityValue } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
+  // Closing the sheet, or opening another line (also the one that moved into this position after a removal), starts fresh:
+  // no unsaved amount carried over, and Remove asks again.
+  const openKey = ingredient ? `${ingredient.position}:${ingredient.rawText}` : null;
+  const [lastKey, setLastKey] = useState(openKey);
+  if (openKey !== lastKey) { setLastKey(openKey); setEdit(null); setConfirmRemove(null); }
   const food = useFood(ing?.foodId ?? '', !!ingredient && !!ing?.foodId && !ing?.recipeId);
   if (!ing) return null;
 
@@ -52,7 +57,7 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetAmount
   const value = edit?.position === ing.position ? edit.value : measures.length ? ingredientSelection(ing, measures) : null;
   const measure = value ? matchMeasure(measures, value.unit) : undefined;
   const qty = value ? parseQuantity(value.text) : null;
-  const check = checkQuantity(qty, measure, false, 'g');
+  const check = checkQuantity(qty, measure, false, 'g', MAX_INGREDIENT_GRAMS);
   const start = measures.length ? ingredientSelection(ing, measures) : null;
   const changed = !!value && !!start && (value.text !== start.text || value.unit !== start.unit);
   const removing = confirmRemove === ing.position;
@@ -65,9 +70,9 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetAmount
         {ing.recipeId || (ing.foodName && state !== 'excluded') ? <SecondaryButton label="Choose a different food or recipe" onPress={() => onChooseFood(ing)} fullWidth />
           : <PrimaryButton label={ing.foodName ? 'Choose a different food or recipe' : 'Choose a food or recipe'} onPress={() => onChooseFood(ing)} fullWidth />}
         <View style={{ flexDirection: 'row', gap: t.space.sm }}>
-          {state !== 'excluded' ? <SecondaryButton label="Leave out" onPress={() => onLeaveOut(ing)} loading={busy} style={{ flex: 1 }} /> : null}
+          {state !== 'excluded' ? <SecondaryButton label="Leave out" onPress={() => onLeaveOut(ing)} loading={busy} disabled={busy} style={{ flex: 1 }} /> : null}
           {onRemove ? (
-            <SecondaryButton label={removing ? 'Tap again to remove' : 'Remove line'} icon={Trash2} tone="danger" style={{ flex: 1 }}
+            <SecondaryButton label={removing ? 'Tap again to remove' : 'Remove line'} icon={Trash2} tone="danger" style={{ flex: 1 }} disabled={busy}
               onPress={() => { if (removing) { setConfirmRemove(null); onRemove(ing); } else setConfirmRemove(ing.position); }} />
           ) : null}
         </View>
@@ -105,8 +110,8 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetAmount
               <>
                 <QuantityPicker measures={measures} value={{ text: value.text, unit: measure?.unit ?? value.unit }} baseUnit="g"
                   onChange={(v) => setEdit({ position: ing.position, value: v })} error={qty !== null && !check.ok ? check.message : null}
-                  onSubmit={() => { if (check.ok && changed) onSetAmount(ing, roundAmount(qty!), measure!.unit); }} />
-                <SecondaryButton label="Save amount" disabled={!changed || !check.ok} loading={busy}
+                  onSubmit={() => { if (check.ok && changed && !busy) onSetAmount(ing, roundAmount(qty!), measure!.unit); }} />
+                <SecondaryButton label="Save amount" disabled={!changed || !check.ok || busy} loading={busy}
                   onPress={() => onSetAmount(ing, roundAmount(qty!), measure!.unit)} fullWidth />
               </>
             ) : (

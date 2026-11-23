@@ -168,27 +168,6 @@ export function reliabilityNote(coverage: number, counts: IngredientCounts): { l
 export const calorieShare = (ingredientKcal: number | null | undefined, totalRecipeKcal: number): number | null =>
   ingredientKcal != null && totalRecipeKcal > 0 ? Math.round((ingredientKcal / totalRecipeKcal) * 100) : null;
 
-/* ───────── Ingredient amount editor ───────── */
-
-export type GramsEditor = { openFor: number | null; text: string; dirty: boolean };
-export const closedEditor: GramsEditor = { openFor: null, text: '', dirty: false };
-
-const gramsText = (grams: number | null | undefined) => (grams ? String(Math.round(grams * 10) / 10) : '');
-
-/**
- * Keeps the grams box in step with the ingredient being shown. Opening (or reopening, even the same ingredient) starts
- * from the current saved grams; while the sheet stays open, the user's typing is kept, and a server update only replaces
- * the box when the user hasn't typed anything.
- */
-export function syncGramsEditor(state: GramsEditor, ingredient: Pick<Ingredient, 'position' | 'grams'> | null): GramsEditor {
-  if (!ingredient) return state.openFor === null && !state.dirty && state.text === '' ? state : closedEditor;
-  if (state.openFor !== ingredient.position) return { openFor: ingredient.position, text: gramsText(ingredient.grams), dirty: false };
-  if (!state.dirty && state.text !== gramsText(ingredient.grams)) return { ...state, text: gramsText(ingredient.grams) };
-  return state;
-}
-
-export const typeGrams = (state: GramsEditor, text: string): GramsEditor => ({ ...state, text, dirty: true });
-
 /* ───────── Logging ───────── */
 
 export type LogRecipeInput = { date: string; meal: Meal; recipeId: string; servings: number; amount?: number; unit?: string };

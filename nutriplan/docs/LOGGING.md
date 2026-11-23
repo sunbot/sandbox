@@ -164,4 +164,8 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
 5. Recipes: search a recipe's name in Add food: it's listed under "Your recipes" with a "Your recipe" badge; log 1 serving
    and, on a recipe with a finished volume, 1 cup; edit the logged entry between cups and servings. On a recipe, choose an
    ingredient → pick another recipe → Use as this ingredient; the line reads "Your recipe: …".
-6. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
+6. Recipe editor (Phase 2): on a recipe, Ingredients → Add → search "oats" → pick cups → Add to recipe; tap the new line, change
+   it to 2 cups, Save amount; Remove line asks twice; Scale recipe ×2 → Apply (servings double, per-serving kcal unchanged, line
+   text doubles); on an imported recipe with unmatched lines, Review steps through only those; Log or plan in cups on a recipe
+   with a finished volume.
+7. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.

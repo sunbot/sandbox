@@ -261,7 +261,7 @@ export default function RecipeScreen() {
         <SecondaryButton label="Delete recipe" tone="danger" onPress={() => setConfirmDelete(true)} fullWidth />
       </View>
 
-      <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => { setOpenPos(null); setReviewing(false); }} busy={m.updateIngredient.isPending}
+      <IngredientSheet ingredient={r.ingredients.find((i) => i.position === openPos) ?? null} onClose={() => { setOpenPos(null); setReviewing(false); }} busy={m.updateIngredient.isPending || m.removeIngredient.isPending}
         footerExtra={reviewing && openPos !== null ? (() => {
           const next = nextToReview(queue, openPos);
           const left = queue.filter((p) => p !== openPos).length;
@@ -269,11 +269,11 @@ export default function RecipeScreen() {
             ? <SecondaryButton label={`Next to review (${left} left)`} onPress={() => setOpenPos(next)} fullWidth />
             : <SecondaryButton label={left > 0 ? `Back to the first (${left} left)` : 'Done reviewing'} onPress={() => { if (left > 0) setOpenPos(nextToReview(queue, null)); else { setOpenPos(null); setReviewing(false); } }} fullWidth />;
         })() : undefined}
-        onChooseFood={(ing) => { setOpenPos(null); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
+        onChooseFood={(ing) => { setOpenPos(null); setReviewing(false); router.push({ pathname: '/food/search', params: { mode: 'ingredient', recipeId: s.id, position: String(ing.position) } }); }}
         onLeaveOut={(ing) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, ignore: true }); afterLine(ing.position); })}
-        onRecipeAmount={(ing) => { setOpenPos(null); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position),
+        onRecipeAmount={(ing) => { setOpenPos(null); setReviewing(false); router.push({ pathname: '/recipe/amount', params: { mode: 'ingredient', id: ing.recipeId!, recipeId: s.id, position: String(ing.position),
           ...(ing.amount != null && ing.servings ? { amount: String(ing.amount), unit: ing.unit ?? 'serving' } : {}) } }); }}
-        onOpenRecipe={(rid) => { setOpenPos(null); router.push({ pathname: '/recipe/[id]', params: { id: rid } }); }}
+        onOpenRecipe={(rid) => { setOpenPos(null); setReviewing(false); router.push({ pathname: '/recipe/[id]', params: { id: rid } }); }}
         onSetAmount={(ing, amount, unit) => run(async () => { await m.updateIngredient.mutateAsync({ id: s.id, position: ing.position, amount, unit }); afterLine(ing.position); })}
         onRemove={(ing) => run(async () => { await m.removeIngredient.mutateAsync({ id: s.id, position: ing.position }); afterLine(ing.position, true); }, `Removed “${ing.rawText}”.`)} />
 

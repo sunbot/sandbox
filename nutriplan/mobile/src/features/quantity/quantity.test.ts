@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Item, Measure } from '../../api/types.ts';
-import { ingredientSelection, measureWorth, checkQuantity, convert, formatQuantity, initialSelection, matchMeasure, measureText, measuresForItem, parseQuantity, scaleFactor, SERVING, volumeNote } from './quantity.ts';
+import { MAX_INGREDIENT_GRAMS, ingredientSelection, measureWorth, checkQuantity, convert, formatQuantity, initialSelection, matchMeasure, measureText, measuresForItem, parseQuantity, scaleFactor, SERVING, volumeNote } from './quantity.ts';
 
 const m = (unit: string, base: number, kind: Measure['kind'] = 'Count', plural = unit + 's'): Measure => ({ unit, label: unit, plural, base, kind, source: null, countable: kind === 'Count' });
 const almond = m('almond', 1.2);
@@ -221,3 +221,10 @@ test('a line whose measure the food lacks starts from its grams; with neither, f
   assert.deepEqual(ingredientSelection({ amount: null, unit: null, grams: null }, [mm('g', 1, 'Mass')]), { text: '100', unit: 'g' });
 });
 
+
+test('a recipe ingredient may weigh up to 50 kg; a logged food stays capped at 5 kg', () => {
+  const kg: Measure = { unit: 'kg', label: 'kg', plural: 'kg', base: 1000, kind: 'Mass', source: null, countable: false };
+  assert.equal(checkQuantity(6, kg, false, 'g').ok, false);
+  assert.ok(checkQuantity(6, kg, false, 'g', MAX_INGREDIENT_GRAMS).ok);
+  assert.equal(checkQuantity(60, kg, false, 'g', MAX_INGREDIENT_GRAMS).ok, false);
+});

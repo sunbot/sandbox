@@ -83,7 +83,10 @@ export function convert(qty: number, from: Measure, to: Measure): number {
 export type QuantityCheck = { ok: true; base: number } | { ok: false; message: string };
 
 /** Whether an amount can be saved, and its base amount (grams, ml or servings). */
-export function checkQuantity(qty: number | null, m: Measure | undefined, isRecipe = false, baseUnit: 'g' | 'ml' | 'serving' = 'g'): QuantityCheck {
+/** A recipe ingredient can weigh more than one meal (a batch); the server allows up to 50 kg per line. */
+export const MAX_INGREDIENT_GRAMS = 50000;
+
+export function checkQuantity(qty: number | null, m: Measure | undefined, isRecipe = false, baseUnit: 'g' | 'ml' | 'serving' = 'g', maxBase = MAX_GRAMS): QuantityCheck {
   if (!m) return { ok: false, message: 'Choose a measure.' };
   if (qty === null) return { ok: false, message: 'Enter an amount, like 12, 0.5 or 1/2.' };
   if (!(qty > 0)) return { ok: false, message: 'Enter an amount greater than zero.' };
@@ -92,7 +95,10 @@ export function checkQuantity(qty: number | null, m: Measure | undefined, isReci
   if (qty < MIN_QUANTITY || (m.base > 0 && base < MIN_BASE)) return { ok: false, message: 'That amount is too small to log.' };
   // A recipe's base amount is servings (whatever measure it's typed in: servings, grams or cups of the finished dish).
   if (isRecipe && base > MAX_SERVINGS) return { ok: false, message: `That's more than ${MAX_SERVINGS} servings. Check the amount.` };
-  if (!isRecipe && base > MAX_GRAMS) return { ok: false, message: baseUnit === 'ml' ? 'That’s more than 5 litres. Check the amount.' : 'That’s more than 5 kg. Check the amount.' };
+  if (!isRecipe && base > maxBase) {
+    const limit = `${formatQuantity(maxBase / 1000)} ${baseUnit === 'ml' ? 'litres' : 'kg'}`;
+    return { ok: false, message: `That’s more than ${limit}. Check the amount.` };
+  }
   return { ok: true, base };
 }
 

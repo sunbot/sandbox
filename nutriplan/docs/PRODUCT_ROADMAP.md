@@ -20,7 +20,7 @@ product decision.
 | Phase | Status |
 |---|---|
 | 1 Unified Recipe System | Awaiting Device Verification |
-| 2 Recipe Editor and Usability | In Progress |
+| 2 Recipe Editor and Usability | Awaiting Device Verification |
 | 2.5 Food Data Quality Audit and Restaurant Strategy | Not Started |
 | 2.6 Ingredient Verification and Critical Data Corrections | Not Started |
 | 3 Food Creation and Nutrition Facts OCR | Not Started |
@@ -67,17 +67,29 @@ Known limits / follow-ups (carried into Phase 2 unless noted):
 - The recipe screen's own "Log or plan" box still takes servings only; weight/volume logging is via Add food → the recipe.
 - Not yet verified on a physical Android phone (checklist: `docs/LOGGING.md` item 5).
 
-## Phase 2 — Recipe Editor and Usability · High · In Progress
+## Phase 2 — Recipe Editor and Usability · High · Awaiting Device Verification
 
-- ⬜ Search and add individual ingredients (today: type lines, then match each).
-- 🟡 Search and add existing recipes as ingredients (works per line via "Choose a food or recipe"; no "add ingredient" search yet).
-- ⬜ Easily edit ingredient quantities and measurements (today: grams for foods, servings/measures for nested recipes).
-- 🟡 Adjust servings and scale recipes (servings yes; scaling all ingredients no).
-- 🟡 Show calculated nutrition per serving and for the entire recipe (both shown; per-100 g with finished weight).
-- ✅ Optionally enter finished weight or volume.
-- ✅ Preserve existing website recipe importing (Paprika and web-page import unchanged and tested).
-- ⬜ Make imported ingredients easy to review and correct.
-- ⬜ Intuitive mobile editing and navigation.
+Commits `ed5dd9a` (API), `ddff772`, `94cf56b` (app), plus the review-fix commit. Rules: `docs/RECIPES.md` → Editing.
+
+| Requirement | Status | Where |
+|---|---|---|
+| Search and add individual ingredients | ✅ | Ingredients → Add → search → amount → "Add to recipe" (`POST /recipes/{id}/ingredients`) |
+| Search and add existing recipes as ingredients | ✅ | same search lists Your recipes (never the recipe itself; loops refused) |
+| Easily edit ingredient quantities and measurements | ✅ | ingredient sheet: `QuantityPicker` in the food's own measures (up to 50 kg a line); nested recipes: Change amount |
+| Adjust servings and scale recipes | ✅ | Change (servings) and Scale recipe ×½ ×1½ ×2 ×3 with a preview (`POST /recipes/{id}/scale`) |
+| Nutrition per serving and for the entire recipe | ✅ | per serving / whole recipe / per 100 g (with finished weight) |
+| Optionally enter finished weight or volume | ✅ | Edit recipe |
+| Preserve existing website recipe importing | ✅ | Paprika and web-page import unchanged (tests) |
+| Make imported ingredients easy to review and correct | ✅ | "N ingredients need a look" banner + Review stepping through only those lines |
+| Intuitive mobile editing and navigation | 🟡 | done in the browser at 360–393 px; needs Android verification. The bulk text editor (Edit recipe) remains for pasting. |
+
+Also: remove a line (two taps), log/plan from the recipe screen in its measures (cups/grams when known).
+Independent review: 10 findings, all fixed with regression tests (scaling rewrote the wrong number in lines like "1 cup
+(220 g) sugar" and could be undone by Refresh matches; a half-confirmed Remove survived closing the sheet; a slow Remove could
+hit the next line; recipe lines were capped at 5 kg; review mode stuck after leaving through search; impossible weights were
+accepted; doc and dead-code cleanups).
+Limits: a line whose text doesn't start with a number keeps its original text when scaled (its scaled amount is kept and noted);
+numbers inside parentheses are left alone (they're usually package sizes).
 
 ## Phase 2.5 — Food Data Quality Audit and Restaurant Strategy · High · Not Started
 

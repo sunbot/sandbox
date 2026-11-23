@@ -94,7 +94,7 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
     var (status, title) = error switch
     {
-        NotFoundException => (StatusCodes.Status404NotFound, "Not found"),
+        NotFoundException or KeyNotFoundException => (StatusCodes.Status404NotFound, "Not found"),
         NotAuthenticatedException => (StatusCodes.Status401Unauthorized, "Sign in to continue."),
         ForbiddenException => (StatusCodes.Status403Forbidden, "You don't have access to that."),
         NutriPlan.Application.Foods.ProviderUnavailableException => (StatusCodes.Status503ServiceUnavailable, "The food database didn't answer. Try again in a moment."),

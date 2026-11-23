@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Ingredient, Nutrition } from '../../api/types';
 import {
-  availableModes, calorieShare, scaleSummary, reviewQueue, nextToReview, closedEditor, syncGramsEditor, typeGrams, eatingNutrition, effectiveMode, gramsPerServing, ingredientCounts, ingredientState, logRecipeRequest,
+  availableModes, calorieShare, scaleSummary, reviewQueue, nextToReview, eatingNutrition, effectiveMode, gramsPerServing, ingredientCounts, ingredientState, logRecipeRequest,
   macroComposition, nutritionFor, parseServings, per100gAvailable, reliabilityNote, roundedPercents, scaleNutrition, servingsWord,
 } from './nutritionView.ts';
 
@@ -180,38 +180,6 @@ test('Log now sends the meal the user selected, not a time-of-day guess', () => 
 });
 
 /* ── ingredient amount editor ── */
-
-test('the grams box starts from the current data every time the sheet opens, even for the same ingredient', () => {
-  let e = syncGramsEditor(closedEditor, { position: 2, grams: 100 });
-  assert.equal(e.text, '100');
-  e = syncGramsEditor(typeGrams(e, '150'), null);           // saved / closed
-  assert.deepEqual(e, closedEditor);
-  e = syncGramsEditor(e, { position: 2, grams: 150 });      // reopen the same ingredient after the save
-  assert.equal(e.text, '150');
-  e = syncGramsEditor(syncGramsEditor(e, null), { position: 2, grams: 80 }); // data changed elsewhere (new food), reopen
-  assert.equal(e.text, '80');
-});
-
-test('typing is kept while the sheet stays open, even if the data refreshes', () => {
-  let e = syncGramsEditor(closedEditor, { position: 1, grams: 100 });
-  e = typeGrams(e, '12');
-  e = syncGramsEditor(e, { position: 1, grams: 90 });        // refetch while open
-  assert.equal(e.text, '12');
-});
-
-test('an untouched box follows a refresh while open, and switching ingredient resets', () => {
-  let e = syncGramsEditor(closedEditor, { position: 1, grams: 100 });
-  e = syncGramsEditor(e, { position: 1, grams: 90 });
-  assert.equal(e.text, '90');
-  e = syncGramsEditor(typeGrams(e, '5'), { position: 3, grams: null });
-  assert.deepEqual(e, { openFor: 3, text: '', dirty: false });
-});
-
-test('syncing an unchanged state returns the same object (no render loop)', () => {
-  const e = syncGramsEditor(closedEditor, { position: 1, grams: 100 });
-  assert.equal(syncGramsEditor(e, { position: 1, grams: 100 }), e);
-  assert.equal(syncGramsEditor(closedEditor, null), closedEditor);
-});
 
 test('the scale summary says what changes', () => {
   assert.equal(scaleSummary(4, 2), 'Makes 4 → 8 servings · every amount ×2');
