@@ -1,3 +1,4 @@
+using NutriPlan.Application.Recipes;
 using NutriPlan.Application.Abstractions;
 using NutriPlan.Application.Foods;
 using NutriPlan.Domain.Diary;
@@ -51,7 +52,7 @@ public sealed class InMemoryStore : IFoodRepository, IRecipeRepository, IDiaryRe
     public Task<Recipe?> FindByExternalIdAsync(RecipeOrigin origin, string externalId, CancellationToken ct = default) =>
         Task.FromResult(Recipes.FirstOrDefault(r => r.Origin == origin && r.ExternalId == externalId));
     public Task<IReadOnlyList<Recipe>> ListAsync(string? search = null, string? category = null, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<Recipe>>(Recipes.Where(r => search is null || r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList());
+        Task.FromResult<IReadOnlyList<Recipe>>(Recipes.Where(r => search is null || RecipeSearch.Match(r, search) is not null).ToList());
     public Task<IReadOnlyList<RecipeLink>> LinksAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<RecipeLink>>(Recipes.Select(r => new RecipeLink(r.Id, r.Name, r.SubRecipeIds.ToList())).ToList());
     void IRecipeRepository.Add(Recipe recipe) => Recipes.Add(recipe);

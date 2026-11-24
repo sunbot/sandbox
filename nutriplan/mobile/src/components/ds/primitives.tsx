@@ -1,7 +1,8 @@
-import { type ReactNode, useId } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   type PressableProps,
   type StyleProp,
@@ -10,6 +11,7 @@ import {
   TextInput,
   type TextInputProps,
   type TextProps,
+  type TextStyle,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -198,16 +200,21 @@ const buttonStyles = (t: Theme) =>
 
 /* ───────────────────────── Search field ───────────────────────── */
 
-export function SearchField({ value, onClear, trailing, style, ...rest }: TextInputProps & { onClear?: () => void; trailing?: ReactNode }) {
+export function SearchField({ value, onClear, trailing, style, onFocus, onBlur, ...rest }: TextInputProps & { onClear?: () => void; trailing?: ReactNode }) {
     const t = useTheme();
+    // Focus is shown on the rounded field itself (accent border), not as the browser's rectangular outline on the input (#84).
+    const [focused, setFocused] = useState(false);
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: t.sizes.touch, borderRadius: t.radii.button, borderWidth: 1, borderColor: t.colors.border, backgroundColor: t.colors.surface, paddingLeft: t.space.md }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: t.sizes.touch, borderRadius: t.radii.button, borderWidth: 1,
+        borderColor: focused ? t.colors.primary : t.colors.border, backgroundColor: t.colors.surface, paddingLeft: t.space.md }}>
         <Search size={t.sizes.iconSmall} color={t.colors.textSecondary} />
         <TextInput
           value={value}
           placeholderTextColor={t.colors.textMuted}
           returnKeyType="search"
-          style={[t.type.body, { flex: 1, minWidth: 0, color: t.colors.text, paddingHorizontal: t.space.sm, minHeight: t.sizes.touch }, style]} // minWidth 0: a web text input won't shrink below its intrinsic width otherwise, pushing the clear button out on narrow phones
+          style={[t.type.body, { flex: 1, minWidth: 0, color: t.colors.text, paddingHorizontal: t.space.sm, minHeight: t.sizes.touch }, NO_WEB_OUTLINE, style]} // minWidth 0: a web text input won't shrink below its intrinsic width otherwise, pushing the clear button out on narrow phones
+          onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+          onBlur={(e) => { setFocused(false); onBlur?.(e); }}
           {...rest}
         />
         {value && onClear ? <IconButton icon={X} label="Clear search" onPress={onClear} /> : null}
@@ -215,6 +222,9 @@ export function SearchField({ value, onClear, trailing, style, ...rest }: TextIn
       </View>
     );
 }
+
+/** The web input's own focus outline (a white rectangle inside the rounded field); focus is drawn on the field instead. */
+export const NO_WEB_OUTLINE = (Platform.OS === 'web' ? { outlineStyle: 'none', outlineWidth: 0 } : null) as unknown as TextStyle | null;
 
 /* ───────────────────────── Filter chip ───────────────────────── */
 

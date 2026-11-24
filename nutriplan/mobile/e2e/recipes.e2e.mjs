@@ -121,3 +121,25 @@ test('updating ingredient matches shows a preview first and saves only on Apply'
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('searching "apple" labels a recipe found through an ingredient, lists name matches first, and the search box has no browser outline (#84)', async () => {
+  const chiliHit = { ...summary('smoky', 'Smoky Chipotle Beef Chili', 6, 420), matchedOn: 'Ingredient', matchedText: '1 tbsp apple cider vinegar' };
+  const pie = summary('pie', 'Apple pie', 8, 300);
+  const { ctx, p, errors } = await open('/food/search?mode=log', { 'GET /api/recipes': () => [200, [pie, chiliHit]] });
+  const box = p.getByRole('textbox').first();
+  await box.click();
+  await box.fill('apple');
+  await p.getByText('Smoky Chipotle Beef Chili').waitFor({ timeout: 15000 });
+  await p.getByText(/Matches ingredient: 1 tbsp apple cider vinegar/).waitFor();
+  const names = await p.locator('text=/^(Apple pie|Smoky Chipotle Beef Chili)$/').allInnerTexts();
+  assert.deepEqual(names.slice(0, 2), ['Apple pie', 'Smoky Chipotle Beef Chili']);
+  const outline = await box.evaluate((el) => getComputedStyle(el).outlineStyle);
+  assert.equal(outline, 'none', 'no rectangular browser outline inside the rounded field');
+  const border = await box.evaluate((el) => getComputedStyle(el.parentElement).borderTopColor);
+  const idle = await p.evaluate(() => { document.activeElement.blur(); return null; });
+  const borderIdle = await box.evaluate((el) => getComputedStyle(el.parentElement).borderTopColor);
+  assert.notEqual(border, borderIdle, 'focus is shown on the field itself');
+  assert.equal(idle, null);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

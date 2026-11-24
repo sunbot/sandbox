@@ -3,7 +3,7 @@ import { ActivityIndicator, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { addBrandedFood, useBrandedSearch, useFoodSearch, useRecipes } from '@/api/hooks';
 import type { BrandedFood } from '@/api/types';
-import { AppText, EmptyState, SecondaryButton, Skeleton, TextButton } from '@/components/ds';
+import { AppText, EmptyState, NO_WEB_OUTLINE, SecondaryButton, Skeleton, TextButton } from '@/components/ds';
 import { PenLine, ScanBarcode, Search } from '@/components/ds/icons';
 import { VoiceButton } from '@/components/VoiceButton';
 import { FoodResultRow } from '@/features/foods/FoodResultRow';
@@ -21,6 +21,7 @@ export default function FoodSearch() {
   const t = useTheme();
   const params = useLocalSearchParams<{ date: string; meal: string; mode: string; recipeId?: string }>();
   const [text, setText] = useState('');
+  const [focused, setFocused] = useState(false);
   const settled = useDebounced(text, 500);
   const local = useFoodSearch(text);
   const branded = useBrandedSearch(settled);
@@ -62,11 +63,14 @@ export default function FoodSearch() {
     <View style={{ flex: 1, backgroundColor: t.colors.background }}>
       <View style={{ padding: t.screenPadding, paddingBottom: t.space.sm, gap: t.space.sm }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, minHeight: 48, paddingHorizontal: t.space.md, borderRadius: t.radii.button, backgroundColor: t.colors.surfaceMuted }}>
+          {/* Focus shows as the field's accent border, not the browser's rectangular outline on the input (#84). */}
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, minHeight: 48, paddingHorizontal: t.space.md, borderRadius: t.radii.button,
+            backgroundColor: t.colors.surfaceMuted, borderWidth: 1, borderColor: focused ? t.colors.primary : 'transparent' }}>
             <Search size={18} strokeWidth={2} color={t.colors.textMuted} />
             <TextInput value={text} onChangeText={setText} placeholder="Foods, your recipes or brands" placeholderTextColor={t.colors.textMuted}
               autoFocus returnKeyType="search" accessibilityLabel="Search foods and recipes" maxLength={100}
-              style={[t.type.body, { flex: 1, minHeight: 48, color: t.colors.text }]} />
+              onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+              style={[t.type.body, { flex: 1, minHeight: 48, color: t.colors.text }, NO_WEB_OUTLINE]} />
           </View>
           <VoiceButton onText={setText} onFinal={setText} />
         </View>

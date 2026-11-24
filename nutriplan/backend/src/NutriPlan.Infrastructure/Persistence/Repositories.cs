@@ -167,16 +167,8 @@ public sealed class RecipeRepository(NutriPlanDbContext db) : IRecipeRepository
         IEnumerable<Recipe> q = all;
         if (!string.IsNullOrWhiteSpace(category))
             q = q.Where(r => r.Categories.Contains(category, StringComparer.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var words = FoodRanker.Tokens(search).ToList();
-            q = q.Where(r =>
-            {
-                var hay = FoodRanker.Tokens($"{r.Name} {string.Join(' ', r.Categories)} {r.Description}").ToHashSet();
-                return words.All(w => hay.Contains(w) || hay.Any(h => h.StartsWith(w)));
-            });
-        }
-        return q.ToList();
+        // Name, category, ingredient lines or description; name matches first (RecipeSearch).
+        return NutriPlan.Application.Recipes.RecipeSearch.Filter(q, search).Select(x => x.Recipe).ToList();
     }
 
     public void Add(Recipe recipe) { recipe.AssignOwner(Owner.Of(db)); db.Recipes.Add(recipe); }

@@ -21,6 +21,11 @@ public sealed record RecipeSummaryDto(
     Guid Id, string Name, double Servings, string Origin, IReadOnlyList<string> Categories, bool IsFavorite,
     string? ImageUrl, bool HasPhoto, string? TotalTime, NutritionDto PerServing, double Coverage, int? Rating)
 {
+    /// <summary>Set by a search when the recipe matched on something other than its name: Category, Ingredient or Description.</summary>
+    public string? MatchedOn { get; init; }
+    /// <summary>The category or ingredient line that matched.</summary>
+    public string? MatchedText { get; init; }
+
     public static RecipeSummaryDto From(Recipe r) => new(
         r.Id, r.Name, r.Servings, r.Origin.ToString(), r.Categories, r.IsFavorite, r.ImageUrl, r.Photo is { Length: > 0 },
         r.TotalTime, NutritionDto.From(r.NutritionPerServing), Math.Round(r.NutritionCoverage, 2), r.Rating);
@@ -81,8 +86,17 @@ public sealed partial class RecipeService(
     /// <summary>Below this ranker score an ingredient is left for you to match by hand.</summary>
     public const double MinAutoMatchScore = 45;
 
-    public async Task<IReadOnlyList<RecipeSummaryDto>> ListAsync(string? search, string? category, CancellationToken ct = default) =>
-        (await recipes.ListAsync(search, category, ct)).Select(RecipeSummaryDto.From).ToList();
+    /// <summary>Your recipes; with a search, each says what it matched on when it isn't the name ("ingredient: 1 tbsp apple cider vinegar").</summary>
+    public async Task<IReadOnlyList<RecipeSummaryDto>> ListAsync(string? search, string? category, CancellationToken ct = default)
+    {
+        var list = await recipes.ListAsync(search, category, ct);
+        if (string.IsNullOrWhiteSpace(search)) return list.Select(RecipeSummaryDto.From).ToList();
+        return RecipeSearch.Filter(list, search).Select(x => RecipeSummaryDto.From(x.Recipe) with
+        {
+            MatchedOn = x.Hit.Field == RecipeMatchField.Name ? null : x.Hit.Field.ToString(),
+            MatchedText = x.Hit.Text,
+        }).ToList();
+    }
 
     public async Task<RecipeDetailDto> GetAsync(Guid id, CancellationToken ct = default) =>
         await ToDetailAsync(await Get(id, ct), ct);

@@ -149,6 +149,9 @@ export type RecipeSummary = {
   totalTime?: string | null;
   perServing: Nutrition;
   coverage: number;
+  /** From a search, when the recipe matched on something other than its name. */
+  matchedOn?: 'Category' | 'Ingredient' | 'Description' | null;
+  matchedText?: string | null;
   rating?: number | null;
 };
 

@@ -113,8 +113,16 @@ export function recipeRow(r: RecipeSummary): FoodRow {
     calories: r0(r.perServing.calories),
     macros: macroText(r.perServing),
     source: 'Your recipe',
-    note: r.coverage < 1 ? `${Math.round(r.coverage * 100)}% of ingredients counted` : null,
+    note: [matchNote(r), r.coverage < 1 ? `${Math.round(r.coverage * 100)}% of ingredients counted` : null].filter(Boolean).join(' · ') || null,
   };
+}
+
+/** Why a recipe is in the results when its name doesn't match the search (#84): "Matches ingredient: 1 tbsp apple cider vinegar". */
+export function matchNote(r: Pick<RecipeSummary, 'matchedOn' | 'matchedText'>): string | null {
+  if (r.matchedOn === 'Ingredient') return `Matches ingredient: ${r.matchedText ?? ''}`.trim();
+  if (r.matchedOn === 'Category') return `Matches category: ${r.matchedText ?? ''}`.trim();
+  if (r.matchedOn === 'Description') return 'Matches description';
+  return null;
 }
 
 /** Your recipes matching a search, best first: names that start with the words, then the rest; never the recipe being edited. */
@@ -123,7 +131,7 @@ export function recipeMatches(recipes: RecipeSummary[], text: string, exceptId?:
   if (q.length < 2) return [];
   return recipes
     .filter((r) => r.id !== exceptId)
-    .map((r, i) => ({ r, i, starts: r.name.toLowerCase().startsWith(q) }))
-    .sort((a, b) => Number(b.starts) - Number(a.starts) || a.i - b.i)
+    .map((r, i) => ({ r, i, starts: r.name.toLowerCase().startsWith(q), byName: !r.matchedOn }))
+    .sort((a, b) => Number(b.byName) - Number(a.byName) || Number(b.starts) - Number(a.starts) || a.i - b.i)
     .map((x) => x.r);
 }

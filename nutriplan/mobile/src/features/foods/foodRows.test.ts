@@ -105,3 +105,14 @@ test('recipe matches put names that start with the search first and never offer 
   assert.deepEqual(recipeMatches(list, 'turkey', 'b').map((r) => r.id), ['c', 'a']);
   assert.deepEqual(recipeMatches(list, 't'), []);
 });
+
+test('a recipe found through an ingredient says so, and name matches come first (#84)', async () => {
+  const { matchNote, recipeMatches } = await import('./foodRows.ts');
+  assert.equal(matchNote({ matchedOn: 'Ingredient', matchedText: '1 tbsp apple cider vinegar' }), 'Matches ingredient: 1 tbsp apple cider vinegar');
+  assert.equal(matchNote({ matchedOn: 'Description', matchedText: null }), 'Matches description');
+  assert.equal(matchNote({ matchedOn: null }), null);
+  const base = { servings: 4, origin: 'Manual', categories: [], isFavorite: false, hasPhoto: false, perServing: { calories: 1, protein: 0, carbs: 0, fat: 0, fiber: 0, nutrients: {} }, coverage: 1 };
+  const chili = { ...base, id: 'c', name: 'Smoky Chipotle Beef Chili', matchedOn: 'Ingredient' as const, matchedText: '1 tbsp apple cider vinegar' };
+  const pie = { ...base, id: 'p', name: 'Grandma’s apple pie' };
+  assert.deepEqual(recipeMatches([chili, pie], 'apple').map((r) => r.id), ['p', 'c']);
+});
