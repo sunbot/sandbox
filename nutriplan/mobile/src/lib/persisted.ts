@@ -13,8 +13,8 @@ export function usePersistedState<T>(key: string, initial: T): [T, (update: (pre
     keyRef.current = key;
     let alive = true;
     AsyncStorage.getItem(key)
-      .then((raw) => { if (alive) { setValue(raw ? (JSON.parse(raw) as T) : initial); setLoadedKey(key); } })
-      .catch(() => { if (alive) setLoadedKey(key); });
+      .then((raw) => { if (alive) { setValue((raw ? (JSON.parse(raw) as T | null) : null) ?? initial); setLoadedKey(key); } })
+      .catch(() => { if (alive) { setValue(initial); setLoadedKey(key); } });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initial` is a default, not a dependency
   }, [key]);
