@@ -4,8 +4,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { useGaps, useLogFoods, useLogRecipe, usePlanMutations } from '@/api/hooks';
 import type { GapItem, GapMode, GapSuggestion, GapSwap, GapTip, GapTipItem } from '@/api/types';
 import { AppCard, AppText, Badge, EmptyState, FilterChip, PrimaryButton, SecondaryButton, Skeleton, TextButton, useSnackbar } from '@/components/ds';
-import { ArrowLeftRight, CalendarClock, CalendarPlus, Check, CircleCheck, CloudOff, Info, RefreshCw, Sparkles } from '@/components/ds/icons';
-import { calorieHeadline, effectLine, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, rotationState, shortOn, skipShown, skippedFor, suggestionId, withSkipped, type SkippedByMode } from '@/features/gaps/gapView';
+import { ArrowLeftRight, CalendarClock, CalendarPlus, Check, CircleAlert, CircleCheck, CloudOff, Info, RefreshCw, Sparkles } from '@/components/ds/icons';
+import { calorieHeadline, compactReasons, effectLine, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, rotationState, shortOn, skipShown, skippedFor, suggestionId, withSkipped, type SkippedByMode } from '@/features/gaps/gapView';
 import { friendlyFoodName } from '@/lib/foodName';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -259,12 +259,17 @@ function Reasons({ reasons }: { reasons: { code: string; text: string }[] }) {
   if (shown.length === 0) return null;
   return (
     <View style={{ gap: 4 }}>
-      {shown.map((r) => (
+      {shown.map((r) => {
+        // A caution (a limit it uses up, or going over the calories left) never gets a tick.
+        const caution = r.code === 'limit' || (r.code === 'calories' && /\bover\b/i.test(r.text));
+        const Icon = caution ? CircleAlert : Check;
+        return (
         <View key={r.text} style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' }}>
-          <Check size={16} color={t.colors.primary} strokeWidth={2.4} style={{ marginTop: 2 }} />
+          <Icon size={16} color={caution ? t.colors.warning : t.colors.primary} strokeWidth={2.4} style={{ marginTop: 2 }} />
           <AppText variant="secondary" tone="secondary" style={{ flex: 1 }}>{r.text}</AppText>
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -274,6 +279,9 @@ function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog
 }) {
   const t = useTheme();
   const badges = originBadges(s.reasons);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const isSingle = s.items.length === 1;
+  const compact = compactReasons(s.reasons, s.effects.length > 0);
   return (
     <AppCard padded={false}>
       <View style={{ padding: t.space.lg, paddingBottom: t.space.sm, gap: t.space.xs }}>
@@ -284,7 +292,7 @@ function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog
         <AppText variant="cardTitle" numberOfLines={3}>{s.items.map(nice).join(' + ')}</AppText>
         <AppText variant="secondary" tone="secondary" numeric>{Math.round(s.adds.calories)} kcal · {fmtAmount(s.adds.protein)} g protein</AppText>
       </View>
-      {s.items.map((it, j) => (
+      {!isSingle ? s.items.map((it, j) => (
         <View key={j} style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 52, paddingHorizontal: t.space.lg, paddingVertical: t.space.xs, borderTopWidth: 1, borderTopColor: t.colors.border }}>
           <View style={{ flex: 1, gap: 2 }}>
             <AppText variant="body" numberOfLines={2}>{nice(it)}</AppText>
@@ -292,13 +300,23 @@ function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog
           </View>
           <AppText variant="bodyStrong" numeric>{Math.round(it.nutrition.calories)}</AppText>
         </View>
-      ))}
+      )) : (
+        <AppText variant="caption" tone="muted" style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>{s.items[0].portion}</AppText>
+      )}
       <View style={{ padding: t.space.lg, paddingTop: t.space.md, gap: t.space.md, borderTopWidth: 1, borderTopColor: t.colors.border }}>
-        <Reasons reasons={s.reasons} />
-        {s.effects.length > 0 ? (
-          <View style={{ gap: 2 }}>
-            <AppText variant="label" tone="muted">AFTER THIS</AppText>
-            {s.effects.map((e) => <AppText key={e.nutrientId} variant="caption" tone="secondary">{effectLine(e)}</AppText>)}
+        {detailsOpen ? null : <Reasons reasons={compact.shown} />}
+        {compact.more ? (
+          <TextButton label={detailsOpen ? 'Hide nutrition details' : 'View nutrition details'} icon={Info} onPress={() => setDetailsOpen((open) => !open)} />
+        ) : null}
+        {detailsOpen ? (
+          <View style={{ gap: t.space.sm }}>
+            <Reasons reasons={s.reasons} />
+            {s.effects.length > 0 ? (
+              <View style={{ gap: 2 }}>
+                <AppText variant="label" tone="muted">AFTER THIS</AppText>
+                {s.effects.map((e) => <AppText key={e.nutrientId} variant="caption" tone="secondary">{effectLine(e)}</AppText>)}
+              </View>
+            ) : null}
           </View>
         ) : null}
         <PrimaryButton label={added ? 'Planned' : `Plan for ${mealLabel(meal).toLowerCase()}`} icon={added ? Check : CalendarClock}

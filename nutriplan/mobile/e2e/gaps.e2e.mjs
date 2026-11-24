@@ -68,3 +68,40 @@ test('each filter keeps its own skipped ideas: rotating in Best match does not u
   assert.equal(await p.getByText('Cottage cheese + Apple').count() > 0, true, 'Best match keeps its place');
   await ctx.close();
 });
+
+test('data limitations collapse to one notice and a card shows its essentials, keeping cautions in view (#87)', async () => {
+  const ctx = await phone(b);
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  const salad = {
+    id: 'salad', items: [{ kind: 'Recipe', foodId: null, recipeId: 'r1', name: 'Greek salad', amount: 1, unit: 'serving', nutrition: N(828, 11), portion: '1 serving' }],
+    adds: N(828, 11), remainingAfter: N(210), summary: '', category: 'Meal', effects: [{ nutrientId: 1079, name: 'Fiber', before: 23, after: 12, unit: 'g', kind: 'Goal' }],
+    reasons: [{ code: 'gap', text: 'Helps close your fiber gap: about 11 of the 23 g missing' }, { code: 'source', text: 'A useful source of potassium' },
+      { code: 'gap', text: 'Helps close your iron gap' }, { code: 'limit', text: 'Uses 900 of the 1,000 mg sodium left in your limit' },
+      { code: 'calories', text: 'Fits within your remaining 1,038 kcal (leaves about 210)' }],
+  };
+  const notes = ['Magnesium is missing from 3 logged foods.', 'Zinc is missing from 3 logged foods.', 'Added sugars are reported only on labelled products.'];
+  await mockApi(p, {
+    'GET /api/plan/gaps': () => ({ date: today(), remaining: N(1038, 115, 100, 30), gaps: [], suggestions: [salad], situation: 'Open', message: 'About 1,038 kcal left today.', mode: 'BestMatch',
+      availableModes: [{ mode: 'BestMatch', count: 1 }], emptyReason: null, emptyMessage: null, swaps: [], nextDay: [], dataNotes: notes, moreIdeas: 0, skippedIdeas: 0 }),
+  });
+  await p.goto(`${server.url}/gaps?date=${today()}`);
+  await p.getByRole('button', { name: '3 data limitations · View details' }).waitFor({ timeout: 15000 });
+  assert.equal(await visible(p.getByText(notes[0])), false, 'collapsed by default');
+  await p.getByRole('button', { name: '3 data limitations · View details' }).click();
+  await p.getByText(notes[2]).waitFor();                                            // nothing about uncertainty is lost
+  await p.getByRole('button', { name: 'Hide data limitations' }).click();
+
+  assert.equal(await p.getByText('Greek salad', { exact: true }).count(), 1, 'the name appears once');
+  await p.getByText('Helps close your fiber gap: about 11 of the 23 g missing').waitFor();
+  await p.getByText('Uses 900 of the 1,000 mg sodium left in your limit').waitFor();  // a caution is never tucked away
+  assert.equal(await visible(p.getByText('Helps close your iron gap')), false);
+  assert.equal(await visible(p.getByText('AFTER THIS')), false);
+  await p.getByRole('button', { name: /^Plan for / }).waitFor();                   // the action stays in view
+  await p.getByRole('button', { name: 'View nutrition details' }).click();
+  await p.getByText('Helps close your iron gap').waitFor();
+  await p.getByText('AFTER THIS').waitFor();
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

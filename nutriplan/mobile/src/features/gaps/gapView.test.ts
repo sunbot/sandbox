@@ -90,3 +90,19 @@ test('show different ideas: each filter keeps its own skipped list (rotating Bes
   assert.deepEqual(skippedFor(all, 'BestMatch'), []);
   assert.deepEqual(skippedFor(all, 'SavedRecipes'), ['cccccccccccccccc']);
 });
+
+test('a collapsed card shows two gap improvements and never hides a caution (#87)', async () => {
+  const { compactReasons } = await import('./gapView.ts');
+  const r = (code: string, text: string) => ({ code, text });
+  const reasons = [
+    r('gap', 'Helps close your fiber gap'), r('source', 'A useful source of potassium'), r('gap', 'Helps close your iron gap'),
+    r('limit', 'Uses 900 of the 1,000 mg sodium left in your limit'), r('calories', 'Fits within your remaining 1,038 kcal (leaves about 210)'),
+    r('recipe', "A recipe you've saved"),
+  ];
+  const c = compactReasons(reasons, false);
+  assert.deepEqual(c.shown.map((x) => x.text), ['Helps close your fiber gap', 'A useful source of potassium', 'Uses 900 of the 1,000 mg sodium left in your limit']);
+  assert.equal(c.more, true, 'iron and the calorie fit are behind details');
+  assert.deepEqual(compactReasons([r('calories', 'About 120 kcal over your remaining 400 kcal')], false).shown.map((x) => x.code), ['calories']);
+  assert.equal(compactReasons([r('protein', 'Adds 30 g protein')], false).more, false);
+  assert.equal(compactReasons([r('protein', 'Adds 30 g protein')], true).more, true, 'nutrient effects are details');
+});
