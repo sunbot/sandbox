@@ -34,3 +34,18 @@ test('removing a grocery item sends its key, offers Undo, and a removed item can
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('a grocery list from an older server (no hiddenItems, no keys) still opens instead of crashing (#68)', async () => {
+  const ctx = await phone(b);
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  await mockApi(p, {
+    'GET /api/plan/grocery': () => ({ from: '2026-11-23', to: '2026-11-29', itemCount: 1,
+      aisles: [{ aisle: 'Produce', items: [{ name: 'Carrots', display: '200 g', inPantry: false }] }] }),
+  });
+  await p.goto(`${server.url}/grocery?from=2026-11-23&to=2026-11-29`);
+  await p.getByText('Carrots', { exact: true }).waitFor({ timeout: 15000 });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

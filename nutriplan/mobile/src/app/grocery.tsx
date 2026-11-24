@@ -74,7 +74,7 @@ export default function GroceryScreen() {
             return (
               <View key={key} style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Pressable disabled={i.inPantry} onPress={() => setChecked((c) => ({ ...c, [key]: !c[key] }))}
-                accessibilityRole="checkbox" accessibilityState={{ checked: isDone, disabled: i.inPantry }} accessibilityLabel={`${i.name}, ${i.inPantry ? 'in your pantry' : i.display}`}
+                accessibilityRole="checkbox" accessibilityState={{ checked: isDone, disabled: i.inPantry }} aria-checked={isDone} accessibilityLabel={`${i.name}, ${i.inPantry ? 'in your pantry' : i.display}`}
                 style={({ pressed }) => [{ flex: 1, flexDirection: 'row', gap: t.space.md, alignItems: 'center', minHeight: 56, paddingHorizontal: t.space.lg, paddingVertical: t.space.sm, borderTopWidth: 1, borderTopColor: t.colors.border }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
                 {isDone ? <SquareCheck size={22} strokeWidth={1.8} color={t.colors.primary} /> : <Square size={22} strokeWidth={1.8} color={t.colors.textMuted} />}
                 <View style={{ flex: 1, gap: 2 }}>
