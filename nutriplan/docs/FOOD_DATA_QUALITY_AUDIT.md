@@ -128,5 +128,21 @@ read-only from production. This wasn't forced to a target; it is what the data a
 6. Treat **added sugars** as unknown in scoring unless labelled.
 7. Remove production database URLs from developer `.env` files (see the safety note).
 
+## 7. Phase 2.6 follow-up (2026-11-24, branch `claude/nutrition-meal-planning-app-9e9qj9`)
+
+- **Recipe matching** (recommendations 1–2): fixed, with regression tests (`RecipeMatchingTests`). Benchmark re-run:
+  `docs/audit/matching_benchmark_2026-11-24.md`. A can of coconut milk now matches SR canned coconut milk (754 kcal per can,
+  was 119), "light coconut milk" is left unmatched with the reason, the unsweetened beverage is a flagged stand-in, sweet
+  potatoes are raw, and "1 can diced tomatoes" is canned tomatoes. The curry above comes out at **504 kcal · 18 g P · 57 g C ·
+  26 g F** per serving (was 388; hand estimate ≈ 525). Known side effects: "Fairlife 2% milk" drops to "check" (0.46), and a
+  brand-only bread line still matches a generic bread (flagged "check" before and after).
+- **Folate** (recommendation 5): Foundation publishes total folate (1177), never DFE (1190). The importer now uses total folate as DFE
+  when no folic acid can be present (not enriched/fortified), and computes DFE from food folate + 1.7 × folic acid
+  when both are published. On a fresh import of the same file, 142 of 378 Foundation foods get folate (was 0). **Existing
+  production rows are unchanged:** the importer skips foods already imported; a backfill would be a data change and needs approval.
+- **The 91 skipped Foundation foods:** correctly skipped. None report energy or a full macro profile: 34 are "0% moisture"
+  (dry-basis lab samples, not food as eaten) and 57 are partial analyses (oils, butter, breads, lunchmeats, some produce).
+  SR Legacy covers the same foods. Inventing their calories would break the nutrition rules.
+
 No data was changed and no provider was added. Changes to matching and data are proposed for Phase 2.6 and need no
 migration. Re-importing or re-matching existing recipes would be a data change and needs approval.

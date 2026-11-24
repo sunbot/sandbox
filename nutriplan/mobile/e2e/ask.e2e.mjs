@@ -83,3 +83,40 @@ test('exclude an unmatched row, add a searched food with a measure, and log only
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('a recipe idea shows each line as matched before saving; lines to check open straight in Review after saving', async () => {
+  const ctx = await phone(b);
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', (e) => errors.push(e.message));
+  const line = (position, rawText, over) => ({ position, rawText, foodText: rawText, status: 'AutoMatched', matchConfidence: 1, ...over });
+  const lines = [
+    line(0, '1 cup red lentils', { foodId: 'l', foodName: 'Lentils, pink or red, raw', grams: 192, nutrition: N(687, 46, 121, 4), foodSource: 'UsdaSrLegacy' }),
+    line(1, '1 can (13.5 oz) coconut milk', { foodId: 'c', foodName: 'Nuts, coconut milk, canned', grams: 383, nutrition: N(754, 8, 11, 82), foodSource: 'UsdaSrLegacy' }),
+    line(2, '1 can light coconut milk', { status: 'Unmatched', matchConfidence: 0, note: 'USDA has no light coconut milk. Choose a food (e.g. a product with a label) or enter it yourself.' }),
+  ];
+  const idea = { name: 'Lentil curry', description: 'Quick', servings: 4, ingredients: lines.map((l) => l.rawText), directions: 'Simmer.', perServing: N(360, 13, 33, 21), coverage: 0.67, warnings: [], lines };
+  const saved = { summary: { id: 'curry', name: 'Lentil curry', servings: 4, origin: 'Assistant', categories: [], isFavorite: false, hasPhoto: false, perServing: N(360, 13, 33, 21), coverage: 0.67 },
+    ingredients: lines, warnings: [], measures: [{ unit: 'serving', label: 'serving', plural: 'servings', base: 1, kind: 'Count', source: '1 of 4 servings', countable: true }], usedIn: [] };
+  const calls = await mockApi(p, {
+    'POST /api/assistant': () => ({ ...response, intent: 'FindRecipes', reply: '1 new idea.', foodMatches: [], recipeIdeas: [idea] }),
+    'POST /api/recipes': () => saved,
+    'GET /api/recipes/curry': () => saved,
+    'GET /api/recipes': () => [200, []],
+  });
+  await p.goto(`${server.url}/assistant`);
+  await p.getByRole('textbox', { name: 'Describe what you ate or ask a question' }).fill('lentil curry recipe');
+  await p.getByRole('button', { name: 'Send' }).click();
+  await p.getByText('Lentil curry', { exact: true }).waitFor({ timeout: 15000 });
+  await p.getByRole('button', { name: 'Ingredients' }).click();
+  await p.getByText(/→ Coconut milk, canned · 383 g · 754 kcal|→ .*coconut milk.*383 g · 754 kcal/i).waitFor();
+  await p.getByText(/→ USDA has no light coconut milk/).waitFor();
+  await p.getByText(/Ingredients counted: 2 of 3/).waitFor();
+  assert.equal(calls.filter((c) => c.method === 'POST' && c.path === '/api/recipes').length, 0, 'nothing saved by looking');
+  await p.getByRole('button', { name: 'Save and review (1)' }).click();
+  await p.waitForURL(/\/recipe\/curry/, { timeout: 15000 });
+  await p.getByText('No USDA food matched').last().waitFor();                     // Review opened on the unmatched line
+  await p.getByText('1 can light coconut milk', { exact: true }).last().waitFor();
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

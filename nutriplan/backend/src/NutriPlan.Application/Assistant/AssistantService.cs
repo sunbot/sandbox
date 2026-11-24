@@ -12,7 +12,9 @@ public sealed record AssistantRequest(string Text, DateOnly? Date);
 
 public sealed record RecipeIdeaDto(
     string Name, string Description, double Servings, IReadOnlyList<string> Ingredients, string Directions,
-    Common.NutritionDto PerServing, double Coverage, IReadOnlyList<string> Warnings);
+    Common.NutritionDto PerServing, double Coverage, IReadOnlyList<string> Warnings,
+    /// <summary>Each line as matched (food, source, grams, nutrition, certainty), for review before saving. Nothing is saved.</summary>
+    IReadOnlyList<Recipes.IngredientDto>? Lines = null);
 
 public sealed record AssistantResponse(
     string Intent,
@@ -174,7 +176,8 @@ public sealed class AssistantService(
         var warnings = recipe.Ingredients.Where(i => i.Status == IngredientMatchStatus.Unmatched || (i.FoodId is not null && i.Grams is null))
             .Select(i => $"Not counted: {i.RawText}").ToList();
         return new RecipeIdeaDto(idea.Name, idea.Description, recipe.Servings, idea.Ingredients, idea.Directions,
-            Common.NutritionDto.From(recipe.NutritionPerServing), Math.Round(recipe.NutritionCoverage, 2), warnings);
+            Common.NutritionDto.From(recipe.NutritionPerServing), Math.Round(recipe.NutritionCoverage, 2), warnings,
+            await recipeService.IngredientDtosAsync(recipe, ct));
     }
 
     private static AssistantResponse Response(

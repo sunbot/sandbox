@@ -149,3 +149,16 @@ test('closing the sheet forgets a half-confirmed Remove, and leaving a review th
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('coverage, match confidence and nutrient data are shown separately; a line says where its numbers come from', async () => {
+  const { ctx, p, errors } = await open('/recipe/porridge');
+  await p.getByText('Ingredients counted').waitFor({ timeout: 15000 });
+  await p.getByText('1 of 3', { exact: true }).waitFor();                           // only the confirmed oats are counted
+  await p.getByText('100% of calories from confirmed or close matches').waitFor();
+  await p.getByText('Nutrient data').waitFor();
+  await p.getByText(/Known for part of the recipe \(by weight\)/).waitFor();       // the mock oats report none of the key nutrients
+  await p.getByRole('button', { name: /^1 cup oats/ }).first().click();
+  await p.getByText('USDA SR Legacy · confirmed by you').waitFor();
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

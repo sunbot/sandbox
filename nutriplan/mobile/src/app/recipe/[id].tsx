@@ -12,7 +12,7 @@ import { NutritionSummary } from '@/features/recipe/NutritionSummary';
 import { RecipeHeader } from '@/features/recipe/RecipeHeader';
 import { ServingModeSelector } from '@/features/recipe/ServingModeSelector';
 import {
-  SCALE_CHOICES, availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nextToReview, nutritionFor, parseServings, reliabilityNote, reviewQueue,
+  SCALE_CHOICES, availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nextToReview, nutritionFor, parseServings, reliabilityNote, recipeTrust, reviewQueue, trustLines,
   scaleSummary, servingsWord, type NutritionMode,
 } from '@/features/recipe/nutritionView';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
@@ -26,13 +26,14 @@ import { useTheme } from '@/theme/ThemeProvider';
 export default function RecipeScreen() {
   const t = useTheme();
   const snackbar = useSnackbar();
-  const { id, planDate } = useLocalSearchParams<{ id: string; planDate?: string }>();
+  const { id, planDate, review } = useLocalSearchParams<{ id: string; planDate?: string; review?: string }>();
   const recipe = useRecipe(id);
   const m = useRecipeMutations();
   const plan = usePlanMutations();
   const logRecipe = useLogRecipe();
   const [amount, setAmount] = useState<QuantityValue>({ text: '1', unit: 'serving' }); // how much I'm having, in the recipe's measures
   const [reviewing, setReviewing] = useState(false); // stepping through lines that need a look
+  const [autoReview, setAutoReview] = useState(review === '1'); // just saved from an idea with lines to check: start Review once
   const [meal, setMeal] = useState<Meal>(mealForNow);
   const [batchDays, setBatchDays] = useState('3');
   const [mode, setMode] = useState<NutritionMode>('serving');
@@ -61,6 +62,7 @@ export default function RecipeScreen() {
   const shown = nutritionFor(basis, shownMode) ?? s.perServing;
   const counts = ingredientCounts(r.ingredients);
   const note = reliabilityNote(s.coverage, counts);
+  const trust = trustLines(recipeTrust(r.ingredients));
 
   const measures = r.measures?.length ? r.measures : [SERVING];
   const amountMeasure = matchMeasure(measures, amount.unit) ?? measures[0];
@@ -70,6 +72,10 @@ export default function RecipeScreen() {
   const asChosen = n && amountQty ? { amount: roundAmount(amountQty), unit: amountMeasure.unit } : {};
   const eating = n ? eatingNutrition(s.perServing, n) : null;
   const queue = reviewQueue(r.ingredients);
+  if (autoReview) {
+    setAutoReview(false);
+    if (queue.length) { setReviewing(true); setOpenPos(nextToReview(queue, null)); }
+  }
   const logDate = today();
 
   const run = async (action: () => Promise<unknown>, done?: string) => {
@@ -140,7 +146,7 @@ export default function RecipeScreen() {
 
       <AppCard style={{ gap: t.space.lg }} sheen>
         <ServingModeSelector modes={modes} value={shownMode} onChange={setMode} />
-        <NutritionSummary nutrition={shown} mode={shownMode} makes={s.servings} gramsPerServing={gramsPerServing(basis)} reliability={note} />
+        <NutritionSummary nutrition={shown} mode={shownMode} makes={s.servings} gramsPerServing={gramsPerServing(basis)} reliability={note} trust={trust} />
         {modes.length < 3 ? (
           <AppText variant="caption" tone="muted">Per 100 g appears once you enter the finished dish’s weight in Edit recipe. It is never estimated from the ingredients.</AppText>
         ) : null}

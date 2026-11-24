@@ -1,10 +1,10 @@
 import { View } from 'react-native';
 import type { Nutrition } from '@/api/types';
 import { AppText, Badge } from '@/components/ds';
-import { CircleAlert, Info } from '@/components/ds/icons';
+import { CircleAlert, CircleCheck, Info } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import { MacroDonutChart } from './MacroDonutChart';
-import { macroComposition, modeLabel, type MacroKey, type NutritionMode } from './nutritionView';
+import { macroComposition, modeLabel, type MacroKey, type NutritionMode, type trustLines } from './nutritionView';
 
 const legend: { key: MacroKey; name: string }[] = [
   { key: 'protein', name: 'Protein' },
@@ -19,7 +19,7 @@ const grams = (n: number) => (n >= 10 ? String(Math.round(n)) : (Math.round(n * 
  * numbers can be trusted. Everything shown is derived from the same `nutrition` object so the chart, legend and
  * stats can never disagree with each other.
  */
-export function NutritionSummary({ nutrition, mode, makes, gramsPerServing, reliability }: {
+export function NutritionSummary({ nutrition, mode, makes, gramsPerServing, reliability, trust }: {
   nutrition: Nutrition;
   mode: NutritionMode;
   /** Servings the whole recipe makes. */
@@ -27,6 +27,8 @@ export function NutritionSummary({ nutrition, mode, makes, gramsPerServing, reli
   /** Finished weight of one serving, only when the cooked weight is known. */
   gramsPerServing?: number | null;
   reliability: { level: 'complete' | 'partial'; text: string };
+  /** Coverage, match confidence and nutrient completeness, shown as separate lines. */
+  trust?: ReturnType<typeof trustLines>;
 }) {
   const t = useTheme();
   const comp = macroComposition(nutrition);
@@ -81,6 +83,24 @@ export function NutritionSummary({ nutrition, mode, makes, gramsPerServing, reli
         {reliability.level === 'partial' ? <Badge label="Incomplete" tone="warning" icon={CircleAlert} /> : null}
         <AppText variant="caption" tone="secondary">{reliability.text}</AppText>
       </View>
+
+      {trust?.length ? (
+        <View style={{ gap: t.space.sm }}>
+          {trust.map((l) => {
+            const Icon = l.weak ? CircleAlert : CircleCheck;
+            return (
+              <View key={l.label} accessible accessibilityLabel={`${l.label}: ${l.value}${l.detail ? `. ${l.detail}` : ''}`} style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' }}>
+                <Icon size={18} strokeWidth={2} color={l.weak ? t.colors.warning : t.colors.textMuted} style={{ marginTop: 2 }} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <AppText variant="caption" tone="muted">{l.label}</AppText>
+                  <AppText variant="secondary">{l.value}</AppText>
+                  {l.detail ? <AppText variant="caption" tone="secondary">{l.detail}</AppText> : null}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -9,7 +9,10 @@ stands right now.
 - **Phase 2.5** (audit and restaurant strategy): Implemented; awaiting owner review of the findings.
 - **Owner testing:** the 2026-11-24 Copilot PR round is on master (and the next APK). Phase 2.6 is developed on branch
   `claude/nutrition-meal-planning-app-9e9qj9` so master stays testable.
-- **Next action:** Phase 2.6, starting with fixes the audit demonstrated (coconut milk variants; recipe matching preferring
+- **Phase 2.6 (in progress, branch `claude/nutrition-meal-planning-app-9e9qj9`):** matcher fixes, folate import, and
+  coverage/confidence/completeness shown separately are done (see roadmap). Pending owner decisions: re-match existing recipes
+  and backfill Foundation folate (data changes).
+- **Next action (earlier plan):** Phase 2.6, starting with fixes the audit demonstrated (coconut milk variants; recipe matching preferring
   "as purchased" foods over FNDDS cooked dishes; separate coverage, confidence and completeness), each with a regression
   test, and no data migration. Re-matching existing recipes or adding a restaurant provider needs owner approval.
 - **Waiting on the owner:** Android checks for Phase 1 (`docs/LOGGING.md` item 5) and Phase 2 (item 6). Phase 2 isn't in an
@@ -65,3 +68,6 @@ stands right now.
 - 2026-11-24 — Copilot round: #83, #78, #79, #80, #76 merged (fixes: aria-checked, #52 test, log-vs-plan loading text, preview input
   validation); #82's features rebuilt on master's selection (meal "…" menu, Delete selected via atomic `POST /api/diary/delete`) and the PR
   closed. Backend 211 domain · 338 app · 63 infra · 14 API (Postgres); app unit 170; browser 46; typecheck, lint ✓.
+- 2026-11-24 — Phase 2.6 on its branch: recipe matching as bought, coconut milk variants, canned context, no package for a size
+  word (`78147da`); Foundation folate as DFE (`17ac02b`); coverage/confidence/completeness and match source on recipes
+  (`6a1b46d`). Backend 212 domain · 354 app · 64 infra · 14 API (Postgres); app unit 174; browser 47; benchmark re-run.

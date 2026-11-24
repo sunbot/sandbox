@@ -130,4 +130,15 @@ public class FoodAndQuantityTests
         Assert.Equal(Recipes.IngredientMatchStatus.Ignored, r.Ingredients.Single(i => i.RawText == "salt").Status);
         Assert.Equal(Recipes.IngredientMatchStatus.Unmatched, r.Ingredients[0].Status);
     }
+
+    [Fact]
+    public void A_size_word_never_falls_back_to_a_package_but_a_plain_count_still_can()
+    {
+        // "1 medium sweet potato" once became a 496 g can because the food listed no "medium".
+        var potato = new[] { new FoodPortion("can (404 x 307)", 496), new FoodPortion("sweetpotato, 5\" long", 130) };
+        Assert.Equal(130, QuantityResolver.Resolve(potato, 1, "medium", "Sweet potato, raw").Grams);
+        Assert.Null(QuantityResolver.Resolve([new FoodPortion("can (404 x 307)", 496)], 1, "medium", "Sweet potato, canned").Grams);
+        // "1 yogurt": the container is the item.
+        Assert.Equal(170, QuantityResolver.Resolve([new FoodPortion("container (6 oz)", 170)], 1, null, "Yogurt, Greek").Grams);
+    }
 }

@@ -9,7 +9,7 @@ import { checkQuantity, ingredientSelection, MAX_INGREDIENT_GRAMS, matchMeasure,
 import { friendlyFoodName } from '@/lib/foodName';
 import { useTheme } from '@/theme/ThemeProvider';
 import { recipeAmount } from './IngredientNutritionRow';
-import { ingredientState, type IngredientState } from './nutritionView';
+import { ingredientState, matchDetail, type IngredientState } from './nutritionView';
 
 const stateWords: Record<IngredientState, string> = {
   header: '', matched: 'Auto-matched to a USDA food', confirmed: 'Confirmed by you', check: 'Check this match',
@@ -98,6 +98,7 @@ export function IngredientSheet({ ingredient, onClose, onChooseFood, onSetAmount
             <AppText variant="label" tone="secondary">Matched food</AppText>
             <AppText variant="body">{friendlyFoodName(ing.foodName)}</AppText>
             {friendlyFoodName(ing.foodName) !== ing.foodName ? <AppText variant="caption" tone="muted">{ing.foodName}</AppText> : null}
+            {!ing.recipeId && matchDetail(ing) ? <AppText variant="caption" tone="secondary">{matchDetail(ing)}</AppText> : null}
           </View>
         ) : null}
         {ing.note ? <AppText variant="secondary" tone="secondary">{ing.note}</AppText> : null}

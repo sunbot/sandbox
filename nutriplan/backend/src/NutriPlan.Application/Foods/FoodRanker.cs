@@ -58,20 +58,23 @@ public static partial class FoodRanker
     /// matching, where "whole milk" must match milk even if you log yogurt every day.</param>
     /// <param name="assumeCookedStaples">Rice, pasta, beans… with no state said: prefer the cooked entry (what people eat) instead of
     /// the dry ingredient. Off for recipe ingredients, where "1 cup rice" means dry.</param>
-    public static IReadOnlyList<RankedFood> Rank(string query, IEnumerable<FoodSearchRow> rows, bool useHistory = true, bool assumeCookedStaples = false)
+    /// <param name="recipeIngredient">Matching a recipe ingredient: the food as bought. FNDDS (Survey) foods describe food
+    /// as eaten, often cooked or with fat added ("Sweet potato, NFS"), so they get less trust and "NFS" isn't treated as the
+    /// plain form. Off for logging, where "as eaten" is right.</param>
+    public static IReadOnlyList<RankedFood> Rank(string query, IEnumerable<FoodSearchRow> rows, bool useHistory = true, bool assumeCookedStaples = false, bool recipeIngredient = false)
     {
         var queryTokens = Tokens(query).ToList();
         var requested = FoodPreparation.Requested(queryTokens);
         var cookedDefault = assumeCookedStaples && requested == PreparationState.Unspecified && FoodPreparation.IsCookedStaple(queryTokens);
         var wantsCombination = CombinationDish().IsMatch($" {query.ToLowerInvariant()} "); // "mac and cheese", "rice with beans"
         return rows
-            .Select(r => new RankedFood(r.Food, Score(queryTokens, requested, cookedDefault, r, useHistory, wantsCombination)))
+            .Select(r => new RankedFood(r.Food, Score(queryTokens, requested, cookedDefault, r, useHistory, wantsCombination, recipeIngredient)))
             .OrderByDescending(r => r.Score)
             .ThenBy(r => r.Food.Name.Length)
             .ToList();
     }
 
-    private static double Score(List<string> queryTokens, PreparationState requested, bool cookedDefault, FoodSearchRow row, bool useHistory, bool wantsCombination)
+    private static double Score(List<string> queryTokens, PreparationState requested, bool cookedDefault, FoodSearchRow row, bool useHistory, bool wantsCombination, bool recipeIngredient = false)
     {
         var food = row.Food;
         var segments = food.Name.ToLowerInvariant().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -121,12 +124,17 @@ public static partial class FoodRanker
         }
 
         // Plain default forms ("Egg, whole", "Yogurt, plain") over variants, unless the query asks otherwise.
-        score += 3 * Math.Min(2, DefaultDescriptors.Count(d => segments.Contains(d) || nameTokens.Contains(d)));
+        score += 3 * Math.Min(2, DefaultDescriptors.Count(d => (segments.Contains(d) || nameTokens.Contains(d)) && !(recipeIngredient && d == "nfs")));
+        // "NFS" (not further specified) in FNDDS is an average of how a food is eaten, usually cooked and often with fat.
+        if (recipeIngredient && nameTokens.Contains("nfs")) score -= RecipeNfsPenalty;
         score -= 4 * nameTokens.Count(t => ProcessedWords.Contains(t) && !querySet.Contains(t));
         score -= 14 * nameTokens.Count(t => OrganWords.Contains(t) && !querySet.Contains(t));
 
         // Plain is better: penalise extra words that weren't asked for.
-        var extra = Math.Max(0, nameTokens.Count - queryTokens.Count);
+        // For a recipe ingredient, USDA's parenthetical notes ("(Includes foods for USDA's Food Distribution Program)",
+        // "(liquid expressed from grated meat and water)") describe the entry, not a different food: they don't count as extra words.
+        var counted = recipeIngredient && food.Name.Contains('(') ? Tokens(Parenthetical().Replace(food.Name, " ")).Count() : nameTokens.Count;
+        var extra = Math.Max(0, counted - queryTokens.Count);
         score -= Math.Min(15, extra * 1.2);
 
         // Raw vs cooked. A state the person asked for is matched strictly; otherwise raw is the default for produce and
@@ -147,7 +155,9 @@ public static partial class FoodRanker
             FoodSource.Recipe => 8,
             FoodSource.UsdaFoundation => 7,
             FoodSource.UsdaSrLegacy => 6,
-            FoodSource.UsdaSurvey => 6,     // "as eaten" foods with everyday names ("Milk, whole", "Coffee, brewed")
+            // "As eaten" foods with everyday names ("Milk, whole", "Coffee, brewed"); for a recipe ingredient the as-bought
+            // SR Legacy/Foundation entry is preferred when both name the food.
+            FoodSource.UsdaSurvey => recipeIngredient ? 6 - RecipeSurveyPenalty : 6,
             FoodSource.UsdaBranded => 1,
             _ => 0,
         };
@@ -172,6 +182,8 @@ public static partial class FoodRanker
     }
 
     public const double MeasuredPortionBoost = 2;
+    public const double RecipeSurveyPenalty = 5;
+    public const double RecipeNfsPenalty = 6;
 
     /// <summary>The food has a count or household-volume measure from USDA or label data (not just g/oz or a drink's ml).</summary>
     public static bool HasMeasuredPortion(Food food) =>
@@ -193,6 +205,9 @@ public static partial class FoodRanker
 
     [GeneratedRegex(@"[^a-z0-9%\-]+")]
     private static partial Regex TokenSplit();
+
+    [GeneratedRegex(@"\([^)]*\)")]
+    private static partial Regex Parenthetical();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\s(and|with)\s")]
     private static partial System.Text.RegularExpressions.Regex CombinationDish();

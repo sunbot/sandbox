@@ -251,7 +251,9 @@ export type FoodMatch = {
 };
 export type Preparation = { state: 'Raw' | 'Cooked' | 'Unspecified'; requested?: string | null; note?: string | null; otherFoodId?: string | null; otherState?: string | null };
 export type FoodMatchGroup = { text: string; amount?: number | null; unit?: string | null; foodQuery: string; matches: FoodMatch[] };
-export type RecipeIdea = { name: string; description: string; servings: number; ingredients: string[]; directions: string; perServing: Nutrition; coverage: number; warnings: string[] };
+export type RecipeIdea = { name: string; description: string; servings: number; ingredients: string[]; directions: string; perServing: Nutrition; coverage: number; warnings: string[];
+  /** Each line as matched (food, source, grams, nutrition, certainty), for review before saving. Older servers omit it. */
+  lines?: Ingredient[] | null };
 
 export type AssistantResponse = {
   intent: string;

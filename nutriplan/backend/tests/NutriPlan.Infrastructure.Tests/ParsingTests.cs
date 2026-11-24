@@ -70,6 +70,32 @@ public class ParsingTests
         Assert.Equal(0, chicken[NutrientIds.Carbohydrate]);
     }
 
+    [Fact]
+    public void Foundation_total_folate_becomes_DFE_only_when_no_folic_acid_can_be_present()
+    {
+        // Foundation foods publish total folate (1177), never DFE (1190).
+        var spinach = new Dictionary<int, double> { [NutrientIds.Energy] = 23, [NutrientIds.FolateTotal] = 194 };
+        UsdaImporter.Normalize(spinach, "Spinach, mature, raw");
+        Assert.Equal(194, spinach[NutrientIds.Folate]);
+        Assert.False(spinach.ContainsKey(NutrientIds.FolateTotal));
+
+        // Enriched or fortified: part of the total is folic acid (1.7× in DFE) in an unknown share, so it stays unknown.
+        var flour = new Dictionary<int, double> { [NutrientIds.Energy] = 364, [NutrientIds.FolateTotal] = 291 };
+        UsdaImporter.Normalize(flour, "Flour, wheat, all-purpose, enriched, bleached");
+        Assert.False(flour.ContainsKey(NutrientIds.Folate));
+        Assert.False(flour.ContainsKey(NutrientIds.FolateTotal));
+
+        // With the split published, DFE is calculated: food folate + 1.7 × folic acid.
+        var cereal = new Dictionary<int, double> { [NutrientIds.Energy] = 380, [NutrientIds.FolateFood] = 20, [NutrientIds.FolicAcid] = 100, [NutrientIds.FolateTotal] = 120 };
+        UsdaImporter.Normalize(cereal, "Cereal, fortified");
+        Assert.Equal(190, cereal[NutrientIds.Folate]);
+
+        // A reported DFE is never overwritten.
+        var sr = new Dictionary<int, double> { [NutrientIds.Energy] = 23, [NutrientIds.Folate] = 194, [NutrientIds.FolateTotal] = 194 };
+        UsdaImporter.Normalize(sr, "Spinach, raw");
+        Assert.Equal(194, sr[NutrientIds.Folate]);
+    }
+
     [Theory]
     [InlineData("1 cup", null, "cup", 1)]
     [InlineData("1/2 cup, chopped", null, "cup, chopped", 0.5)]

@@ -410,7 +410,7 @@ public sealed partial class RecipeService(
             if (!cache.TryGetValue(q, out var found))
             {
                 // Ingredients are weighed or measured into grams: drinks labelled per 100 ml can't be summed by weight.
-                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false, assumeCookedStaples: false)).Where(r => !r.Food.IsVolume).ToList();
+                found = (await foodService.SearchRankedAsync(q, 12, ct, dedupe: false, useHistory: false, assumeCookedStaples: false, recipeIngredient: true)).Where(r => !r.Food.IsVolume).ToList();
                 cache[q] = found;
             }
             return found;
@@ -439,10 +439,21 @@ public sealed partial class RecipeService(
                 continue;
             }
 
+            // A variant USDA doesn't have ("light coconut milk"): no food would be right, so say so instead of matching
+            // the full-fat or beverage entry.
+            if (IngredientQuery.NoUsdaEntry(ing.FoodText) is { } missing)
+            {
+                (ing.FoodId, ing.FoodName, ing.Grams, ing.Status) = (null, null, null, IngredientMatchStatus.Unmatched);
+                ing.MatchConfidence = 0;
+                ing.ResolutionNote = missing;
+                continue;
+            }
+
             // Search the food words; a known recipe term may only show up with the preparation ("sunflower, safflower or canola oil").
             var query = IngredientQuery.Alias(ing.FoodText) is null && ing.Preparation is not null && IngredientQuery.Alias($"{ing.FoodText} {ing.Preparation}") is { } fromPrep
                 ? fromPrep
                 : IngredientQuery.Clean(ing.FoodText);
+            query = IngredientQuery.WithPackagingContext(query, ing.Unit, ing.RawText);
             var top = await SearchCachedAsync(query);
             var best = top.FirstOrDefault();
 
@@ -613,6 +624,20 @@ public sealed partial class RecipeService(
 
     private async Task<RecipeDetailDto> ToDetailAsync(Recipe r, CancellationToken ct)
     {
+        var (ingredients, nutrition) = await IngredientLinesAsync(r, ct);
+        var usedIn = (await recipes.LinksAsync(ct)).Where(x => x.Id != r.Id && x.Uses.Contains(r.Id)).Select(x => new RecipeUseDto(x.Id, x.Name)).ToList();
+
+        return new RecipeDetailDto(RecipeSummaryDto.From(r), r.Description, r.Directions, r.Notes, r.PrepTime, r.CookTime,
+            r.SourceName, r.SourceUrl, r.ServingDescription, r.CookedWeightGrams, r.SourceNutritionText, ingredients, nutrition.Warnings,
+            r.FinishedVolumeMl, RecipeMeasuresDto(r), NutritionDto.From(nutrition.Total.Rounded()), usedIn);
+    }
+
+    /// <summary>Each line as shown for review (matched food, source, grams, its nutrition, certainty, note). Works for an unsaved recipe too.</summary>
+    public async Task<IReadOnlyList<IngredientDto>> IngredientDtosAsync(Recipe r, CancellationToken ct = default) =>
+        (await IngredientLinesAsync(r, ct)).Lines;
+
+    private async Task<(List<IngredientDto> Lines, RecipeNutrition Nutrition)> IngredientLinesAsync(Recipe r, CancellationToken ct)
+    {
         var foodMap = await foods.GetManyAsync(r.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
         var subs = await recipes.GetManyAsync(r.SubRecipeIds, ct);
         var nutrition = RecipeNutritionCalculator.Calculate(r, foodMap, subs);
@@ -628,11 +653,7 @@ public sealed partial class RecipeService(
                 i.Status.ToString(), i.MatchConfidence, i.ResolutionNote, n,
                 i.RecipeId, sub?.Name ?? i.RecipeName, i.Servings, f?.Source.ToString(), f?.Quality.ToString());
         }).ToList();
-        var usedIn = (await recipes.LinksAsync(ct)).Where(x => x.Id != r.Id && x.Uses.Contains(r.Id)).Select(x => new RecipeUseDto(x.Id, x.Name)).ToList();
-
-        return new RecipeDetailDto(RecipeSummaryDto.From(r), r.Description, r.Directions, r.Notes, r.PrepTime, r.CookTime,
-            r.SourceName, r.SourceUrl, r.ServingDescription, r.CookedWeightGrams, r.SourceNutritionText, ingredients, nutrition.Warnings,
-            r.FinishedVolumeMl, RecipeMeasuresDto(r), NutritionDto.From(nutrition.Total.Rounded()), usedIn);
+        return (ingredients, nutrition);
     }
 
     public static IReadOnlyList<MeasureDto> RecipeMeasuresDto(Recipe r) =>
