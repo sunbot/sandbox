@@ -26,6 +26,12 @@ public static partial class IngredientQuery
     /// </summary>
     private static readonly (Regex Pattern, string Query, string? StandIn)[] Aliases =
     [
+        // Coconut milk: the drink in a carton (≈30 kcal/100 g) and the canned cooking milk (≈200 kcal/100 g) are different
+        // foods. A recipe's plain "coconut milk" is the canned kind; the beverage only when the line says so. USDA's
+        // beverage entry is sweetened, so an unsweetened one is a stand-in to confirm.
+        (Rx(@"\bunsweetened\b.*\bcoconut milk\b.*\b(beverage|drink)\b|\bcoconut milk (beverage|drink)\b.*\bunsweetened\b"), "beverages coconut milk sweetened fortified", "the sweetened coconut milk beverage for an unsweetened one (fewer calories and sugar)"),
+        (Rx(@"\bcoconut milk\b.*\b(beverage|drink)\b|\b(carton|refrigerated)\b.*\bcoconut milk\b"), "beverages coconut milk sweetened fortified", null),
+        (Rx(@"\b(canned |full[- ]fat |unsweetened )*coconut milk\b(?!\s*(yogurt|ice cream|creamer|kefir|powder))"), "nuts coconut milk canned", null),
         (Rx(@"\b(\d{2})\s*/\s*(\d{1,2})\b.*\bground beef\b|\bground beef\b.*\b(\d{2})\s*/\s*(\d{1,2})\b"), "{beef}", null),
         (Rx(@"\b(\d{2})\s*%\s*lean\b.*\bground beef\b"), "{beefpct}", null),
         (Rx(@"\b(lean|extra lean)\s+ground beef\b"), "beef ground 90 lean meat 10 fat raw", null),
@@ -169,6 +175,35 @@ public static partial class IngredientQuery
 
     [GeneratedRegex(@"\bbone-?in\b|\bwhole (chickens?|turkeys?|ducks?|birds?)\b|\bneck bones?\b|\bwith (the )?bones?\b", RegexOptions.IgnoreCase)]
     private static partial Regex BoneIn();
+
+    /// <summary>
+    /// Variants USDA has no entry for, with the reason shown to you; matching any nearby food would be confidently wrong
+    /// ("light coconut milk" has about a third of the calories of the canned full-fat entry).
+    /// </summary>
+    public static string? NoUsdaEntry(string foodText) =>
+        LightCoconutMilk().IsMatch(foodText)
+            ? "USDA has no light coconut milk. Choose a food (e.g. a product with a label) or enter it yourself."
+            : null;
+
+    [GeneratedRegex(@"\b(light|lite|reduced[- ]fat|low[- ]fat)\s+coconut milk\b", RegexOptions.IgnoreCase)]
+    private static partial Regex LightCoconutMilk();
+
+    /// <summary>
+    /// "1 can black beans", "1 (14.5 oz) can diced tomatoes": the food comes canned, so search for the canned entry
+    /// (drained beans, tomatoes in juice) instead of the raw or dried food.
+    /// </summary>
+    public static string WithPackagingContext(string query, string? unit, string rawText)
+    {
+        if (query.Contains("canned", StringComparison.OrdinalIgnoreCase)) return query;
+        var canned = unit is not null && CanUnit().IsMatch(unit) || CannedWord().IsMatch(rawText);
+        return canned ? $"{query} canned" : query;
+    }
+
+    [GeneratedRegex(@"^\s*cans?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex CanUnit();
+
+    [GeneratedRegex(@"\b(cans?|canned|tinned|tins?)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex CannedWord();
 
     /// <summary>Recipe wording → USDA wording, or null when no alias applies.</summary>
     public static string? Alias(string foodText)

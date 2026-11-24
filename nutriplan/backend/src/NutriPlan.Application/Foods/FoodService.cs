@@ -71,16 +71,16 @@ public sealed class FoodService(
 
     /// <param name="dedupe">Collapse entries with the same name (for display). Matching code passes false so it can
     /// try each entry's measures.</param>
-    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true, bool useHistory = true, bool assumeCookedStaples = true)
+    public async Task<IReadOnlyList<RankedFood>> SearchRankedAsync(string query, int limit, CancellationToken ct = default, bool dedupe = true, bool useHistory = true, bool assumeCookedStaples = true, bool recipeIngredient = false)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
         // Everyday words USDA names differently ("toast" → toasted bread), same as Ask.
         if (Synonyms.TryGetValue(query.Trim(), out var synonym)) query = synonym;
         var rows = await foods.SearchAsync(query.Trim(), Math.Max(limit * 12, 300), ct);
-        if (!dedupe) return FoodRanker.Rank(query, rows, useHistory, assumeCookedStaples).Take(limit).ToList();
+        if (!dedupe) return FoodRanker.Rank(query, rows, useHistory, assumeCookedStaples, recipeIngredient).Take(limit).ToList();
         // Several entries can share a name (Foundation samples, SR Legacy, Survey). Keep one per name, preferring
         // one that has household measures (cup, slice…) so amounts like "1 cup" can be converted.
-        return FoodRanker.Rank(query, rows, useHistory, assumeCookedStaples)
+        return FoodRanker.Rank(query, rows, useHistory, assumeCookedStaples, recipeIngredient)
             .GroupBy(r => (r.Food.Name.ToLowerInvariant(), r.Food.Brand?.ToLowerInvariant()))
             .Select(g =>
             {

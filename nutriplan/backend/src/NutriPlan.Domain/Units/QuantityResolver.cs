@@ -101,12 +101,16 @@ public static partial class QuantityResolver
                 return new(null, ResolutionMethod.Unresolved, $"\"{unitText}\" isn't a known measure for this food. Pick a portion or enter grams.");
         }
 
+        // A size word ("1 medium sweet potato") asks for the food itself in that size: never a package of it.
+        var sizeAsked = !string.IsNullOrWhiteSpace(unitText) && SizeWords.Contains(Singular(unitText.Trim().ToLowerInvariant()));
+
         // No unit at all: "2 eggs" → the food's natural single item.
         // US recipes and labels assume large eggs.
         var hints = foodName is not null && foodName.StartsWith("egg", StringComparison.OrdinalIgnoreCase)
             ? DefaultPortionHints.Prepend("large")
             : DefaultPortionHints;
-        var usable = portions.Where(p => LeadingVolumeUnit(p.Description) is null && !Words(p.Description).Contains("inch")).ToList();
+        var usable = portions.Where(p => LeadingVolumeUnit(p.Description) is null && !Words(p.Description).Contains("inch")
+            && !(sizeAsked && Words(p.Description).Overlaps(ContainerWords))).ToList();
 
         // Best default: a portion named after the food itself ("1 banana" for "Banana, raw").
         var nameWord = foodName is null ? null : Singular(WordSplit().Split(foodName.ToLowerInvariant()).FirstOrDefault(w => w.Length > 2) ?? "");
@@ -147,6 +151,10 @@ public static partial class QuantityResolver
     private static readonly string[] OddWords = ["snack", "thin", "small", "mini", "miniature", "baby", "crust", "bite", "cocktail", "thick", "large"];
 
     /// <summary>Portions that are a piece of the food or a different variety, not "one" of it.</summary>
+    /// <summary>Packages: a fine "one" for "1 yogurt", never for "1 medium" of something.</summary>
+    private static readonly HashSet<string> ContainerWords =
+        ["can", "jar", "package", "pkg", "container", "box", "bottle", "bag", "carton", "packet", "pouch", "tub", "tray"];
+
     private static readonly HashSet<string> PartOrVarietyWords =
         ["slice", "ring", "strip", "wedge", "leaf", "sprig", "grape", "cherry", "plum", "italian", "cube", "floret", "segment", "section", "spear", "stalk", "chopped", "nlea"];
 
