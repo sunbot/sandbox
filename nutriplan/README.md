@@ -17,7 +17,7 @@ gaps in your calories, macros and nutrients.** Log by search, barcode, voice, or
 | **Today** | Calorie ring, macro bars, key nutrients, meals; one-tap quick-add of your usual foods. |
 | **Search / scan / speak** | Ranked USDA search (prefers plain, raw, trusted foods and what you eat often), barcode scanning (local DB → Open Food Facts → "add from label"), voice input. |
 | **Ask** | Chat or talk: "2 eggs and toast for breakfast", "half a pound of chicken breast", "Christmas cookie recipes", "what can I make with what I have?", "what should I eat to hit my protein?". You get choices with amounts and nutrition; nothing is logged until you tap. |
-| **Week** | 7 days of planned vs. eaten. Weekly budget mode spreads an overage across the remaining days (capped per day); a banner offers to rescale the rest of the plan. Batch-cook a recipe into leftovers across days. "I ate this" turns a planned meal into a log entry. |
+| **Week** | 7 days of planned vs. eaten. Weekly budget mode spreads an overage across the remaining days (capped per day); a banner offers to rescale the rest of the plan. "I ate this" turns a planned meal into a log entry. |
 | **Fill the gaps** | An optimizer picks 1–3 foods/recipes (from what you eat, your pantry, favourites, and nutrient-dense staples) at realistic portions to land on your remaining calories, protein and nutrient targets. |
 | **Recipes** | Import **Paprika** exports (`.paprikarecipes`) or any recipe link (schema.org data). Each ingredient is matched to a food and converted to grams using USDA household measures; nutrition per serving is computed, unmatched lines are highlighted to fix. |
 | **Grocery list** | From the plan, merged by food, batch recipes bought once, pantry subtracted, grouped by aisle, shareable. |

@@ -113,6 +113,16 @@ test('Review steps through only the lines that need a look', async () => {
   await ctx.close();
 });
 
+test('the Log or plan card has no leftovers planning (#86): just amount, meal, Log now and Plan', async () => {
+  const { ctx, p, errors } = await open('/recipe/porridge');
+  await p.getByRole('button', { name: /^Log now/ }).waitFor({ timeout: 15000 });
+  await p.getByRole('button', { name: 'Plan for today' }).waitFor();
+  assert.equal(await p.getByText('Cook once, eat several times').count(), 0);
+  assert.equal(await p.getByRole('button', { name: 'Plan leftovers' }).count(), 0);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('the recipe screen logs in the recipe\'s own measures: 1 cup is half a serving', async () => {
   const { ctx, p, calls, errors } = await open('/recipe/porridge');
   await p.getByRole('button', { name: /Measure: serving/ }).click({ timeout: 15000 });
