@@ -27,6 +27,7 @@ export default function GapsScreen() {
   const snackbar = useSnackbar(); // alerts don't show on web; the snackbar works everywhere
   const { date = today() } = useLocalSearchParams<{ date?: string }>();
   const [mode, setMode] = useState<GapMode>('BestMatch');
+  const [showDataNotes, setShowDataNotes] = useState(false);
   const [meal, setMeal] = useState<Meal>(mealForNow());
   const [done, setDone] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
@@ -128,7 +129,16 @@ export default function GapsScreen() {
         <AppText variant="body" tone="secondary" accessibilityLiveRegion="polite">{g.message}</AppText>
         <Macros n={g.remaining} />
         {short.length && g.situation !== 'Over' ? <AppText variant="caption" tone="muted">Short on {short.slice(0, 4).join(', ')}{short.length > 4 ? ` and ${short.length - 4} more` : ''}.</AppText> : null}
-        {g.dataNotes.map((n) => <AppText key={n} variant="caption" tone="muted">{n}</AppText>)}
+        {g.dataNotes.length > 0 ? (
+          <View style={{ gap: t.space.xs }}>
+            <TextButton
+              label={showDataNotes ? 'Hide data limitations' : `${g.dataNotes.length} data ${g.dataNotes.length === 1 ? 'limitation' : 'limitations'} · View details`}
+              icon={Info}
+              onPress={() => setShowDataNotes((open) => !open)}
+            />
+            {showDataNotes ? g.dataNotes.map((n) => <AppText key={n} variant="caption" tone="muted">{n}</AppText>) : null}
+          </View>
+        ) : null}
       </AppCard>
 
       {gaps.isFetching && gaps.isPlaceholderData ? <AppText variant="caption" tone="muted" accessibilityLiveRegion="polite">Updating…</AppText> : null}
