@@ -4,12 +4,12 @@ import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarDays, ChevronLeft, ChevronRight, CloudOff } from '@/components/ds/icons';
-import { useClearMeal, useDeleteEntry, useLogFood, useLogRecipe, useMoveDiaryEntries, usePlanMutations, useUpdateEntry } from '@/api/hooks';
+import { CalendarDays, ChevronLeft, ChevronRight, CloudOff, Trash2 } from '@/components/ds/icons';
+import { useClearMeal, useDeleteDiaryEntries, useDeleteEntry, useLogFood, useLogRecipe, useMoveDiaryEntries, usePlanMutations, useUpdateEntry } from '@/api/hooks';
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
 import { AppText, ConfirmationSheet, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
 import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
-import { BulkMoveSheet, MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
+import { BulkMoveSheet, MealMenuSheet, MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
 import { defaultDestination, isNoOpMove, liveSelection, mealInSentence, undoGroups } from '@/features/today/bulkMove';
 import { SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
@@ -37,6 +37,7 @@ export default function TodayScreen() {
   const logFood = useLogFood();
   const logRecipe = useLogRecipe();
   const moveEntries = useMoveDiaryEntries();
+  const deleteEntries = useDeleteDiaryEntries();
   const plan = usePlanMutations();
 
   const [expanded, setExpanded] = useState<Partial<Record<Meal, boolean>>>({});
@@ -50,6 +51,8 @@ export default function TodayScreen() {
   const [showNutrients, setShowNutrients] = useState(false);
   const [loggingId, setLoggingId] = useState<string | null>(null);
   const [clearing, setClearing] = useState<{ date: string; meal: Meal; entryIds: string[] } | null>(null);
+  const [menuMeal, setMenuMeal] = useState<Meal | null>(null);
+  const [deletingSelected, setDeletingSelected] = useState<{ date: string; entryIds: string[] } | null>(null);
 
   const isToday = date === today();
   const go = (pathname: '/food/search' | '/scan', meal: Meal = quickMeal) => router.push({ pathname, params: { date, meal, mode: 'log' } });
@@ -76,9 +79,9 @@ export default function TodayScreen() {
       return next;
     });
   }, []);
-  // Press and hold a food: selection starts with that food ticked (no separate "Select" button).
-  const startSelection = useCallback((firstId: string) => {
-    setSelectedEntryIds(new Set([firstId]));
+  // Press and hold a food: selection starts with that food ticked. The meal's "…" menu starts it with nothing ticked.
+  const startSelection = useCallback((firstId?: string) => {
+    setSelectedEntryIds(new Set(firstId ? [firstId] : []));
     setSelectionMode(true);
     setExpanded(Object.fromEntries(meals.map((m) => [m, true])) as Partial<Record<Meal, boolean>>);
   }, []);
@@ -190,6 +193,25 @@ export default function TodayScreen() {
     });
   };
 
+  // Delete selected: like Clear meal (hidden at once, Undo, the server delete after the Undo window) but across meals.
+  const confirmDeleteSelected = () => {
+    if (!deletingSelected) return;
+    const request = deletingSelected;
+    setDeletingSelected(null);
+    clearSelection();
+    data.hideMany(request.entryIds);
+    const n = request.entryIds.length;
+    snackbar({
+      message: `Deleted ${n} ${n === 1 ? 'entry' : 'entries'}`,
+      actionLabel: 'Undo',
+      onAction: () => data.unhideMany(request.entryIds),
+      onTimeout: () => deleteEntries.mutate(request, {
+        onSettled: () => data.unhideMany(request.entryIds),
+        onError: (err) => snackbar({ message: errorText(err, "Couldn't delete those entries; nothing was deleted. Refresh and try again.") }),
+      }),
+    });
+  };
+
   /* ── Render ── */
 
   const header = (
@@ -273,7 +295,7 @@ export default function TodayScreen() {
               <MealSection key={m} meal={m} totals={md?.totals.calories ?? 0} entries={entries} planned={planned}
                 expanded={isExpanded} onToggle={() => setExpanded((x) => ({ ...x, [m]: !isExpanded }))}
                 onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry}
-                onClear={() => setClearing({ date, meal: m, entryIds: entries.map((e) => e.id) })}
+                onMenu={() => setMenuMeal(m)}
                 onLogPlanned={logPlanned} loggingId={loggingId}
                 selectionMode={selectionMode} selectedEntryIds={selectedEntryIds} onToggleSelect={toggleSelectedEntry} onStartSelection={startSelection} />
             );
@@ -300,12 +322,24 @@ export default function TodayScreen() {
       <ConfirmationSheet visible={clearing !== null} title={`Clear ${clearing?.meal ?? 'meal'}?`}
         message={clearing ? `Remove ${clearing.entryIds.length} logged ${clearing.entryIds.length === 1 ? 'entry' : 'entries'} from ${clearing.meal} on ${clearing.date}? Planned items are not removed.` : undefined}
         confirmLabel="Clear entries" destructive onConfirm={confirmClear} onCancel={() => setClearing(null)} />
+      <MealMenuSheet meal={menuMeal} count={day.meals.find((x) => x.meal === menuMeal)?.entries.length ?? 0} onClose={() => setMenuMeal(null)}
+        onSelect={() => { setMenuMeal(null); startSelection(); }}
+        onClear={() => {
+          const entries = day.meals.find((x) => x.meal === menuMeal)?.entries ?? [];
+          if (menuMeal && entries.length) setClearing({ date, meal: menuMeal, entryIds: entries.map((e) => e.id) });
+          setMenuMeal(null);
+        }} />
+      <ConfirmationSheet visible={deletingSelected !== null} title="Delete selected entries?"
+        message={deletingSelected ? `Remove ${deletingSelected.entryIds.length} logged ${deletingSelected.entryIds.length === 1 ? 'entry' : 'entries'} from ${deletingSelected.date}? Planned items are not removed.` : undefined}
+        confirmLabel="Delete entries" destructive onConfirm={confirmDeleteSelected} onCancel={() => setDeletingSelected(null)} />
       {selectionMode ? (
         // Pinned while selecting, so Move is always in reach after scrolling down to tick entries in later meals.
         <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap',
           paddingHorizontal: t.screenPadding, paddingVertical: t.space.sm, backgroundColor: t.colors.surfaceRaised, borderTopWidth: 1, borderTopColor: t.colors.border }}>
           <AppText variant="bodyStrong" accessibilityLiveRegion="polite" style={{ flex: 1, minWidth: 90 }}>{selectedEntries.length} selected</AppText>
           <SecondaryButton label="Cancel" onPress={clearSelection} />
+          <SecondaryButton label="Delete" icon={Trash2} tone="danger" accessibilityLabel="Delete selected" disabled={selectedEntries.length === 0}
+            onPress={() => setDeletingSelected({ date, entryIds: selectedEntries.map((e) => e.id) })} />
           <PrimaryButton label="Move" onPress={openMoveSheet} disabled={selectedEntries.length === 0} />
         </View>
       ) : null}

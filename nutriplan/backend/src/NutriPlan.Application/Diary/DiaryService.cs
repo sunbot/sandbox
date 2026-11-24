@@ -42,6 +42,9 @@ public sealed record LogQuickRequest(DateOnly Date, MealSlot Meal, string Name, 
 
 public sealed record MoveDiaryEntriesRequest(DateOnly Date, IReadOnlyList<Guid>? EntryIds, MealSlot Meal);
 
+/// <summary>Delete selected entries of one date (any meals): every entry is removed, or none is.</summary>
+public sealed record DeleteDiaryEntriesRequest(DateOnly Date, IReadOnlyList<Guid>? EntryIds);
+
 public sealed record QuickLogItemDto(ItemDto Item, string UsualMeal, int TimesLogged, DateTimeOffset LastLogged);
 
 /// <summary>
@@ -217,9 +220,28 @@ public sealed class DiaryService(
         if (entries.Count != ids.Count)
             throw new ValidationException("The meal changed. Refresh and try again; nothing was deleted.");
 
+        await RemoveAndSaveAsync(entries, ct);
+    }
+
+    /// <summary>Deletes a bounded set of selected entries from one date, across meals, in one save (all or nothing).</summary>
+    public async Task DeleteManyAsync(DeleteDiaryEntriesRequest r, CancellationToken ct = default)
+    {
+        if (r.EntryIds is null || r.EntryIds.Count == 0) throw new ValidationException("Select at least one diary entry.");
+        if (r.EntryIds.Count > 100) throw new ValidationException("Delete no more than 100 diary entries at once.");
+        if (r.EntryIds.Distinct().Count() != r.EntryIds.Count) throw new ValidationException("Each diary entry can only be selected once.");
+
+        var requested = r.EntryIds.ToHashSet();
+        var entries = (await diary.GetRangeAsync(r.Date, r.Date, ct)).Where(e => requested.Contains(e.Id)).ToList();
+        if (entries.Count != requested.Count) throw new NotFoundException("One or more diary entries were not found for that date; nothing was deleted.");
+        await RemoveAndSaveAsync(entries, ct);
+    }
+
+    private async Task RemoveAndSaveAsync(IReadOnlyList<DiaryEntry> entries, CancellationToken ct)
+    {
         foreach (var entry in entries)
         {
             diary.Remove(entry);
+            // Un-logging a planned meal puts it back on the plan.
             if (entry.PlanEntryId is { } planId && await plans.GetAsync(planId, ct) is { Status: PlanStatus.Eaten } planned)
                 planned.Reopen();
         }

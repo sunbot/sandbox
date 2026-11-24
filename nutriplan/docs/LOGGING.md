@@ -100,12 +100,17 @@ Swipe a logged diary row left (Today and Week) to reveal **Delete**; it never de
 and shows Undo; the server delete happens when the Undo window closes (about 5 s). One row is open at a time; tapping a row or
 starting to scroll closes it (that tap doesn't open the editor). A drag has to be clearly sideways to take the touch, so taps and
 vertical scrolling are untouched. Screen readers get a "Delete" action on the row, and Delete is also in
-the editor. Long press is reserved (not used).
+the editor. Press and hold starts selecting entries (below).
 
-On Today, expand a nonempty meal and choose **Clear breakfast/lunch/dinner/snack**. The confirmation names the date and
+On Today, open a nonempty meal's **…** menu and choose **Clear breakfast/lunch/dinner/snack**. The confirmation names the date and
 number of logged entries; planned items are not removed. Undo cancels the clear before the five-second window closes.
 Only the confirmed entries are sent to the server, so entries added later are left alone. If a confirmed entry was moved
 or removed meanwhile, the clear fails as a whole and the diary refreshes. Clearing a logged planned item reopens its plan.
+
+**Selecting entries** (press and hold a food, or **…** → Select entries, which starts with nothing ticked): a bar pinned at the
+bottom shows "N selected · Cancel · Delete · Move". Selection can span meals of the same day. **Move** uses `POST /api/diary/move`;
+**Delete** asks for confirmation, hides the entries with Undo, and after the Undo window sends one `POST /api/diary/delete`
+(owner-scoped, same date, at most 100, all or nothing; a logged planned item goes back to the plan).
 
 - Implementation: `features/diary/SwipeableDiaryRow.tsx`: React Native's own `PanResponder` + `Pressable` (not a gesture-handler
   swipe component: inside `ReanimatedSwipeable` taps on the row and on the revealed Delete button never arrived on an Android phone,
@@ -173,17 +178,18 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    it to 2 cups, Save amount; Remove line asks twice; Scale recipe ×2 → Apply (servings double, per-serving kcal unchanged, line
    text doubles); on an imported recipe with unmatched lines, Review steps through only those; Log or plan in cups on a recipe
    with a finished volume.
-7. Clear a meal: on a non-today date, expand each meal with logged entries and check Clear, the count/date and Cancel. Confirm and Undo:
+7. Clear a meal: on a non-today date, open each nonempty meal's **…** menu and check Clear, the count/date and Cancel. Confirm and Undo:
    entries and totals return unchanged. Confirm again and wait; refresh and check only that date and meal were cleared,
-   planned items remain, and a logged planned item returns to the plan. Empty meals have no Clear action. Repeat offline:
+   planned items remain, and a logged planned item returns to the plan. Empty meals have no **…** menu. Repeat offline:
    the error is shown and entries return or refresh when connectivity is restored.
 8. Today bulk move: **press and hold** a food (a short vibration): selection starts with it ticked, and a bar pinned at the
-   bottom shows "N selected · Cancel · Move" while you scroll. A short tap still opens the editor; Android back ends selection.
+   bottom shows "N selected · Cancel · Delete · Move" while you scroll. **…** → Select entries starts with nothing ticked. A short tap still opens the editor; Android back ends selection.
    TalkBack: the row's actions include "Select to move".
    Select foods from at least two different meals (touch and TalkBack: rows read as checkboxes), tap Move: the sheet never
    starts on the meal they're all already in, and choosing that meal disables Move ("already in …"). Move them: date, amounts
-   and nutrition unchanged; "Moved N entries to dinner" with **Undo** puts each back in its own meal. Clear is hidden while
-   selecting. Cancel moves nothing; a failed move keeps the selection to retry.
+   and nutrition unchanged; "Moved N entries to dinner" with **Undo** puts each back in its own meal. The **…** menu is hidden
+   while selecting. Cancel moves nothing; a failed move keeps the selection to retry. **Delete** with two meals ticked:
+   confirm, Undo restores them; confirm again and wait: both are gone after refresh, and a logged planned item is back on the plan.
 9. Large text (Android font size at maximum) on the editor, rows, Ask review and scanner.
 
 ## Removing items from the grocery list

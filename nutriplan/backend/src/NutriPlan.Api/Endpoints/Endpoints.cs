@@ -80,6 +80,7 @@ public static class DiaryEndpoints
         g.MapPost("/copy", (CopyRequest r, DiaryService s, CancellationToken ct) => s.CopyAsync(r.From, r.To, r.Meal, r.ToMeal, ct));
         g.MapPost("/clear-meal", async (ClearMealRequest r, DiaryService s, CancellationToken ct) => { await s.ClearMealAsync(r, ct); return Results.NoContent(); });
         g.MapPost("/move", (MoveDiaryEntriesRequest r, DiaryService s, CancellationToken ct) => s.MoveManyAsync(r, ct));
+        g.MapPost("/delete", async (DeleteDiaryEntriesRequest r, DiaryService s, CancellationToken ct) => { await s.DeleteManyAsync(r, ct); return Results.NoContent(); });
         g.MapPost("/{id:guid}/relog", (Guid id, RelogRequest r, DiaryService s, CancellationToken ct) => s.RelogAsync(id, r.Date, r.Meal, ct));
         g.MapPatch("/{id:guid}", (Guid id, UpdateDiaryRequest r, DiaryService s, CancellationToken ct) => s.UpdateAsync(id, r.Scale, r.Date, r.Meal, r.Note, ct, r.Amount, r.Unit, r.Grams));
         g.MapDelete("/{id:guid}", async (Guid id, DiaryService s, CancellationToken ct) => { await s.DeleteAsync(id, ct); return Results.NoContent(); });

@@ -473,6 +473,15 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
             date = Day, entryIds = new[] { (string)entry["id"]! }, meal = "Breakfast",
         })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync($"/api/plan/{plan["id"]}/amount", new { amount = 99.0, unit = "g" })).StatusCode);
+        // Delete selected: another user's entry is not found (nothing deleted), and a mixed-owner set deletes nothing either.
+        Assert.Equal(HttpStatusCode.NotFound, (await b.PostAsJsonAsync("/api/diary/delete", new { date = Day, entryIds = new[] { (string)entry["id"]! } })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await a.PostAsJsonAsync("/api/diary/delete", new
+        {
+            date = Day, entryIds = new[] { (string)callerEntry["id"]!, (string)otherEntry["id"]! },
+        })).StatusCode);
+        var otherDay = await Json(await b.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"));
+        Assert.Contains(otherDay["meals"]!.AsArray().SelectMany(m => m!["entries"]!.AsArray()), e => (string?)e!["id"] == (string)otherEntry["id"]!);
+        Assert.Equal(HttpStatusCode.NoContent, (await a.PostAsJsonAsync("/api/diary/delete", new { date = Day, entryIds = new[] { (string)callerEntry["id"]! } })).StatusCode);
         var stillDay = await Json(await a.GetAsync($"/api/diary/{Day:yyyy-MM-dd}"));
         Assert.Contains("\"unit\":\"oz\"", stillDay.ToJsonString());
         // Count entries, not text: the day's meal sections also carry their own "meal" label.

@@ -15,7 +15,7 @@ const almonds = { id: 'f1', name: 'Nuts, almonds', source: 'UsdaSrLegacy', quali
   measures: [{ unit: 'almond', label: 'almond', plural: 'almonds', base: 1.2, kind: 'Count', source: 'almond', countable: true }, { unit: 'cup', label: 'cup', plural: 'cups', base: 143, kind: 'Volume', source: 'cup, whole', countable: false },
     { unit: 'g', label: 'g', plural: 'g', base: 1, kind: 'Mass', source: null, countable: false }, { unit: 'oz', label: 'oz', plural: 'oz', base: 28.349523, kind: 'Mass', source: null, countable: false }] };
 
-async function openToday(totals, food = almonds, clear = () => [204], initialEntries = [almondsEntry, yogurtEntry], moveStatus = 200) {
+async function openToday(totals, food = almonds, clear = () => [204], initialEntries = [almondsEntry, yogurtEntry], moveStatus = 200, deleteMany = () => [204]) {
   const ctx = await phone(b);
   const p = await ctx.newPage();
   let currentEntries = initialEntries.map((e) => ({ ...e }));
@@ -42,6 +42,7 @@ async function openToday(totals, food = almonds, clear = () => [204], initialEnt
     },
     'DELETE /api/diary/': () => [204],
     'POST /api/diary/clear-meal': clear,
+    'POST /api/diary/delete': deleteMany,
   });
   await p.goto(server.url + '/');
   const row = p.getByRole('button', { name: /^Almonds, 28 g/ }).first();
@@ -50,21 +51,26 @@ async function openToday(totals, food = almonds, clear = () => [204], initialEnt
 }
 /** Press and hold a diary row: starts selecting entries to move, with that row ticked. */
 const holdRow = (p, name) => p.getByRole('button', { name }).first().click({ delay: 800 });
+/** Clear is in the meal's "…" menu, not next to Add. */
+const chooseClear = async (p) => {
+  await p.getByRole('button', { name: 'Breakfast actions' }).click();
+  await p.getByRole('button', { name: /^Clear breakfast/ }).click();
+};
 const deletes = (calls) => calls.filter((c) => c.method === 'DELETE').length;
 
 test('clear meal confirms the count, supports cancel and undo, and sends only confirmed entries', async () => {
   const { ctx, p, calls } = await openToday();
-  const clear = p.getByRole('button', { name: 'Clear breakfast' });
-  await clear.click();
+  assert.equal(await p.getByRole('button', { name: /^Clear breakfast/ }).count(), 0, 'no inline Clear next to Add');
+  await chooseClear(p);
   await p.getByText(`Remove 2 logged entries from Breakfast on ${today()}? Planned items are not removed.`).waitFor();
   await p.getByRole('button', { name: 'Cancel' }).click();
   assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
-  await clear.click();
+  await chooseClear(p);
   await p.getByRole('button', { name: 'Clear entries' }).click();
   await p.getByRole('button', { name: 'Undo' }).click();
   assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
   assert.equal(calls.filter((c) => c.path.includes('clear-meal')).length, 0);
-  await clear.click();
+  await chooseClear(p);
   await p.getByRole('button', { name: 'Clear entries' }).click();
   await p.waitForTimeout(6000);
   const request = calls.find((c) => c.path.includes('clear-meal'));
@@ -74,7 +80,7 @@ test('clear meal confirms the count, supports cancel and undo, and sends only co
 
 test('clear failure restores entries and shows an error', async () => {
   const { ctx, p } = await openToday(undefined, almonds, () => [500, { detail: 'Clear failed' }]);
-  await p.getByRole('button', { name: 'Clear breakfast' }).click();
+  await chooseClear(p);
   await p.getByRole('button', { name: 'Clear entries' }).click();
   await p.getByText('Clear failed').waitFor({ timeout: 10000 });
   assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
@@ -262,12 +268,12 @@ test('over a macro target the summary says how far over (the bar itself stops at
   await ctx.close();
 });
 
-test('while selecting entries to move, a meal cannot be cleared (the two would act on the same rows)', async () => {
+test('while selecting entries, the meal menu (and its Clear) is hidden: the two would act on the same rows', async () => {
   const { ctx, p, errors } = await openToday();
-  await p.getByRole('button', { name: 'Clear breakfast' }).waitFor();
+  await p.getByRole('button', { name: 'Breakfast actions' }).waitFor();
   await holdRow(p, /^Almonds/);
   await p.getByRole('checkbox', { name: /^Almonds/ }).first().waitFor();
-  assert.equal(await p.getByRole('button', { name: 'Clear breakfast' }).count(), 0);
+  assert.equal(await p.getByRole('button', { name: 'Breakfast actions' }).count(), 0);
   assert.deepEqual(errors, []);
   await ctx.close();
 });
@@ -301,6 +307,49 @@ test('moving never defaults to a move that changes nothing, and Undo sends each 
   assert.deepEqual(moves.slice(1).map((m) => [m.meal, m.entryIds]), [['Breakfast', ['e1']], ['Lunch', ['e3']]]);
   assert.deepEqual(getEntries().map((x) => x.meal), ['Breakfast', 'Lunch']);
   assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('the meal menu starts selecting with nothing ticked; Delete selected confirms, offers Undo, then deletes only the ticked entries', async () => {
+  const { ctx, p, calls, errors } = await openToday();
+  await p.getByRole('button', { name: 'Breakfast actions' }).click();
+  await p.getByRole('button', { name: 'Select entries' }).click();
+  await p.getByText('0 selected').waitFor();
+  const del = p.getByRole('button', { name: 'Delete selected' });
+  assert.equal(await del.isDisabled(), true, 'nothing ticked: Delete is disabled');
+  await p.getByRole('checkbox', { name: /^Almonds/ }).first().click();
+  await p.getByText('1 selected').waitFor();
+  await del.click();
+  await p.getByText(`Remove 1 logged entry from ${today()}? Planned items are not removed.`).waitFor();
+  await p.getByRole('button', { name: 'Cancel' }).last().click();
+  await p.getByText('1 selected').waitFor();                                 // cancelling keeps the selection
+  await del.click();
+  await p.getByRole('button', { name: 'Delete entries' }).click();
+  await p.getByText('Deleted 1 entry').waitFor();
+  await p.getByRole('button', { name: 'Undo' }).click();
+  assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true, 'Undo brings it back');
+  assert.equal(calls.filter((c) => c.path === '/api/diary/delete').length, 0, 'nothing sent before the Undo window ends');
+
+  await holdRow(p, /^Almonds/);
+  await p.getByRole('checkbox', { name: /^Greek yogurt|^Yogurt/ }).first().click();
+  await p.getByText('2 selected').waitFor();
+  await p.getByRole('button', { name: 'Delete selected' }).click();
+  await p.getByRole('button', { name: 'Delete entries' }).click();
+  for (let i = 0; i < 80 && !calls.some((c) => c.path === '/api/diary/delete'); i++) await p.waitForTimeout(100);
+  const request = calls.find((c) => c.path === '/api/diary/delete');
+  assert.deepEqual(JSON.parse(request.body), { date: today(), entryIds: ['e1', 'e2'] });
+  assert.equal(deletes(calls), 0, 'one bulk request, not one delete per entry');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('a failed Delete selected restores the entries and says nothing was deleted', async () => {
+  const { ctx, p } = await openToday(undefined, almonds, () => [204], undefined, 200, () => [404, { detail: 'One or more diary entries were not found for that date; nothing was deleted.' }]);
+  await holdRow(p, /^Almonds/);
+  await p.getByRole('button', { name: 'Delete selected' }).click();
+  await p.getByRole('button', { name: 'Delete entries' }).click();
+  await p.getByText(/nothing was deleted/).waitFor({ timeout: 10000 });
+  assert.equal(await visible(p.getByRole('button', { name: /^Almonds, 28 g/ }).first()), true);
   await ctx.close();
 });
 

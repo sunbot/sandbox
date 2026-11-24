@@ -101,6 +101,44 @@ public class ServiceTests
     }
 
     [Fact]
+    public async Task Delete_selected_removes_entries_across_meals_in_one_save_and_reopens_plans()
+    {
+        var plannedItem = new PlanEntry(_store.Today, MealSlot.Lunch, ItemSnapshot.QuickCalories("Planned", 300));
+        ((IPlanRepository)_store).Add(plannedItem);
+        plannedItem.MarkEaten();
+        var breakfast = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("A", 100));
+        var lunch = new DiaryEntry(_store.Today, MealSlot.Lunch, ItemSnapshot.QuickCalories("B", 300), plannedItem.Id);
+        var kept = new DiaryEntry(_store.Today, MealSlot.Lunch, ItemSnapshot.QuickCalories("C", 50));
+        foreach (var e in new[] { breakfast, lunch, kept }) ((IDiaryRepository)_store).Add(e);
+
+        await Diary().DeleteManyAsync(new(_store.Today, [breakfast.Id, lunch.Id]));
+
+        Assert.Equal(1, _store.Saves);
+        var left = await ((IDiaryRepository)_store).GetRangeAsync(_store.Today, _store.Today);
+        Assert.Equal(new[] { kept.Id }, left.Select(e => e.Id));
+        Assert.Equal(PlanStatus.Planned, plannedItem.Status);
+    }
+
+    [Fact]
+    public async Task Delete_selected_rejects_empty_duplicate_missing_or_other_day_entries_without_writing()
+    {
+        var entry = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Today", 100));
+        var yesterday = new DiaryEntry(_store.Today.AddDays(-1), MealSlot.Lunch, ItemSnapshot.QuickCalories("Yesterday", 200));
+        ((IDiaryRepository)_store).Add(entry);
+        ((IDiaryRepository)_store).Add(yesterday);
+
+        await Assert.ThrowsAsync<Common.ValidationException>(() => Diary().DeleteManyAsync(new(_store.Today, [])));
+        await Assert.ThrowsAsync<Common.ValidationException>(() => Diary().DeleteManyAsync(new(_store.Today, null)));
+        await Assert.ThrowsAsync<Common.ValidationException>(() => Diary().DeleteManyAsync(new(_store.Today, [entry.Id, entry.Id])));
+        await Assert.ThrowsAsync<Common.ValidationException>(() => Diary().DeleteManyAsync(new(_store.Today, Enumerable.Range(0, 101).Select(_ => Guid.NewGuid()).ToArray())));
+        await Assert.ThrowsAsync<Common.NotFoundException>(() => Diary().DeleteManyAsync(new(_store.Today, [entry.Id, Guid.NewGuid()])));
+        await Assert.ThrowsAsync<Common.NotFoundException>(() => Diary().DeleteManyAsync(new(_store.Today, [entry.Id, yesterday.Id])));
+
+        Assert.Equal(0, _store.Saves);
+        Assert.Single(await ((IDiaryRepository)_store).GetRangeAsync(_store.Today, _store.Today));
+    }
+
+    [Fact]
     public async Task Bulk_move_rejects_more_than_100_entries_before_writing()
     {
         var entry = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Snack", 100));

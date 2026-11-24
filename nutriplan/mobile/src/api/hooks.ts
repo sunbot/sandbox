@@ -135,6 +135,15 @@ export function useClearMeal() {
   });
 }
 
+/** Delete selected entries of one day (any meals) in one request: all or nothing. */
+export function useDeleteDiaryEntries() {
+  const invalidate = useInvalidateNutrition();
+  return useMutation({
+    mutationFn: (r: { date: string; entryIds: string[] }) => post<void>('/diary/delete', r),
+    onSettled: invalidate,
+  });
+}
+
 export function useCopyMeal() {
   const invalidate = useInvalidateNutrition();
   return useMutation({
