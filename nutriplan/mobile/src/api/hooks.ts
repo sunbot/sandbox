@@ -296,6 +296,15 @@ export const useHeatmap = (date: string) => useQuery({ queryKey: keys.heatmap(da
 
 export const useTargets = () => useQuery({ queryKey: keys.targets, queryFn: () => get<T.Targets>('/targets') });
 
+/** Preview of unsaved weekly-flexibility settings. Nothing is saved; keeps the last answer while a new one loads. */
+export const useBudgetPreview = (s: { calories: number; mode: 'Daily' | 'Weekly'; weekStartsOn: string; maxDailyAdjustment: number; extraKcal: number }, enabled: boolean) =>
+  useQuery({
+    queryKey: ['targets', 'preview', s] as const,
+    queryFn: () => get<T.BudgetPreview>(`/targets/preview?${q({ calories: s.calories, mode: s.mode, weekStartsOn: s.weekStartsOn, maxDailyAdjustment: s.maxDailyAdjustment, extraKcal: s.extraKcal, today: today() })}`),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
+
 export function useUpdateTargets() {
   const qc = useQueryClient();
   return useMutation({

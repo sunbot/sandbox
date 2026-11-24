@@ -36,6 +36,9 @@ public sealed record WeekDto(
     NutritionDto DailyTargets,
     IReadOnlyList<PlanDayDto> Days);
 
+/// <summary>Unsaved settings to try; anything left out uses the saved value.</summary>
+public sealed record BudgetPreviewRequest(double? Calories, BudgetMode? BudgetMode, DayOfWeek? WeekStartsOn, double? MaxDailyAdjustment, double ExtraKcal, DateOnly? Today);
+
 public sealed record AddPlanFoodRequest(DateOnly Date, MealSlot Meal, Guid FoodId, double? Grams, double? Amount, string? Unit);
 
 /// <summary>Several foods planned for one meal (Ask's "Plan all"): all are planned, or none.</summary>
@@ -94,6 +97,32 @@ public sealed class PlanService(
 
         return new WeekDto(start, end, targets.BudgetMode.ToString(), budget.WeeklyTarget, budget.ConsumedSoFar,
             budget.ProjectedTotal, budget.UnabsorbedCarryover, NutritionDto.From(targets.AsProfile()), days);
+    }
+
+    /// <summary>What unsaved target settings would mean for this week, using the production weekly calculation. Nothing is saved.</summary>
+    public async Task<BudgetPreview> PreviewBudgetAsync(BudgetPreviewRequest r, CancellationToken ct = default)
+    {
+        var saved = await targetsRepo.GetAsync(ct);
+        if (r.Calories is { } c && (!double.IsFinite(c) || c <= 0)) throw new ValidationException("Calories must be greater than zero.");
+        if (!double.IsFinite(r.ExtraKcal) || Math.Abs(r.ExtraKcal) > 10_000) throw new ValidationException("The example amount must be within ±10,000 kcal.");
+        if (r.MaxDailyAdjustment is { } a && !double.IsFinite(a)) throw new ValidationException("Daily flexibility must be a number.");
+        // A detached copy: the tracked entity must never pick up preview values.
+        var targets = new NutritionTargets
+        {
+            Calories = r.Calories ?? saved.Calories,
+            BudgetMode = r.BudgetMode ?? saved.BudgetMode,
+            WeekStartsOn = r.WeekStartsOn ?? saved.WeekStartsOn,
+            MaxDailyAdjustment = Math.Clamp(r.MaxDailyAdjustment ?? saved.MaxDailyAdjustment, 0, 0.5),
+        };
+        var today = r.Today ?? clock.Today;
+        var start = WeeklyBudgetCalculator.WeekStartFor(today, targets.WeekStartsOn);
+        var logged = await diary.GetRangeAsync(start, start.AddDays(6), ct);
+        var inputs = Enumerable.Range(0, 7).Select(i =>
+        {
+            var date = start.AddDays(i);
+            return new DayBudgetInput(date, logged.Where(e => e.Date == date).Sum(e => e.Item.Nutrients.Calories), 0);
+        }).ToList();
+        return WeeklyBudgetCalculator.Preview(targets, today, inputs, r.ExtraKcal);
     }
 
     public async Task<PlanEntryDto> AddFoodAsync(AddPlanFoodRequest r, CancellationToken ct = default)

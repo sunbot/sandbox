@@ -119,6 +119,8 @@ public static class PlanEndpoints
 
         var t = api.MapGroup("/targets").WithTags("Targets");
         t.MapGet("/", (TargetsService s, CancellationToken ct) => s.GetAsync(ct));
+        t.MapGet("/preview", (double? calories, NutriPlan.Domain.Planning.BudgetMode? mode, DayOfWeek? weekStartsOn, double? maxDailyAdjustment, double? extraKcal, DateOnly? today, PlanService s, CancellationToken ct) =>
+            s.PreviewBudgetAsync(new BudgetPreviewRequest(calories, mode, weekStartsOn, maxDailyAdjustment, extraKcal ?? 0, today), ct));
         t.MapPut("/", (UpdateTargetsRequest r, TargetsService s, CancellationToken ct) => s.UpdateAsync(r, ct));
     }
 }
