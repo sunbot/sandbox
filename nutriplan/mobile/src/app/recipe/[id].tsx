@@ -3,7 +3,7 @@ import { Linking, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLogRecipe, usePlanMutations, useRecipe, useRecipeMutations } from '@/api/hooks';
 import { AppCard, AppText, ConfirmationSheet, EmptyState, FilterChip, PrimaryButton, SecondaryButton, SectionHeader, Skeleton, TextButton, useSnackbar } from '@/components/ds';
-import { CalendarPlus, Check, ChefHat, CircleAlert, ExternalLink, Layers, Plus, RefreshCw } from '@/components/ds/icons';
+import { CalendarPlus, Check, ChefHat, CircleAlert, ExternalLink, Plus, RefreshCw } from '@/components/ds/icons';
 import { IngredientNutritionRow } from '@/features/recipe/IngredientNutritionRow';
 import { IngredientSheet } from '@/features/recipe/IngredientSheet';
 import { QuantityPicker, type QuantityValue } from '@/features/quantity/QuantityPicker';
@@ -15,7 +15,7 @@ import {
   SCALE_CHOICES, availableModes, effectiveMode, eatingNutrition, gramsPerServing, ingredientCounts, logRecipeRequest, nextToReview, nutritionFor, parseServings, reliabilityNote, recipeTrust, reviewQueue, trustLines,
   scaleSummary, servingsWord, type NutritionMode,
 } from '@/features/recipe/nutritionView';
-import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
+import { dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
 
 /**
@@ -35,7 +35,6 @@ export default function RecipeScreen() {
   const [reviewing, setReviewing] = useState(false); // stepping through lines that need a look
   const [autoReview, setAutoReview] = useState(review === '1'); // just saved from an idea with lines to check: start Review once
   const [meal, setMeal] = useState<Meal>(mealForNow);
-  const [batchDays, setBatchDays] = useState('3');
   const [mode, setMode] = useState<NutritionMode>('serving');
   // Everything that needs reading stays on screen rather than in alerts, which don't appear in the web version.
   const [notice, setNotice] = useState<string | null>(null);
@@ -91,13 +90,6 @@ export default function RecipeScreen() {
     // The meal the user picked above, never a time-of-day guess.
     await logRecipe.mutateAsync(logRecipeRequest({ date: logDate, meal, recipeId: s.id, servings: roundAmount(n), ...asChosen }));
     snackbar({ message: `Logged ${servingsWord(n)} to ${meal.toLowerCase()} today` });
-  });
-
-  const batch = () => n && run(async () => {
-    const days = Math.max(1, Math.min(7, Number(batchDays) || 1));
-    const start = planDate ?? logDate;
-    await plan.addBatch.mutateAsync({ recipeId: s.id, servingsPerPortion: n, slots: Array.from({ length: days }, (_, i) => ({ date: addDays(start, i), meal })) });
-    setNotice(`Planned ${days} portions of ${s.name}, ${meal.toLowerCase()} from ${dayLabel(start)}. It's on the grocery list once.`);
   });
 
   const saveYield = async () => {
@@ -208,14 +200,6 @@ export default function RecipeScreen() {
         <View style={{ gap: t.space.sm }}>
           <PrimaryButton label={`Log now · ${meal === 'Snack' ? 'snacks' : meal.toLowerCase()}`} icon={Check} disabled={!n} loading={logRecipe.isPending} onPress={logNow} fullWidth />
           <SecondaryButton label={planDate ? `Plan for ${dayLabel(planDate)}` : 'Plan for today'} icon={CalendarPlus} disabled={!n} loading={plan.addRecipe.isPending} onPress={addToPlan} fullWidth />
-        </View>
-        <View style={{ gap: t.space.xs, borderTopWidth: 1, borderTopColor: t.colors.border, paddingTop: t.space.md }}>
-          <AppText variant="label" tone="secondary">Cook once, eat several times</AppText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, flexWrap: 'wrap' }}>
-            <TextInput value={batchDays} onChangeText={setBatchDays} keyboardType="number-pad" accessibilityLabel="Number of days to plan leftovers" style={[...input, { width: 72, textAlign: 'center' }]} />
-            <AppText variant="secondary" tone="secondary">days</AppText>
-            <SecondaryButton label="Plan leftovers" icon={Layers} disabled={!n} loading={plan.addBatch.isPending} onPress={batch} />
-          </View>
         </View>
       </AppCard>
 
