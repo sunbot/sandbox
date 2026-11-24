@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { Platform, Pressable, TextInput, View } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import type { Measure } from '@/api/types';
-import { AppText } from '@/components/ds';
-import { Check, ChevronDown, ChevronUp } from '@/components/ds/icons';
+import { AppText, BottomSheet } from '@/components/ds';
+import { Check, ChevronDown } from '@/components/ds/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import { baseText, capitalize, measureWorth, matchMeasure, parseQuantity, sourceText, switchMeasure, volumeNote, type ExactAmount } from './quantity';
 
@@ -24,6 +24,7 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
   onSubmit?: () => void;
 }) {
   const t = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   // The exact amount behind a converted number, so browsing measures (almonds -> oz -> almonds) doesn't drift.
   const exact = useRef<ExactAmount>(null);
@@ -62,18 +63,20 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
           style={[field, { width: 112, paddingHorizontal: t.space.md, color: t.colors.text, fontSize: t.type.sectionTitle.fontSize, fontVariant: ['tabular-nums'] },
             Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null]}
         />
-        <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button" accessibilityState={{ expanded: open }}
+        <Pressable onPress={() => { Keyboard.dismiss(); setOpen(true); }} accessibilityRole="button" accessibilityState={{ expanded: open }}
           accessibilityLabel={`Measure: ${measure ? measure.plural : 'none'}. Change measure`}
           style={({ pressed }) => [field, { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: t.space.md, gap: t.space.sm }, pressed && { backgroundColor: t.colors.surfaceMuted }]}>
           <AppText variant="body" style={{ flex: 1 }} numberOfLines={1}>{measure ? (qty === 1 ? measure.label : measure.plural) : 'Choose'}</AppText>
-          {open ? <ChevronUp size={20} color={t.colors.textSecondary} /> : <ChevronDown size={20} color={t.colors.textSecondary} />}
+          <ChevronDown size={20} color={t.colors.textSecondary} />
         </Pressable>
       </View>
 
-      {equivalent && !open ? <AppText variant="secondary" tone="secondary" numeric>{equivalent}</AppText> : null}
+      {equivalent ? <AppText variant="secondary" tone="secondary" numeric>{equivalent}</AppText> : null}
       {error ? <AppText variant="secondary" style={{ color: t.colors.errorText }} accessibilityLiveRegion="polite">{error}</AppText> : null}
 
-      {open ? (
+      {/* A separate sheet above the editor (its own modal layer), so the options never sit under the editor's actions. */}
+      <BottomSheet visible={open} onClose={() => setOpen(false)} title="Choose a measure">
+        <ScrollView style={{ maxHeight: Math.round(windowHeight * 0.6) }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
         <View style={{ borderRadius: t.radii.button, borderWidth: 1, borderColor: t.colors.border, overflow: 'hidden' }} accessibilityRole="radiogroup">
           {measures.map((m, i) => {
             const selected = m.unit === measure?.unit;
@@ -92,7 +95,8 @@ export function QuantityPicker({ measures, value, onChange, baseUnit = 'g', erro
           })}
           {note ? <AppText variant="caption" tone="muted" style={{ padding: t.space.md, borderTopWidth: 1, borderTopColor: t.colors.border }}>{note}</AppText> : null}
         </View>
-      ) : null}
+        </ScrollView>
+      </BottomSheet>
     </View>
   );
 }
