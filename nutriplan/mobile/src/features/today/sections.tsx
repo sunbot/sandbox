@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, View } from 'react-native';
-import { CalendarClock, Check, Ellipsis, ListChecks, Trash2, ChevronDown, ChevronUp, Mic, Plus, ScanBarcode, Search, Sparkles } from '@/components/ds/icons';
+import { CalendarClock, Check, ChevronLeft, ChevronRight, Ellipsis, ListChecks, Square, SquareCheck, SquareMinus, Trash2, ChevronDown, ChevronUp, Mic, Plus, ScanBarcode, Search, Sparkles } from '@/components/ds/icons';
 import type { Day, DiaryEntry, NutrientProgress as NP, PlanEntry, QuickLogItem, Targets } from '@/api/types';
 import {
   AppCard, AppText, Badge, BottomSheet, CalorieRing, FilterChip, FoodRow, IconButton, MacroProgress, NutrientProgress,
@@ -136,14 +136,29 @@ export function MealPickerSheet({ visible, meal, onPick, onClose }: { visible: b
   );
 }
 
-export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, onClose, loading, alreadyThere = false }: {
+export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, onClose, loading, alreadyThere = false, day, days, onPickDay, dayText }: {
   visible: boolean; count: number; meal: Meal; error?: string | null; onPick: (m: Meal) => void; onConfirm: () => void; onClose: () => void; loading: boolean;
-  /** Every selected entry is already in the chosen meal: nothing to move. */
+  /** Every selected entry is already in the chosen meal on the chosen day: nothing to move. */
   alreadyThere?: boolean;
+  /** The destination day (ISO), quick choices around the viewed day, and a stepper for any other day. */
+  day: string; days: { label: string; date: string }[]; onPickDay: (d: string) => void; dayText: (d: string) => string;
 }) {
   const t = useTheme();
+  const step = (n: number) => onPickDay(addDaysIso(day, n));
   return (
     <BottomSheet visible={visible} onClose={onClose} title={`Move ${count} ${count === 1 ? 'entry' : 'entries'} to`}>
+      <View style={{ gap: t.space.xs }}>
+        <AppText variant="label" tone="secondary">Day</AppText>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: t.space.sm }}>
+          {days.map((d) => <FilterChip key={d.date} label={d.label} selected={d.date === day} onPress={() => onPickDay(d.date)} />)}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconButton icon={ChevronLeft} label="Day before" onPress={() => step(-1)} />
+          <AppText variant="bodyStrong" align="center" style={{ flex: 1 }} accessibilityLiveRegion="polite">{dayText(day)}</AppText>
+          <IconButton icon={ChevronRight} label="Day after" onPress={() => step(1)} />
+        </View>
+        <AppText variant="label" tone="secondary">Meal</AppText>
+      </View>
       <View style={{ paddingBottom: t.space.md }}>
         {meals.map((m) => {
           const selected = m === meal;
@@ -157,7 +172,7 @@ export function BulkMoveSheet({ visible, count, meal, error, onPick, onConfirm, 
           );
         })}
       </View>
-      {alreadyThere ? <AppText variant="secondary" tone="secondary" accessibilityLiveRegion="polite">{count === 1 ? 'It’s' : 'They’re all'} already in {mealLabel(meal).toLowerCase()}. Pick another meal.</AppText> : null}
+      {alreadyThere ? <AppText variant="secondary" tone="secondary" accessibilityLiveRegion="polite">{count === 1 ? 'It’s' : 'They’re all'} already in {mealLabel(meal).toLowerCase()} that day. Pick another meal or day.</AppText> : null}
       {error ? <AppText variant="secondary" tone="error" accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</AppText> : null}
       <View style={{ gap: t.space.sm, paddingBottom: t.space.md }}>
         <PrimaryButton label={`Move ${count} ${count === 1 ? 'entry' : 'entries'}`} onPress={onConfirm} loading={loading} fullWidth disabled={count === 0 || alreadyThere} />
@@ -190,9 +205,15 @@ export function MealMenuSheet({ meal, count, onSelect, onClear, onClose }: { mea
   );
 }
 
+const addDaysIso = (iso: string, n: number) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 /* ───────────────────────── Meal section ───────────────────────── */
 
-export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onMenu, onLogPlanned, loggingId, selectionMode, selectedEntryIds, onToggleSelect, onStartSelection }: {
+export function MealSection({ meal, totals, entries, planned, expanded, onToggle, onAdd, onEntry, onDeleteEntry, onMenu, onLogPlanned, loggingId, selectionMode, selectedEntryIds, onToggleSelect, onStartSelection, mealChecked = 'none', onToggleMeal }: {
   meal: Meal;
   totals: number;
   entries: DiaryEntry[];
@@ -211,6 +232,9 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   onToggleSelect: (id: string) => void;
   /** Press and hold an entry: start selecting, with it selected. */
   onStartSelection: (id: string) => void;
+  /** While selecting: the heading's checkbox (all / some / none of this meal's entries) and what tapping it does. */
+  mealChecked?: 'all' | 'some' | 'none';
+  onToggleMeal?: () => void;
 }) {
   const t = useTheme();
   const count = entries.length + planned.length;
@@ -230,6 +254,15 @@ export function MealSection({ meal, totals, entries, planned, expanded, onToggle
   return (
     <AppCard padded={false}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: t.space.xs }}>
+        {selectionMode && entries.length && onToggleMeal ? (
+          <Pressable onPress={onToggleMeal} accessibilityRole="checkbox" accessibilityState={{ checked: mealChecked === 'all' ? true : mealChecked === 'some' ? 'mixed' : false }}
+            aria-checked={mealChecked === 'all' ? true : mealChecked === 'some' ? 'mixed' : false}
+            accessibilityLabel={`Select all of ${mealLabel(meal).toLowerCase()}`}
+            style={{ width: t.sizes.touch, height: t.sizes.touch, alignItems: 'center', justifyContent: 'center', marginLeft: t.space.xs }}>
+            {(() => { const Box = mealChecked === 'all' ? SquareCheck : mealChecked === 'some' ? SquareMinus : Square;
+              return <Box size={22} color={mealChecked === 'none' ? t.colors.textSecondary : t.colors.primary} />; })()}
+          </Pressable>
+        ) : null}
         <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded }}
           accessibilityLabel={`${mealLabel(meal)}, ${Math.round(totals)} calories${planned.length ? `, ${planned.length} planned` : ''}`}
           accessibilityHint={expanded ? 'Collapses the meal' : 'Shows the foods in this meal'}

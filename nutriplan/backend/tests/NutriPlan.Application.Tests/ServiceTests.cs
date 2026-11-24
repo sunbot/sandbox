@@ -139,6 +139,24 @@ public class ServiceTests
     }
 
     [Fact]
+    public async Task Bulk_move_can_move_entries_to_another_day_keeping_their_snapshots()
+    {
+        var a = new DiaryEntry(_store.Today, MealSlot.Dinner, ItemSnapshot.QuickCalories("Pasta", 600));
+        var b = new DiaryEntry(_store.Today, MealSlot.Snack, ItemSnapshot.QuickCalories("Cookie", 150));
+        ((IDiaryRepository)_store).Add(a);
+        ((IDiaryRepository)_store).Add(b);
+        var tomorrow = _store.Today.AddDays(1);
+
+        var moved = await Diary().MoveManyAsync(new(_store.Today, [a.Id, b.Id], MealSlot.Lunch, tomorrow));
+
+        Assert.All(moved, e => { Assert.Equal(tomorrow, e.Date); Assert.Equal("Lunch", e.Meal.ToString()); });
+        Assert.Equal(600, a.Item.Nutrients.Calories);
+        Assert.Empty(await ((IDiaryRepository)_store).GetRangeAsync(_store.Today, _store.Today));
+        Assert.Equal(2, (await ((IDiaryRepository)_store).GetRangeAsync(tomorrow, tomorrow)).Count);
+        await Assert.ThrowsAsync<Common.ValidationException>(() => Diary().MoveManyAsync(new(tomorrow, [a.Id], MealSlot.Lunch, tomorrow.AddDays(400))));
+    }
+
+    [Fact]
     public async Task Bulk_move_rejects_more_than_100_entries_before_writing()
     {
         var entry = new DiaryEntry(_store.Today, MealSlot.Breakfast, ItemSnapshot.QuickCalories("Snack", 100));

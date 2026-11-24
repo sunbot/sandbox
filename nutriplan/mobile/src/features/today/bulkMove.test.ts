@@ -28,3 +28,28 @@ test('meals read naturally in a sentence', () => {
   assert.equal(mealInSentence('Snack'), 'snacks');
   assert.equal(mealInSentence('Dinner'), 'dinner');
 });
+
+test('a meal checkbox ticks all its entries, shows "some" when partly ticked, and keeps other meals (#85)', async () => {
+  const { mealSelection, toggleMeal } = await import('./bulkMove.ts');
+  const dinner = [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }];
+  let sel = toggleMeal(dinner, new Set(['l1']));                 // lunch item already ticked
+  assert.equal(mealSelection(dinner, sel), 'all');
+  assert.ok(sel.has('l1'), 'the other meal keeps its selection');
+  sel.delete('d2');
+  assert.equal(mealSelection(dinner, sel), 'some');
+  sel = toggleMeal(dinner, sel);                                 // some → all
+  assert.equal(mealSelection(dinner, sel), 'all');
+  sel = toggleMeal(dinner, sel);                                 // all → none
+  assert.equal(mealSelection(dinner, sel), 'none');
+  assert.deepEqual([...sel], ['l1']);
+});
+
+test('moving to another day is never a no-op, and Undo then sends every entry back', async () => {
+  const { isNoOpMove, undoGroups } = await import('./bulkMove.ts');
+  const e = (id: string, meal: 'Breakfast' | 'Dinner') => ({ id, meal }) as never;
+  const sel = [e('a', 'Dinner'), e('b', 'Dinner')];
+  assert.equal(isNoOpMove(sel, 'Dinner', '2026-11-24', '2026-11-24'), true);
+  assert.equal(isNoOpMove(sel, 'Dinner', '2026-11-25', '2026-11-24'), false);
+  assert.deepEqual(undoGroups(sel, 'Dinner', true), [{ meal: 'Dinner', entryIds: ['a', 'b'] }]);
+  assert.deepEqual(undoGroups(sel, 'Dinner'), []);
+});

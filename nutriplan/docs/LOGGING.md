@@ -108,7 +108,9 @@ Only the confirmed entries are sent to the server, so entries added later are le
 or removed meanwhile, the clear fails as a whole and the diary refreshes. Clearing a logged planned item reopens its plan.
 
 **Selecting entries** (press and hold a food, or **…** → Select entries, which starts with nothing ticked): a bar pinned at the
-bottom shows "N selected · Cancel · Delete · Move". Selection can span meals of the same day. **Move** uses `POST /api/diary/move`;
+bottom shows "✕ · N selected · Delete · Move" on one row. Selection can span meals of the same day; each meal heading gets a
+checkbox that ticks all of its entries (shown as partly ticked when only some are). Move goes to any meal on the same day,
+yesterday, tomorrow or any other day (‹ › steps one day), with Undo putting each entry back on its own day and meal. **Move** uses `POST /api/diary/move`;
 **Delete** asks for confirmation, hides the entries with Undo, and after the Undo window sends one `POST /api/diary/delete`
 (owner-scoped, same date, at most 100, all or nothing; a logged planned item goes back to the plan).
 
@@ -183,7 +185,9 @@ to set is dropped by its own converter. What the web scanner does (pure logic in
    planned items remain, and a logged planned item returns to the plan. Empty meals have no **…** menu. Repeat offline:
    the error is shown and entries return or refresh when connectivity is restored.
 8. Today bulk move: **press and hold** a food (a short vibration): selection starts with it ticked, and a bar pinned at the
-   bottom shows "N selected · Cancel · Delete · Move" while you scroll. **…** → Select entries starts with nothing ticked. A short tap still opens the editor; Android back ends selection.
+   bottom shows "✕ · N selected · Delete · Move" on one row while you scroll (check at the narrowest phone width). Tap a meal's
+   checkbox: all of it is ticked; untick one: the box shows a dash. Move → Tomorrow → Dinner: the foods leave this day and
+   appear tomorrow with the same amounts; Undo brings them back. **…** → Select entries starts with nothing ticked. A short tap still opens the editor; Android back ends selection.
    TalkBack: the row's actions include "Select to move".
    Select foods from at least two different meals (touch and TalkBack: rows read as checkboxes), tap Move: the sheet never
    starts on the meal they're all already in, and choosing that meal disables Move ("already in …"). Move them: date, amounts

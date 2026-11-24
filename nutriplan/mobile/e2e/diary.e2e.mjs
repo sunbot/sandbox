@@ -23,7 +23,7 @@ async function openToday(totals, food = almonds, clear = () => [204], initialEnt
   p.on('pageerror', (e) => errors.push(e.message));
   const calls = await mockApi(p, {
     'GET /api/diary/quick-log': () => [],
-    'GET /api/diary/': () => day(currentEntries, totals),
+    'GET /api/diary/': (c) => day(currentEntries.filter((e) => !e.date || c.path.endsWith(e.date)), totals),
     'GET /api/targets': () => TARGETS,
     'GET /api/foods/f1': () => food,
     'GET /api/nutrients': () => [200, [
@@ -37,7 +37,7 @@ async function openToday(totals, food = almonds, clear = () => [204], initialEnt
     'POST /api/diary/move': (c) => {
       if (moveStatus !== 200) return [moveStatus, { title: 'Could not move entries' }];
       const request = JSON.parse(c.body);
-      currentEntries = currentEntries.map((e) => request.entryIds.includes(e.id) ? { ...e, meal: request.meal } : e);
+      currentEntries = currentEntries.map((e) => request.entryIds.includes(e.id) ? { ...e, meal: request.meal, date: request.toDate ?? e.date } : e);
       return [200, currentEntries.filter((e) => request.entryIds.includes(e.id))];
     },
     'DELETE /api/diary/': () => [204],
@@ -288,7 +288,7 @@ test('moving never defaults to a move that changes nothing, and Undo sends each 
   assert.equal(await p.getByRole('radio', { name: 'Breakfast' }).getAttribute('aria-checked') === 'true'
     || await p.getByRole('radio', { name: 'Breakfast' }).getAttribute('aria-selected') === 'true', false);
   await p.getByRole('radio', { name: 'Breakfast' }).click();
-  await p.getByText('It’s already in breakfast. Pick another meal.').waitFor();
+  await p.getByText('It’s already in breakfast that day. Pick another meal or day.').waitFor();
   assert.ok(await p.getByRole('button', { name: 'Move 1 entry' }).isDisabled());
   await p.getByRole('button', { name: 'Close' }).last().click();
   await p.waitForTimeout(400);
@@ -364,8 +364,45 @@ test('press and hold starts selecting with that food ticked; a short tap still o
   await p.getByText('1 selected').waitFor();
   assert.ok(await p.getByRole('checkbox', { name: /^Almonds/ }).first().isChecked(), 'the held food is ticked');
   assert.equal(await p.getByRole('textbox', { name: 'Amount' }).count(), 0, 'holding does not also open the editor');
-  await p.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await p.getByRole('button', { name: 'Cancel selection' }).click();
   await p.getByText('1 selected').waitFor({ state: 'detached' });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('selection: a meal checkbox selects all (then some), the bar stays on one row, and Move can go to tomorrow (#85)', async () => {
+  const lunch = { ...yogurtEntry, id: 'e3', meal: 'Lunch', item: { ...yogurtEntry.item, name: 'Lentil soup' } };
+  const { ctx, p, calls, errors } = await openToday(undefined, almonds, () => [204], [almondsEntry, yogurtEntry, lunch]);
+  await p.setViewportSize({ width: 360, height: 760 });
+  await holdRow(p, /^Lentil soup/);                                    // lunch item ticked
+  const breakfastBox = p.getByRole('checkbox', { name: 'Select all of breakfast' });
+  await breakfastBox.click();
+  await p.getByText('3 selected').waitFor();
+  assert.equal(await breakfastBox.getAttribute('aria-checked'), 'true');
+  await p.getByRole('checkbox', { name: /^Almonds/ }).first().click();  // untick one: the meal shows "some"
+  await p.getByText('2 selected').waitFor();
+  assert.equal(await breakfastBox.getAttribute('aria-checked'), 'mixed');
+
+  const count = await p.getByText('2 selected').boundingBox();
+  const move = await p.getByRole('button', { name: 'Move', exact: true }).boundingBox();
+  const close = await p.getByRole('button', { name: 'Cancel selection' }).boundingBox();
+  assert.ok(Math.abs(count.y + count.height / 2 - (move.y + move.height / 2)) < 12, 'Move is on the same row as the count');
+  assert.ok(Math.abs(close.y - move.y) < 12 && move.x + move.width <= 360, 'nothing wraps or overflows at 360 px');
+
+  await p.getByRole('button', { name: 'Move', exact: true }).click();
+  await p.getByRole('button', { name: 'Tomorrow' }).click();
+  await p.getByRole('radio', { name: 'Dinner' }).click();
+  await p.getByRole('button', { name: /^Move 2 entries/ }).click();
+  await p.getByText(/Moved 2 entries to dinner on /).waitFor({ timeout: 10000 });
+  const req = JSON.parse(calls.find((c) => c.path === '/api/diary/move').body);
+  const tomorrow = new Date(Date.now() + 864e5); const iso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+  assert.deepEqual(req, { date: today(), entryIds: ['e2', 'e3'], meal: 'Dinner', toDate: iso });
+  await p.getByRole('button', { name: /^Almonds, 28 g/ }).first().waitFor();          // the unticked food stays
+  assert.equal(await p.getByRole('button', { name: /^Lentil soup/ }).count(), 0, 'moved foods left today');
+  await p.getByRole('button', { name: 'Undo' }).click();
+  for (let i = 0; i < 40 && calls.filter((c) => c.path === '/api/diary/move').length < 3; i++) await p.waitForTimeout(100);
+  const undo = calls.filter((c) => c.path === '/api/diary/move').slice(1).map((c) => JSON.parse(c.body));
+  assert.deepEqual(undo.map((u) => [u.date, u.toDate, u.meal, u.entryIds]), [[iso, today(), 'Breakfast', ['e2']], [iso, today(), 'Lunch', ['e3']]]);
   assert.deepEqual(errors, []);
   await ctx.close();
 });

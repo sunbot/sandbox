@@ -4,14 +4,14 @@ import { RefreshControl, ScrollView } from 'react-native-gesture-handler';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarDays, ChevronLeft, ChevronRight, CloudOff, Trash2 } from '@/components/ds/icons';
+import { CalendarDays, ChevronLeft, ChevronRight, CloudOff, Trash2, X } from '@/components/ds/icons';
 import { useClearMeal, useDeleteDiaryEntries, useDeleteEntry, useLogFood, useLogRecipe, useMoveDiaryEntries, usePlanMutations, useUpdateEntry } from '@/api/hooks';
 import type { DiaryEntry, PlanEntry, QuickLogItem } from '@/api/types';
 import { AppText, ConfirmationSheet, EmptyState, FilterChip, IconButton, PrimaryButton, SecondaryButton, useSnackbar } from '@/components/ds';
 import { EntrySheet, type EntryChange, type EntryDraft } from '@/features/today/EntrySheet';
 import { BulkMoveSheet, MealMenuSheet, MealPickerSheet, MealSection, NutrientsCard, NutrientsSheet, QuickActions, RecentFoods, SummaryCard, TodaySkeleton, displayName, type NutrientMode } from '@/features/today/sections';
 import { useTodayData } from '@/features/today/useTodayData';
-import { defaultDestination, isNoOpMove, liveSelection, mealInSentence, undoGroups } from '@/features/today/bulkMove';
+import { dayChoices, defaultDestination, isNoOpMove, liveSelection, mealInSentence, mealSelection, toggleMeal, undoGroups } from '@/features/today/bulkMove';
 import { SwipeGroup } from '@/features/diary/SwipeableDiaryRow';
 import { addDays, dayLabel, fromIsoDate, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -46,6 +46,7 @@ export default function TodayScreen() {
   const [showMoveSheet, setShowMoveSheet] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [moveDestination, setMoveDestination] = useState<Meal>(quickMeal);
+  const [moveDay, setMoveDay] = useState(date); // destination day; the day being viewed unless you pick another
   const [editing, setEditing] = useState<DiaryEntry | null>(null);
   const [drafts, setDrafts] = useState<Record<string, EntryDraft>>({}); // kept if a sheet is dismissed by accident
   const [showNutrients, setShowNutrients] = useState(false);
@@ -137,30 +138,33 @@ export default function TodayScreen() {
 
   const openMoveSheet = useCallback(() => {
     setMoveDestination(defaultDestination(selectedEntries, quickMeal)); // never a move that changes nothing
+    setMoveDay(date);
     setMoveError(null);
     setShowMoveSheet(true);
-  }, [selectedEntries, quickMeal]);
+  }, [selectedEntries, quickMeal, date]);
 
   const moveSelectedEntries = useCallback(async () => {
-    if (!selectedEntries.length || moveEntries.isPending || isNoOpMove(selectedEntries, moveDestination)) return;
+    if (!selectedEntries.length || moveEntries.isPending || isNoOpMove(selectedEntries, moveDestination, moveDay, date)) return;
     const to = moveDestination;
-    const back = undoGroups(selectedEntries, to); // where each entry came from, for Undo
+    const toDay = moveDay;
+    const otherDay = toDay !== date;
+    const back = undoGroups(selectedEntries, to, otherDay); // where each entry came from, for Undo
     const count = back.reduce((n, g) => n + g.entryIds.length, 0);
     try {
-      await moveEntries.mutateAsync({ date, entryIds: selectedEntries.map((e) => e.id), meal: to });
+      await moveEntries.mutateAsync({ date, entryIds: selectedEntries.map((e) => e.id), meal: to, ...(otherDay ? { toDate: toDay } : {}) });
       clearSelection();
       snackbar({
-        message: `Moved ${count} ${count === 1 ? 'entry' : 'entries'} to ${mealInSentence(to)}`,
+        message: `Moved ${count} ${count === 1 ? 'entry' : 'entries'} to ${mealInSentence(to)}${otherDay ? ` on ${dayLabel(toDay)}` : ''}`,
         actionLabel: 'Undo',
         onAction: async () => {
-          try { for (const g of back) await moveEntries.mutateAsync({ date, entryIds: g.entryIds, meal: g.meal }); }
+          try { for (const g of back) await moveEntries.mutateAsync(otherDay ? { date: toDay, entryIds: g.entryIds, meal: g.meal, toDate: date } : { date, entryIds: g.entryIds, meal: g.meal }); }
           catch (e) { snackbar({ message: errorText(e, "Couldn't move them back. Refresh and check the meals.") }); }
         },
       });
     } catch (e) {
       setMoveError(errorText(e, "Couldn't move those entries"));
     }
-  }, [selectedEntries, moveEntries, date, moveDestination, clearSelection, snackbar]);
+  }, [selectedEntries, moveEntries, date, moveDestination, moveDay, clearSelection, snackbar]);
 
   const deleteEntry = useCallback((e: DiaryEntry) => {
     setDrafts(({ [e.id]: _, ...rest }) => rest);
@@ -297,7 +301,8 @@ export default function TodayScreen() {
                 onAdd={() => go('/food/search', m)} onEntry={setEditing} onDeleteEntry={deleteEntry}
                 onMenu={() => setMenuMeal(m)}
                 onLogPlanned={logPlanned} loggingId={loggingId}
-                selectionMode={selectionMode} selectedEntryIds={selectedEntryIds} onToggleSelect={toggleSelectedEntry} onStartSelection={startSelection} />
+                selectionMode={selectionMode} selectedEntryIds={selectedEntryIds} onToggleSelect={toggleSelectedEntry} onStartSelection={startSelection}
+                mealChecked={mealSelection(entries, selectedEntryIds)} onToggleMeal={() => setSelectedEntryIds((cur) => toggleMeal(entries, cur))} />
             );
           })}
         </View>
@@ -334,17 +339,20 @@ export default function TodayScreen() {
         confirmLabel="Delete entries" destructive onConfirm={confirmDeleteSelected} onCancel={() => setDeletingSelected(null)} />
       {selectionMode ? (
         // Pinned while selecting, so Move is always in reach after scrolling down to tick entries in later meals.
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap',
-          paddingHorizontal: t.screenPadding, paddingVertical: t.space.sm, backgroundColor: t.colors.surfaceRaised, borderTopWidth: 1, borderTopColor: t.colors.border }}>
-          <AppText variant="bodyStrong" accessibilityLiveRegion="polite" style={{ flex: 1, minWidth: 90 }}>{selectedEntries.length} selected</AppText>
-          <SecondaryButton label="Cancel" onPress={clearSelection} />
+        // One row on any phone width (#85): close · count · Delete · Move.
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: t.space.xs,
+          paddingLeft: t.space.xs, paddingRight: t.screenPadding, paddingVertical: t.space.sm, backgroundColor: t.colors.surfaceRaised, borderTopWidth: 1, borderTopColor: t.colors.border }}>
+          <IconButton icon={X} label="Cancel selection" onPress={clearSelection} />
+          <AppText variant="bodyStrong" accessibilityLiveRegion="polite" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>{selectedEntries.length} selected</AppText>
           <SecondaryButton label="Delete" icon={Trash2} tone="danger" accessibilityLabel="Delete selected" disabled={selectedEntries.length === 0}
-            onPress={() => setDeletingSelected({ date, entryIds: selectedEntries.map((e) => e.id) })} />
-          <PrimaryButton label="Move" onPress={openMoveSheet} disabled={selectedEntries.length === 0} />
+            onPress={() => setDeletingSelected({ date, entryIds: selectedEntries.map((e) => e.id) })} style={{ paddingHorizontal: t.space.md }} />
+          <PrimaryButton label="Move" onPress={openMoveSheet} disabled={selectedEntries.length === 0} style={{ paddingHorizontal: t.space.lg }} />
         </View>
       ) : null}
       <BulkMoveSheet visible={showMoveSheet} count={selectedEntries.length} meal={moveDestination} error={moveError}
-        alreadyThere={isNoOpMove(selectedEntries, moveDestination)}
+        alreadyThere={isNoOpMove(selectedEntries, moveDestination, moveDay, date)}
+        day={moveDay} days={dayChoices(date, addDays)} onPickDay={(d) => { setMoveDay(d); setMoveError(null); }}
+        dayText={(d) => fromIsoDate(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
         onPick={(meal) => { setMoveDestination(meal); setMoveError(null); }}
         onConfirm={() => { void moveSelectedEntries(); }} onClose={() => setShowMoveSheet(false)} loading={moveEntries.isPending} />
     </View>

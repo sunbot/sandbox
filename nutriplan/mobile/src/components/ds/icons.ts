@@ -70,3 +70,4 @@ export { default as Keyboard } from 'lucide-react-native/icons/keyboard';
 export { default as CameraOff } from 'lucide-react-native/icons/camera-off';
 export { default as Ellipsis } from 'lucide-react-native/icons/ellipsis';
 export { default as ListChecks } from 'lucide-react-native/icons/list-checks';
+export { default as SquareMinus } from 'lucide-react-native/icons/square-minus';

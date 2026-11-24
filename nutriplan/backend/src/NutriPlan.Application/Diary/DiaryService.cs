@@ -40,7 +40,8 @@ public sealed record LogRecipeRequest(DateOnly Date, MealSlot Meal, Guid RecipeI
 
 public sealed record LogQuickRequest(DateOnly Date, MealSlot Meal, string Name, double Calories, double? Protein, double? Carbs, double? Fat);
 
-public sealed record MoveDiaryEntriesRequest(DateOnly Date, IReadOnlyList<Guid>? EntryIds, MealSlot Meal);
+/// <summary>Move entries of <c>Date</c> to <c>Meal</c> on <c>ToDate</c> (default: the same day).</summary>
+public sealed record MoveDiaryEntriesRequest(DateOnly Date, IReadOnlyList<Guid>? EntryIds, MealSlot Meal, DateOnly? ToDate = null);
 
 /// <summary>Delete selected entries of one date (any meals): every entry is removed, or none is.</summary>
 public sealed record DeleteDiaryEntriesRequest(DateOnly Date, IReadOnlyList<Guid>? EntryIds);
@@ -189,7 +190,9 @@ public sealed class DiaryService(
         var entries = (await diary.GetRangeAsync(r.Date, r.Date, ct)).Where(e => requested.Contains(e.Id)).ToList();
         if (entries.Count != requested.Count) throw new NotFoundException("One or more diary entries were not found for that date.");
 
-        foreach (var entry in entries) entry.Move(r.Date, r.Meal);
+        var to = r.ToDate ?? r.Date;
+        if (Math.Abs(to.DayNumber - r.Date.DayNumber) > 366) throw new ValidationException("Move entries by at most a year.");
+        foreach (var entry in entries) entry.Move(to, r.Meal);
         await uow.SaveChangesAsync(ct);
         var byId = entries.ToDictionary(e => e.Id);
         return r.EntryIds.Select(id => DiaryEntryDto.From(byId[id])).ToList();
