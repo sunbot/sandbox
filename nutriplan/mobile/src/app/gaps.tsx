@@ -264,6 +264,8 @@ function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog
 }) {
   const t = useTheme();
   const badges = originBadges(s.reasons);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const isSingle = s.items.length === 1;
   return (
     <AppCard padded={false}>
       <View style={{ padding: t.space.lg, paddingBottom: t.space.sm, gap: t.space.xs }}>
@@ -274,7 +276,7 @@ function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog
         <AppText variant="cardTitle" numberOfLines={3}>{s.items.map(nice).join(' + ')}</AppText>
         <AppText variant="secondary" tone="secondary" numeric>{Math.round(s.adds.calories)} kcal · {fmtAmount(s.adds.protein)} g protein</AppText>
       </View>
-      {s.items.map((it, j) => (
+      {!isSingle ? s.items.map((it, j) => (
         <View key={j} style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.md, minHeight: 52, paddingHorizontal: t.space.lg, paddingVertical: t.space.xs, borderTopWidth: 1, borderTopColor: t.colors.border }}>
           <View style={{ flex: 1, gap: 2 }}>
             <AppText variant="body" numberOfLines={2}>{nice(it)}</AppText>
@@ -282,13 +284,23 @@ function SuggestionCard({ s, meal, added, adding, logged, logging, onPlan, onLog
           </View>
           <AppText variant="bodyStrong" numeric>{Math.round(it.nutrition.calories)}</AppText>
         </View>
-      ))}
+      )) : (
+        <AppText variant="caption" tone="muted" style={{ paddingHorizontal: t.space.lg, paddingBottom: t.space.sm }}>{s.items[0].portion}</AppText>
+      )}
       <View style={{ padding: t.space.lg, paddingTop: t.space.md, gap: t.space.md, borderTopWidth: 1, borderTopColor: t.colors.border }}>
-        <Reasons reasons={s.reasons} />
-        {s.effects.length > 0 ? (
-          <View style={{ gap: 2 }}>
-            <AppText variant="label" tone="muted">AFTER THIS</AppText>
-            {s.effects.map((e) => <AppText key={e.nutrientId} variant="caption" tone="secondary">{effectLine(e)}</AppText>)}
+        <Reasons reasons={s.reasons.filter((r) => !['limit', 'calories'].includes(r.code)).slice(0, 2)} />
+        {s.reasons.length > 2 || s.effects.length > 0 ? (
+          <TextButton label={detailsOpen ? 'Hide nutrition details' : 'View nutrition details'} icon={Info} onPress={() => setDetailsOpen((open) => !open)} />
+        ) : null}
+        {detailsOpen ? (
+          <View style={{ gap: t.space.sm }}>
+            <Reasons reasons={s.reasons} />
+            {s.effects.length > 0 ? (
+              <View style={{ gap: 2 }}>
+                <AppText variant="label" tone="muted">AFTER THIS</AppText>
+                {s.effects.map((e) => <AppText key={e.nutrientId} variant="caption" tone="secondary">{effectLine(e)}</AppText>)}
+              </View>
+            ) : null}
           </View>
         ) : null}
         <PrimaryButton label={added ? 'Planned' : `Plan for ${mealLabel(meal).toLowerCase()}`} icon={added ? Check : CalendarClock}
