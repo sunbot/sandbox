@@ -144,6 +144,8 @@ public static class RecipeEndpoints
         g.MapPost("/{id:guid}/ingredients", (Guid id, AddIngredientRequest r, RecipeService s, CancellationToken ct) => s.AddIngredientAsync(id, r, ct));
         g.MapDelete("/{id:guid}/ingredients/{position:int}", (Guid id, int position, RecipeService s, CancellationToken ct) => s.RemoveIngredientAsync(id, position, ct));
         g.MapPost("/{id:guid}/rematch", (Guid id, RecipeService s, CancellationToken ct) => s.RematchAsync(id, ct));
+        // Preview by default; ?apply=true saves. Only the signed-in user's recipes (owner-scoped repository and query filter).
+        g.MapPost("/rematch-all", (bool? apply, RecipeService s, CancellationToken ct) => s.RematchAllAsync(apply == true, ct));
         g.MapPost("/{id:guid}/scale", (Guid id, ScaleRecipeRequest r, RecipeService s, CancellationToken ct) => s.ScaleAsync(id, r.Factor, ct));
         g.MapPut("/{id:guid}/servings", (Guid id, ServingsRequest r, RecipeService s, CancellationToken ct) => s.SetServingsAsync(id, r.Servings, ct));
         g.MapPost("/import/paprika", async (IFormFile file, RecipeService s, CancellationToken ct) =>

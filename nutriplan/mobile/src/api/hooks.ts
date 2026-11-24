@@ -271,6 +271,11 @@ export function useRecipeMutations() {
     remove: useMutation({ mutationFn: (id: string) => del(`/recipes/${id}`), onSuccess: refresh }),
     setServings: useMutation({ mutationFn: ({ id, servings }: { id: string; servings: number }) => put<T.RecipeDetail>(`/recipes/${id}/servings`, { servings }), onSuccess: refresh }),
     rematch: useMutation({ mutationFn: (id: string) => post<T.RecipeDetail>(`/recipes/${id}/rematch`), onSuccess: refresh }),
+    /** Preview (nothing saved) or apply re-matching every recipe with the current matcher. */
+    rematchAll: useMutation({
+      mutationFn: (apply: boolean) => post<T.RematchAllResult>(`/recipes/rematch-all${apply ? '?apply=true' : ''}`),
+      onSuccess: (r) => { if (r.applied) refresh(); },
+    }),
   };
 }
 

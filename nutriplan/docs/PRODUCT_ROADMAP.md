@@ -133,7 +133,12 @@ Developed on branch `claude/nutrition-meal-planning-app-9e9qj9` (owner testing t
   - "Save and review (N)" saves the idea and opens it straight in Review on the lines to fix.
 - ✅ Coverage, match confidence (share of calories from confirmed/close matches) and nutrient completeness (key nutrients known
   by weight) are reported separately on the recipe screen (`6a1b46d`).
-- ⬜ Re-matching existing recipes with the improved matcher, and backfilling Foundation folate, are data changes: need approval.
+- ✅ Re-match existing recipes (approved by the owner 2026-11-24): Recipes → "Update ingredient matches…" previews what would
+  change, saving nothing, then Apply saves all changed recipes in one save and updates recipes that use them. The owner
+  runs it in the app.
+  - Kept as they are: confirmed or excluded lines, and nested recipe lines; diary and plan snapshots.
+  - Endpoint: `POST /api/recipes/rematch-all[?apply=true]`, owner-scoped.
+- ⬜ Backfilling Foundation folate for already-imported foods is a data change: needs approval.
 - ⬜ Stop for approval before any significant data migration or new external provider.
 
 ## Phase 3 — Food Creation and Nutrition Label OCR · High · Not Started

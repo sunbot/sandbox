@@ -174,6 +174,11 @@ export type Ingredient = {
   foodQuality?: string | null;
 };
 
+/** Re-matching every recipe: a preview (applied=false) or the result. */
+export type RematchLine = { rawText: string; foodBefore?: string | null; foodAfter?: string | null; gramsBefore?: number | null; gramsAfter?: number | null; status: string };
+export type RecipeRematch = { id: string; name: string; kcalPerServingBefore: number; kcalPerServingAfter: number; coverageBefore: number; coverageAfter: number; lines: RematchLine[] };
+export type RematchAllResult = { applied: boolean; recipesChecked: number; changed: RecipeRematch[] };
+
 /** A recipe that uses this one as an ingredient. */
 export type RecipeUse = { id: string; name: string };
 

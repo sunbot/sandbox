@@ -3,10 +3,11 @@ import { FlatList, Pressable, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useRecipeMutations, useRecipes } from '@/api/hooks';
-import { AppCard, AppText, Badge, EmptyState, PrimaryButton, SearchField, SecondaryButton, Skeleton } from '@/components/ds';
+import { AppCard, AppText, Badge, EmptyState, PrimaryButton, SearchField, SecondaryButton, Skeleton, TextButton } from '@/components/ds';
 import { ChefHat, ChevronRight, Download, Plus, Star } from '@/components/ds/icons';
 import { paprikaImportError, urlImportError, type ImportNotice } from '@/features/recipe/importNotice';
 import { RecipeThumb } from '@/features/recipe/RecipeThumb';
+import { RematchAllSheet } from '@/features/recipe/RematchAllSheet';
 import { useServerAuth } from '@/lib/authImage';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -18,6 +19,7 @@ export default function RecipesScreen() {
   const { planDate } = useLocalSearchParams<{ planDate?: string }>();
   const [search, setSearch] = useState('');
   const [url, setUrl] = useState('');
+  const [rematching, setRematching] = useState(false);
   const recipes = useRecipes(search);
   const m = useRecipeMutations();
   const server = useServerAuth();
@@ -76,6 +78,7 @@ export default function RecipesScreen() {
   const list = recipes.data ?? [];
 
   return (
+    <>
     <FlatList
       style={{ flex: 1, backgroundColor: t.colors.background }}
       contentContainerStyle={{ padding: t.screenPadding, gap: t.space.sm, paddingBottom: t.space.huge }}
@@ -110,6 +113,11 @@ export default function RecipesScreen() {
             {noticeBox(fileNotice)}
             <AppText variant="caption" tone="muted">In Paprika: select recipes → Share/Export → Paprika Recipe Format.</AppText>
           </AppCard>
+          {list.length ? (
+            <View style={{ flexDirection: 'row' }}>
+              <TextButton label="Update ingredient matches…" onPress={() => setRematching(true)} />
+            </View>
+          ) : null}
         </View>
       }
       ListEmptyComponent={recipes.isLoading ? <View style={{ gap: t.space.sm }}>{[0, 1, 2].map((i) => <Skeleton key={i} width="100%" height={88} radius={20} />)}</View>
@@ -141,5 +149,7 @@ export default function RecipesScreen() {
         </Pressable>
       )}
     />
+    <RematchAllSheet visible={rematching} onClose={() => setRematching(false)} />
+    </>
   );
 }

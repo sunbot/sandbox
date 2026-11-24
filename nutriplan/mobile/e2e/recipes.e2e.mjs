@@ -101,3 +101,23 @@ test('a nested recipe line reads as your recipe, and a recipe shows where it is 
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('updating ingredient matches shows a preview first and saves only on Apply', async () => {
+  const change = { id: 'chili', name: 'Turkey chili', kcalPerServingBefore: 388, kcalPerServingAfter: 504, coverageBefore: 1, coverageAfter: 1,
+    lines: [{ rawText: '1 can (13.5 oz) coconut milk', foodBefore: 'Coconut milk', foodAfter: 'Nuts, coconut milk, canned', gramsBefore: 382.7, gramsAfter: 382.7, status: 'AutoMatched' }] };
+  const { ctx, p, calls, errors } = await open('/recipes', {
+    'POST /api/recipes/rematch-all': (c) => ({ applied: c.query.get('apply') === 'true', recipesChecked: 2, changed: [change] }),
+  });
+  await p.getByRole('button', { name: 'Update ingredient matches…' }).click();
+  await p.getByText('Checked 2 recipes: 1 would change.', { exact: false }).waitFor({ timeout: 15000 });
+  await p.getByText('388 → 504 kcal per serving').waitFor();
+  await p.getByText(/Coconut milk \(383 g\) → .*canned.* \(383 g\)/i).waitFor();
+  const rematches = () => calls.filter((c) => c.path === '/api/recipes/rematch-all');
+  assert.equal(rematches().length, 1);
+  assert.notEqual(rematches()[0].query.get('apply'), 'true', 'opening only previews');
+  await p.getByRole('button', { name: 'Apply to 1 recipe' }).click();
+  await p.getByText('Updated 1 recipe.', { exact: false }).waitFor();
+  assert.equal(rematches()[1].query.get('apply'), 'true');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

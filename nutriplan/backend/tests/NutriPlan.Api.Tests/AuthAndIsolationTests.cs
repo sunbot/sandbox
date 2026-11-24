@@ -490,6 +490,39 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     }
 
     [PostgresFact]
+    public async Task Rematch_all_preview_saves_nothing_and_only_touches_your_own_recipes()
+    {
+        var a = await NewMember();
+        var b = await NewMember();
+        var recipe = await Json(await a.PostAsJsonAsync("/api/recipes", new { name = "Qzwv bowl", servings = 1, ingredients = new[] { "100 g qzwvberry" } }));
+        var id = (string)recipe["summary"]!["id"]!;
+        Assert.Equal("Unmatched", (string?)recipe["ingredients"]![0]!["status"]);
+        // The food now exists (as an improved matcher would now find it).
+        await a.PostAsJsonAsync("/api/foods", new
+        {
+            name = "Qzwvberry", brand = (string?)null, barcode = (string?)null, servingGrams = 100.0, servingDescription = "100 g",
+            nutrientsPerServing = new Dictionary<string, double> { ["1008"] = 250 },
+        });
+
+        // Another member's re-match neither sees nor changes this recipe.
+        var other = await Json(await b.PostAsync("/api/recipes/rematch-all?apply=true", null));
+        Assert.DoesNotContain(other["changed"]!.AsArray(), c => (string?)c!["id"] == id);
+
+        var preview = await Json(await a.PostAsync("/api/recipes/rematch-all", null));
+        Assert.False((bool)preview["applied"]!);
+        var change = preview["changed"]!.AsArray().Single(c => (string?)c!["id"] == id)!;
+        Assert.Equal(250, (double)change["kcalPerServingAfter"]!);
+        var stillUnmatched = await Json(await a.GetAsync($"/api/recipes/{id}"));
+        Assert.Equal("Unmatched", (string?)stillUnmatched["ingredients"]![0]!["status"]);   // preview wrote nothing
+
+        var applied = await Json(await a.PostAsync("/api/recipes/rematch-all?apply=true", null));
+        Assert.True((bool)applied["applied"]!);
+        var now = await Json(await a.GetAsync($"/api/recipes/{id}"));
+        Assert.Equal("AutoMatched", (string?)now["ingredients"]![0]!["status"]);
+        Assert.Equal(250, (double)now["summary"]!["perServing"]!["calories"]!);
+    }
+
+    [PostgresFact]
     public async Task A_new_member_starts_with_default_targets_not_the_owners()
     {
         (await Owner().PutAsJsonAsync("/api/targets", new { calories = 1666.0 })).EnsureSuccessStatusCode();

@@ -40,6 +40,9 @@ public sealed class RecipeIngredient
 
     public bool IsRecipe => RecipeId is not null;
 
+    /// <summary>An independent copy (for previews that must not touch the stored recipe).</summary>
+    public RecipeIngredient Copy() => (RecipeIngredient)MemberwiseClone();
+
     public bool CountsTowardNutrition => Status is IngredientMatchStatus.AutoMatched or IngredientMatchStatus.Confirmed
                                          && (IsRecipe ? Servings is > 0 : FoodId is not null && Grams is not null);
 

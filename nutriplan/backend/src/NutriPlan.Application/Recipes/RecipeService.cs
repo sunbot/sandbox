@@ -32,6 +32,15 @@ public sealed record RecipeDetailDto(
     IReadOnlyList<IngredientDto> Ingredients, IReadOnlyList<string> Warnings,
     double? FinishedVolumeMl = null, IReadOnlyList<MeasureDto>? Measures = null, NutritionDto? Total = null, IReadOnlyList<RecipeUseDto>? UsedIn = null);
 
+/// <summary>Re-matching all recipes: what changed (or would change) per recipe. <c>Applied</c> is false for a preview.</summary>
+public sealed record RematchAllResultDto(bool Applied, int RecipesChecked, IReadOnlyList<RecipeRematchDto> Changed);
+
+public sealed record RecipeRematchDto(Guid Id, string Name, double KcalPerServingBefore, double KcalPerServingAfter,
+    double CoverageBefore, double CoverageAfter, IReadOnlyList<RematchLineDto> Lines);
+
+/// <summary>One line whose food, amount or status changed.</summary>
+public sealed record RematchLineDto(string RawText, string? FoodBefore, string? FoodAfter, double? GramsBefore, double? GramsAfter, string Status);
+
 /// <summary>A recipe that uses this one as an ingredient.</summary>
 public sealed record RecipeUseDto(Guid Id, string Name);
 
@@ -294,6 +303,54 @@ public sealed partial class RecipeService(
         await uow.SaveChangesAsync(ct);
         return await ToDetailAsync(recipe, ct);
     }
+
+    /// <summary>
+    /// Re-matches every one of your recipes with the current matcher. With <paramref name="apply"/> false nothing is saved:
+    /// it reports what would change. Lines you confirmed or excluded, and lines that are your recipes, are kept; diary and
+    /// plan entries keep their own snapshots. Applying saves every changed recipe in one go and updates the recipes that use them.
+    /// </summary>
+    public async Task<RematchAllResultDto> RematchAllAsync(bool apply, CancellationToken ct = default)
+    {
+        var all = await recipes.ListAsync(null, null, ct);
+        var changes = new List<RecipeRematchDto>();
+        var changed = new List<Recipe>();
+        foreach (var stored in all)
+        {
+            // A preview works on a detached copy, so the stored recipe can't pick up the changes by accident.
+            var recipe = apply ? stored : DetachedCopy(stored);
+            var kcalBefore = stored.NutritionPerServing.Calories;
+            var coverageBefore = stored.NutritionCoverage;
+            var before = recipe.Ingredients.ToDictionary(i => i.Position, i => (i.RawText, i.FoodName, i.Grams, i.Status));
+            recipe.ReparseIngredients();
+            await MatchIngredientsAsync(recipe, onlyUnmatched: false, ct);
+            var lines = recipe.Ingredients
+                .Select(i => (Now: i, Was: before.TryGetValue(i.Position, out var b) && b.RawText == i.RawText ? b : default))
+                .Where(x => x.Was.RawText is null || x.Was.FoodName != x.Now.FoodName || !SameGrams(x.Was.Grams, x.Now.Grams) || x.Was.Status != x.Now.Status)
+                .Select(x => new RematchLineDto(x.Now.RawText, x.Was.FoodName, x.Now.FoodName, x.Was.Grams, x.Now.Grams, x.Now.Status.ToString()))
+                .ToList();
+            var kcalAfter = recipe.NutritionPerServing.Calories;
+            if (lines.Count == 0 && Math.Abs(kcalAfter - kcalBefore) < 0.5) continue;
+            changed.Add(recipe);
+            changes.Add(new RecipeRematchDto(stored.Id, stored.Name, Math.Round(kcalBefore), Math.Round(kcalAfter),
+                Math.Round(coverageBefore, 2), Math.Round(recipe.NutritionCoverage, 2), lines));
+        }
+        if (apply && changed.Count > 0)
+        {
+            await PropagateAsync(changed, ct);
+            await uow.SaveChangesAsync(ct);
+        }
+        // Preview: the in-memory changes are never saved (no SaveChanges in this request).
+        return new RematchAllResultDto(apply && changed.Count > 0, all.Count, changes);
+    }
+
+    private static Recipe DetachedCopy(Recipe r)
+    {
+        var copy = new Recipe(r.Name, r.Servings, r.Origin);
+        copy.ReplaceIngredients(r.Ingredients.Select(i => i.Copy()));
+        return copy;
+    }
+
+    private static bool SameGrams(double? a, double? b) => a is null ? b is null : b is not null && Math.Abs(a.Value - b.Value) < 0.5;
 
     /// <summary>How many servings the whole recipe makes. Per-serving nutrition is recalculated; ingredients don't change.</summary>
     public async Task<RecipeDetailDto> SetServingsAsync(Guid id, double servings, CancellationToken ct = default)

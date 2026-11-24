@@ -73,3 +73,12 @@ it), and a line that is another of your recipes is expanded into that recipe's o
 ## Not yet (later phases)
 
 Automatic matching of ingredient text to your own recipes (you pick them); batch/inventory tracking; recalculating history.
+
+## Updating matches for all recipes
+
+Recipes → **Update ingredient matches…** re-runs the current matcher on every recipe of yours. It first shows a preview, and
+nothing is saved: each recipe that would change, its kcal per serving before → after, and each changed line (food and grams
+before → after). **Apply** saves them all at once and recalculates the recipes that use them.
+- Kept as they are: lines you confirmed or excluded, and lines that are another recipe.
+- Diary and plan entries keep their own snapshots.
+- One recipe at a time: the recipe screen's re-match.

@@ -119,4 +119,37 @@ public class RecipeMatchingTests
         Assert.StartsWith("Sweet potato, raw", ing.FoodName);
         Assert.Equal(260, ing.Grams!.Value, 1);
     }
+
+    [Fact]
+    public async Task Rematch_all_previews_without_saving_then_applies_once_and_keeps_your_confirmed_lines()
+    {
+        // A recipe matched before the canned entry was available: both lines on the drink.
+        var drink = _store.AddFood("Coconut milk", 31, 0.2, 2.9, 2.1, FoodSource.UsdaSurvey, new FoodPortion("cup", 244));
+        var detail = await Recipes().CreateAsync(new SaveRecipeRequest("Curry", 4, ["1 can (13.5 oz) coconut milk", "1 cup coconut milk"], null, null, null, null, null));
+        await Recipes().UpdateIngredientAsync(detail.Summary.Id, 0, new UpdateIngredientRequest(drink.Id, 382.7, null, null, null));
+        await Recipes().UpdateIngredientAsync(detail.Summary.Id, 1, new UpdateIngredientRequest(drink.Id, 244, null, null, null));
+        var recipe = _store.Recipes.Single();
+        // The old matcher's result for line 0, as stored before this phase: auto-matched, not chosen by you.
+        recipe.Ingredients[0].Status = IngredientMatchStatus.AutoMatched;
+        _store.AddFood("Nuts, coconut milk, canned (liquid expressed from grated meat and water)", 197, 2, 2.8, 21.3, FoodSource.UsdaSrLegacy, new FoodPortion("cup", 226));
+        var savesBefore = _store.Saves;
+
+        var preview = await Recipes().RematchAllAsync(apply: false);
+        Assert.False(preview.Applied);
+        var change = Assert.Single(preview.Changed);
+        Assert.True(change.KcalPerServingAfter > change.KcalPerServingBefore, $"{change.KcalPerServingBefore} -> {change.KcalPerServingAfter}; {string.Join(" / ", change.Lines.Select(l => $"{l.RawText}: {l.FoodBefore} {l.GramsBefore} -> {l.FoodAfter} {l.GramsAfter} {l.Status}"))}");
+        var line = Assert.Single(change.Lines);                      // the confirmed line isn't touched
+        Assert.Equal("Coconut milk", line.FoodBefore);
+        Assert.StartsWith("Nuts, coconut milk, canned", line.FoodAfter);
+        Assert.Equal(savesBefore, _store.Saves);                     // a preview saves nothing
+
+        var applied = await Recipes().RematchAllAsync(apply: true);
+        Assert.True(applied.Applied);
+        Assert.Equal(savesBefore + 1, _store.Saves);                 // one save for everything
+        var after = _store.Recipes.Single();
+        Assert.Equal(IngredientMatchStatus.Confirmed, after.Ingredients[1].Status);
+        Assert.Equal("Coconut milk", after.Ingredients[1].FoodName);
+
+        Assert.Empty((await Recipes().RematchAllAsync(apply: false)).Changed); // nothing left to change
+    }
 }
