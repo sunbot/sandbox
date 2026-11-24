@@ -22,7 +22,7 @@ product decision.
 | 1 Unified Recipe System | Awaiting Device Verification |
 | 2 Recipe Editor and Usability | Awaiting Device Verification |
 | 2.5 Food Data Quality Audit and Restaurant Strategy | Implemented (awaiting owner review of findings and strategy) |
-| 2.6 Ingredient Verification and Critical Data Corrections | Not Started |
+| 2.6 Ingredient Verification and Critical Data Corrections | In Progress (branch `claude/nutrition-meal-planning-app-9e9qj9`) |
 | 3 Food Creation and Nutrition Facts OCR | Not Started |
 | 4 Fill the Gaps Improvements | In Progress (earlier work shipped; remaining items not started) |
 | 5 Ask Assistant Improvements | In Progress (earlier work shipped; remaining items not started) |
@@ -113,12 +113,25 @@ imports and no restaurant providers without owner approval.
   estimate distinction.
 - ✅ Only safe read-only audit tooling and tests are implemented in this phase (`scripts/audit/`, `MatchingBenchmark`).
 
-## Phase 2.6 — Ingredient Verification and Critical Data Corrections · High · Not Started
+## Phase 2.6 — Ingredient Verification and Critical Data Corrections · High · In Progress
 
-- ⬜ Use the audit's findings to improve match transparency and fix demonstrated high-impact bugs (each with a regression test).
-- ⬜ For AI-generated and imported recipes: a review showing original ingredient, matched food, source, gram weight,
-  confidence, nutrition contribution and warnings; correction before saving where feasible.
-- ⬜ Report match coverage, confidence and nutrient completeness separately; never imply 100% matching means accurate nutrition.
+Developed on branch `claude/nutrition-meal-planning-app-9e9qj9` (owner testing the merged Copilot work on master first).
+
+- ✅ Demonstrated high-impact bugs fixed, each with a regression test (`78147da`, `17ac02b`):
+  - Recipe matching prefers as-bought SR Legacy/Foundation entries over FNDDS "as eaten"/NFS (logging unchanged).
+  - Coconut milk: canned vs beverage told apart; light coconut milk left unmatched with the reason.
+  - "can"/"canned" in a line searches for the canned food.
+  - A size word never falls back to a package portion.
+  - Foundation total folate imported as DFE when no folic acid can be present.
+  - The 91 skipped Foundation foods are confirmed correct to skip.
+  - Benchmark: `docs/audit/matching_benchmark_2026-11-24.md`.
+- 🟡 Review for imported/AI recipes:
+  - Done: the ingredient sheet already showed the original line, matched food, grams, kcal and warnings, and now also the
+    data source and match certainty (`6a1b46d`).
+  - To do: correction before saving for AI ideas.
+- ✅ Coverage, match confidence (share of calories from confirmed/close matches) and nutrient completeness (key nutrients known
+  by weight) are reported separately on the recipe screen (`6a1b46d`).
+- ⬜ Re-matching existing recipes with the improved matcher, and backfilling Foundation folate, are data changes: need approval.
 - ⬜ Stop for approval before any significant data migration or new external provider.
 
 ## Phase 3 — Food Creation and Nutrition Label OCR · High · Not Started
