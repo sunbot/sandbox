@@ -50,6 +50,9 @@ public static class NutrientIds
     public const int Niacin = 1167;                       // mg
     public const int VitaminB6 = 1175;                    // mg
     public const int Folate = 1190;                       // µg DFE
+    public const int FolateTotal = 1177;                  // µg (Foundation foods report this, not DFE)
+    public const int FolicAcid = 1186;                    // µg (added; counts 1.7× in DFE)
+    public const int FolateFood = 1187;                   // µg (naturally occurring)
     public const int VitaminB12 = 1178;                   // µg
     public const int Choline = 1180;                      // mg
 }

@@ -74,7 +74,8 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         //    FNDDS (survey) files put the legacy nutrient *number* (208 = energy) in nutrient_id; translate those.
         var legacyNumbers = ReadLegacyNutrientNumbers(Path.Combine(folder, "nutrient.csv"));
         var nutrients = new Dictionary<long, Dictionary<int, double>>();
-        var tracked = NutrientCatalog.TrackedIds.Concat([NutrientIds.EnergyAtwaterGeneral, NutrientIds.EnergyAtwaterSpecific, NutrientIds.SugarsTotalNlea]).ToHashSet();
+        var tracked = NutrientCatalog.TrackedIds.Concat([NutrientIds.EnergyAtwaterGeneral, NutrientIds.EnergyAtwaterSpecific, NutrientIds.SugarsTotalNlea,
+            NutrientIds.FolateTotal, NutrientIds.FolicAcid, NutrientIds.FolateFood]).ToHashSet();
         using (var reader = Open(Path.Combine(folder, "food_nutrient.csv")))
         {
             foreach (var row in reader.GetRecords<UsdaFoodNutrientRow>())
@@ -116,7 +117,7 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         {
             var id = fdcId.ToString(CultureInfo.InvariantCulture);
             if (existing.Contains(id)) { skipped++; continue; }
-            if (!nutrients.TryGetValue(fdcId, out var map) || !Normalize(map)) { skipped++; continue; }
+            if (!nutrients.TryGetValue(fdcId, out var map) || !Normalize(map, row.description)) { skipped++; continue; }
 
             branded.TryGetValue(fdcId, out var b);
             var foodPortions = portions.GetValueOrDefault(fdcId) ?? [];
@@ -149,8 +150,23 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
     }
 
     /// <summary>Fills energy/sugar from alternates; returns false if the food has no usable energy value.</summary>
-    public static bool Normalize(Dictionary<int, double> map)
+    public static bool Normalize(Dictionary<int, double> map, string? name = null)
     {
+        // Folate is tracked as DFE (µg dietary folate equivalents = food folate + 1.7 × folic acid). Foundation foods publish
+        // only total folate. Without added folic acid the two are the same, so total folate is used; for an enriched or
+        // fortified food the split isn't known, so folate stays unknown rather than wrong.
+        if (!map.ContainsKey(NutrientIds.Folate))
+        {
+            var folicAcid = map.GetValueOrDefault(NutrientIds.FolicAcid);
+            if (map.TryGetValue(NutrientIds.FolateFood, out var food) && map.ContainsKey(NutrientIds.FolicAcid))
+                map[NutrientIds.Folate] = Math.Round(food + 1.7 * folicAcid, 1);
+            else if (map.TryGetValue(NutrientIds.FolateTotal, out var total) && folicAcid == 0 && !Fortified(name))
+                map[NutrientIds.Folate] = total;
+        }
+        map.Remove(NutrientIds.FolateTotal);
+        map.Remove(NutrientIds.FolicAcid);
+        map.Remove(NutrientIds.FolateFood);
+
         if (!map.ContainsKey(NutrientIds.Energy))
         {
             if (map.TryGetValue(NutrientIds.EnergyAtwaterSpecific, out var s)) map[NutrientIds.Energy] = s;
@@ -165,6 +181,9 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         map.Remove(NutrientIds.SugarsTotalNlea);
         return map.ContainsKey(NutrientIds.Energy);
     }
+
+    private static bool Fortified(string? name) =>
+        name is not null && System.Text.RegularExpressions.Regex.IsMatch(name, @"\b(enriched|fortified)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>"1 cup, chopped" style text from the portion row (unit name + description + modifier).</summary>
     public static string PortionDescription(UsdaPortionRow row, IReadOnlyDictionary<int, string> units)
