@@ -125,10 +125,12 @@ Developed on branch `claude/nutrition-meal-planning-app-9e9qj9` (owner testing t
   - Foundation total folate imported as DFE when no folic acid can be present.
   - The 91 skipped Foundation foods are confirmed correct to skip.
   - Benchmark: `docs/audit/matching_benchmark_2026-11-24.md`.
-- 🟡 Review for imported/AI recipes:
-  - Done: the ingredient sheet already showed the original line, matched food, grams, kcal and warnings, and now also the
-    data source and match certainty (`6a1b46d`).
-  - To do: correction before saving for AI ideas.
+- ✅ Review for imported/AI recipes:
+  - The ingredient sheet shows the original line, matched food, grams, kcal and warnings, plus the data source and match
+    certainty (`6a1b46d`).
+  - AI recipe ideas in Ask list each line as matched before saving: food, grams, kcal, source, certainty, notes, and the three
+    trust measures. Nothing is saved by looking.
+  - "Save and review (N)" saves the idea and opens it straight in Review on the lines to fix.
 - ✅ Coverage, match confidence (share of calories from confirmed/close matches) and nutrient completeness (key nutrients known
   by weight) are reported separately on the recipe screen (`6a1b46d`).
 - ⬜ Re-matching existing recipes with the improved matcher, and backfilling Foundation folate, are data changes: need approval.

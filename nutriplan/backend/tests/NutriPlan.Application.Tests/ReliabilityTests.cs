@@ -310,6 +310,28 @@ public class ReliabilityTests
         Assert.Equal(100, r.FoodMatches[0].Matches[0].Quantity.Grams!.Value, 0);
     }
 
+    private sealed class OneIdea(RecipeIdea idea) : IRecipeIdeaGenerator
+    {
+        public bool IsAvailable => true;
+        public Task<IReadOnlyList<RecipeIdea>> GenerateAsync(string request, int count, string? constraints, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<RecipeIdea>>([idea]);
+    }
+
+    [Fact]
+    public async Task A_recipe_idea_shows_each_line_as_matched_for_review_and_saves_nothing()
+    {
+        _store.AddFood("Nuts, coconut milk, canned (liquid expressed from grated meat and water)", 197, 2, 2.8, 21.3, portions: new FoodPortion("cup", 226));
+        _store.AddFood("Lentils, pink or red, raw", 358, 24, 63, 2.2, portions: new FoodPortion("cup", 192));
+        var idea = new RecipeIdea("Lentil curry", "Quick", 4, ["1 cup red lentils", "1 can (13.5 oz) coconut milk", "1 can light coconut milk"], "Simmer.");
+        var r = await Assistant(null, new OneIdea(idea)).HandleAsync(new AssistantRequest("lentil curry recipe", Sat));
+
+        var lines = Assert.Single(r.RecipeIdeas).Lines!;
+        Assert.Equal(3, lines.Count);
+        Assert.Equal("UsdaSrLegacy", lines[1].FoodSource);
+        Assert.Equal(754, lines[1].Nutrition!.Calories, 0);          // 382.7 g × 197 kcal/100 g, from the stored food
+        Assert.Equal("Unmatched", lines[2].Status);                  // light coconut milk: no USDA entry, not guessed
+        Assert.Empty(_store.Recipes);                                // an idea is only priced, never saved
+    }
+
     private sealed class NoIdeas : IRecipeIdeaGenerator
     {
         public bool IsAvailable => false;
@@ -321,10 +343,10 @@ public class ReliabilityTests
         public Task<string> GetHtmlAsync(Uri url, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
-    private AssistantService Assistant(ILanguageInterpreter? lm)
+    private AssistantService Assistant(ILanguageInterpreter? lm, IRecipeIdeaGenerator? ideas = null)
     {
         var foods = Foods();
-        return new AssistantService(lm ?? new Unavailable(), new NoIdeas(), foods, new Recipes.RecipeService(_store, _store, foods, new NoWeb(), _store),
+        return new AssistantService(lm ?? new Unavailable(), ideas ?? new NoIdeas(), foods, new Recipes.RecipeService(_store, _store, foods, new NoWeb(), _store),
             new Pantry.PantryService(_store, _store, _store, _store), new GapFillService(_store, _store, _store, _store, _store, _store, foods),
             _store, Microsoft.Extensions.Logging.Abstractions.NullLogger<AssistantService>.Instance);
     }

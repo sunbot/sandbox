@@ -6,6 +6,8 @@ import type { AssistantResponse, RecipeIdea, RecipeSummary } from '@/api/types';
 import { AppCard, AppText, PrimaryButton, SecondaryButton } from '@/components/ds';
 import { CalendarClock, Check, Sparkles } from '@/components/ds/icons';
 import { dayLabel, mealForNow, today, type Meal } from '@/lib/format';
+import { friendlyFoodName } from '@/lib/foodName';
+import { ingredientState, matchDetail, recipeTrust, reviewQueue, trustLines } from '@/features/recipe/nutritionView';
 import { useTheme } from '@/theme/ThemeProvider';
 
 const r0 = (n: number) => Math.round(n);
@@ -73,10 +75,14 @@ function IdeaCard({ idea }: { idea: RecipeIdea }) {
   const [open, setOpen] = useState(false);
   const { create } = useRecipeMutations();
   const [error, setError] = useState<string | null>(null);
+  const lines = idea.lines ?? [];
+  const toReview = reviewQueue(lines).length;
+  const trust = lines.length ? trustLines(recipeTrust(lines)) : [];
   const save = async () => {
     try {
       const saved = await create.mutateAsync({ name: idea.name, servings: idea.servings, ingredients: idea.ingredients, directions: idea.directions, description: idea.description });
-      router.push({ pathname: '/recipe/[id]', params: { id: saved.summary.id } });
+      // Lines that need a look: open the saved recipe straight into Review, so they're fixed before it's used.
+      router.push({ pathname: '/recipe/[id]', params: toReview ? { id: saved.summary.id, review: '1' } : { id: saved.summary.id } });
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
   return (
@@ -88,14 +94,29 @@ function IdeaCard({ idea }: { idea: RecipeIdea }) {
       <AppText variant="caption" tone="muted">per serving · {idea.servings} servings · {Math.round(idea.coverage * 100)}% of ingredients matched (USDA data)</AppText>
       {open ? (
         <View style={{ gap: 2, marginTop: t.space.xs }}>
-          {idea.ingredients.map((l, i) => <AppText key={i} variant="secondary">• {l}</AppText>)}
+          {lines.length ? lines.map((l) => {
+            const state = ingredientState(l);
+            if (state === 'header') return <AppText key={l.position} variant="label" tone="secondary">{l.rawText}</AppText>;
+            const result = state === 'unmatched' ? (l.note ?? 'Not matched: not counted')
+              : state === 'excluded' ? (l.note ?? 'Not counted')
+              : `${friendlyFoodName(l.foodName ?? '')}${l.grams != null ? ` · ${Math.round(l.grams)} g` : ''}${l.nutrition ? ` · ${Math.round(l.nutrition.calories)} kcal` : ''}`;
+            const detail = state === 'unmatched' || state === 'excluded' ? null : [matchDetail(l), state === 'check' ? l.note : null].filter(Boolean).join(' · ');
+            return (
+              <View key={l.position} style={{ paddingVertical: 2 }} accessible accessibilityLabel={`${l.rawText}: ${result}${detail ? `. ${detail}` : ''}`}>
+                <AppText variant="secondary">• {l.rawText}</AppText>
+                <AppText variant="caption" tone={state === 'unmatched' || state === 'check' ? 'warning' : 'secondary'} style={{ paddingLeft: t.space.md }}>→ {result}</AppText>
+                {detail ? <AppText variant="caption" tone="muted" style={{ paddingLeft: t.space.md }}>{detail}</AppText> : null}
+              </View>
+            );
+          }) : idea.ingredients.map((l, i) => <AppText key={i} variant="secondary">• {l}</AppText>)}
+          {trust.map((l) => <AppText key={l.label} variant="caption" tone={l.weak ? 'warning' : 'muted'}>{l.label}: {l.value}{l.detail ? `. ${l.detail}` : ''}</AppText>)}
           <AppText variant="secondary" style={{ marginTop: t.space.xs }}>{idea.directions}</AppText>
         </View>
       ) : null}
       {error ? <AppText variant="secondary" tone="error">{error}</AppText> : null}
       <View style={{ flexDirection: 'row', gap: t.space.sm, marginTop: t.space.xs }}>
         <SecondaryButton label={open ? 'Hide' : 'Ingredients'} onPress={() => setOpen(!open)} />
-        <PrimaryButton label="Save recipe" loading={create.isPending} onPress={save} />
+        <PrimaryButton label={toReview ? `Save and review (${toReview})` : 'Save recipe'} loading={create.isPending} onPress={save} />
       </View>
     </AppCard>
   );
