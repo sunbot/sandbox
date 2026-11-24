@@ -48,6 +48,15 @@ public static class GapExplainer
         }
 
         var energy = needs.FirstOrDefault(n => n.NutrientId == NutrientIds.Energy);
+        // Protein pacing: said when this uses a much bigger share of the calories left than of the protein still needed.
+        var protein = needs.FirstOrDefault(n => n.NutrientId == NutrientIds.Protein && n.Kind == TargetKind.Goal && n.Evaluable && n.Remaining > p.OpenNeedShare * n.DailyTarget);
+        if (energy is { Remaining: > 0 } && protein is not null)
+        {
+            var kcalShare = Math.Min(1, added.Calories / energy.Remaining);
+            var proteinShare = Math.Min(1, added.Protein / protein.Remaining);
+            if (kcalShare - proteinShare >= p.ProteinPacingNoteShare)
+                reasons.Add(new("pacing", $"Uses {Math.Round(kcalShare * 100)}% of your remaining calories but only {Math.Round(proteinShare * 100)}% of the {Fmt(protein.Remaining)} g protein still needed", NutrientIds.Protein));
+        }
         if (energy is { Remaining: > 0 })
         {
             var over = added.Calories - energy.Remaining;

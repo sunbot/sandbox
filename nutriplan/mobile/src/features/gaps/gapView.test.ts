@@ -104,5 +104,7 @@ test('a collapsed card shows two gap improvements and never hides a caution (#87
   assert.equal(c.more, true, 'iron and the calorie fit are behind details');
   assert.deepEqual(compactReasons([r('calories', 'About 120 kcal over your remaining 400 kcal')], false).shown.map((x) => x.code), ['calories']);
   assert.equal(compactReasons([r('protein', 'Adds 30 g protein')], false).more, false);
+  assert.deepEqual(compactReasons([r('gap', 'fiber'), r('pacing', 'Uses 80% of your remaining calories but only 10% of the 115 g protein still needed')], false).shown.map((x) => x.code),
+    ['gap', 'pacing'], 'the protein trade-off is always explained');
   assert.equal(compactReasons([r('protein', 'Adds 30 g protein')], true).more, true, 'nutrient effects are details');
 });

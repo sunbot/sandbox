@@ -121,6 +121,10 @@ export const skippedFor = (all: SkippedByMode, mode: GapMode): string[] => all[m
 /** The same map with one filter's skipped list replaced; the other filters' lists are untouched. */
 export const withSkipped = (all: SkippedByMode, mode: GapMode, ids: string[]): SkippedByMode => ({ ...all, [mode]: ids });
 
+/** A reason that warns rather than recommends: a limit it uses up, low protein for its calories, or going over the calories left. */
+export const isCaution = (r: { code: string; text: string }) =>
+  r.code === 'limit' || r.code === 'pacing' || (r.code === 'calories' && /\bover\b/i.test(r.text));
+
 /** Codes that only say where a suggestion comes from (shown as badges, not as reasons). */
 const ORIGIN_CODES = ['favorite', 'recipe', 'pantry', 'frequent'];
 
@@ -131,7 +135,7 @@ const ORIGIN_CODES = ['favorite', 'recipe', 'pantry', 'frequent'];
  */
 export function compactReasons<R extends { code: string; text: string }>(reasons: R[], hasEffects: boolean): { shown: R[]; more: boolean } {
   const helps = reasons.filter((r) => ['protein', 'gap', 'source'].includes(r.code)).slice(0, 2);
-  const cautions = reasons.filter((r) => r.code === 'limit' || (r.code === 'calories' && /\bover\b/i.test(r.text)));
+  const cautions = reasons.filter(isCaution);
   const shown = [...helps, ...cautions];
   const rest = reasons.filter((r) => !shown.includes(r) && !ORIGIN_CODES.includes(r.code));
   return { shown, more: hasEffects || rest.length > 0 };

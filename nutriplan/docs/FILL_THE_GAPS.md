@@ -40,7 +40,13 @@ combined, and a nutrient absent from the logged foods looked like a deficiency.
    day's needs a suggestion of that size is expected to fill, so a snack isn't measured against a whole empty day).
 6. **Ranking:** coverage of the top three needs against the whole gap (capped at what's still needed) + how much of
    the calorie room it uses + familiarity (favorite recipe, pantry, eaten at least 3 times in 90 days, your meal slot,
-   eaten together) - complexity. To show at all, a suggestion must cover at least 25 % of the share of those needs
+   eaten together) - complexity - **protein pacing** (#87). When protein is still a gap, a suggestion that uses a much
+   bigger share of the calories left than of the protein still needed is ranked lower: `ProteinPacingWeight` × (calorie
+   share − protein share) × protein's priority. When the difference is 40 points or more, the card says so as a caution,
+   e.g. "Uses 80% of your remaining calories but only 10% of the 115 g protein still needed". Pacing is a ranking
+   trade-off, not a filter: such a dish is still offered when it helps other gaps. Known: the need score sums every open
+   gap against the top three priorities, so it can exceed 1 when one dish touches many micronutrients. Pacing counters this
+   for protein; the score itself is unchanged, to keep the show/hide threshold stable. To show at all, a suggestion must cover at least 25 % of the share of those needs
    a suggestion of its size is expected to fill, so the list can be shorter than three, or empty. Where something comes
    from ("You eat this often", "Uses food from your pantry") is only claimed for a combination when true of all of it.
 7. **Modes** (`mode=` on `GET /api/plan/gaps`): `BestMatch`, `Meal` (meals only, needs room for one), `QuickSnack`,

@@ -281,11 +281,26 @@ public static class GapRecommender
         // whole gap and on how much of the room it uses, so a meal isn't outranked by a snack just because snacks are small.
         if (NeedScore(added, open, p, scale) < p.MinSuggestionScore) return null;
         var room = Math.Max(1, Math.Min(kcalLeft, p.MaxMealKcal));
-        var score = NeedScore(added, open, p) + p.CalorieFitWeight * Math.Clamp(added.Calories / room, 0, 1) + Preference(items, ctx, p) - p.ComplexityPenalty * (items.Count - 1);
+        var score = NeedScore(added, open, p) + p.CalorieFitWeight * Math.Clamp(added.Calories / room, 0, 1) + Preference(items, ctx, p) - p.ComplexityPenalty * (items.Count - 1)
+            - p.ProteinPacingWeight * ProteinPacingShortfall(added, kcalLeft, open);
 
         var remaining = new NutrientProfile(needs.ToDictionary(n => n.NutrientId, n => n.Remaining - added.Get(n.NutrientId)));
         return new GapSuggestion(items.ToList(), category, added.Rounded(), remaining.Rounded(), score,
             GapExplainer.Reasons(items, added, needs, p, scale), GapExplainer.Effects(added, needs, p));
+    }
+
+    /// <summary>
+    /// How much bigger the share of the calories left is than the share of the protein still needed (0 when protein isn't a
+    /// gap or the suggestion keeps pace), times protein's priority. 828 kcal of 1,038 left with 11 of 115 g protein ≈ 0.7 × 0.9.
+    /// </summary>
+    public static double ProteinPacingShortfall(NutrientProfile added, double kcalLeft, IReadOnlyList<GapTarget> open)
+    {
+        var protein = open.FirstOrDefault(n => n.NutrientId == NutrientIds.Protein);
+        if (protein is null || protein.Remaining <= 0 || protein.DailyTarget <= 0 || kcalLeft <= 0) return 0;
+        var kcalShare = Math.Clamp(added.Calories / kcalLeft, 0, 1);
+        var proteinShare = Math.Clamp(added.Protein / protein.Remaining, 0, 1);
+        var priority = protein.Weight * Math.Min(1, protein.Remaining / protein.DailyTarget);
+        return Math.Max(0, kcalShare - proteinShare) * priority;
     }
 
     private static bool Contributes(NutrientProfile item, IReadOnlyList<GapTarget> open, GapFillPolicy p, double scale = 1) =>

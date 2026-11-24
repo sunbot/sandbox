@@ -5,7 +5,7 @@ import { useGaps, useLogFoods, useLogRecipe, usePlanMutations } from '@/api/hook
 import type { GapItem, GapMode, GapSuggestion, GapSwap, GapTip, GapTipItem } from '@/api/types';
 import { AppCard, AppText, Badge, EmptyState, FilterChip, PrimaryButton, SecondaryButton, Skeleton, TextButton, useSnackbar } from '@/components/ds';
 import { ArrowLeftRight, CalendarClock, CalendarPlus, Check, CircleAlert, CircleCheck, CloudOff, Info, RefreshCw, Sparkles } from '@/components/ds/icons';
-import { calorieHeadline, compactReasons, effectLine, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, rotationState, shortOn, skipShown, skippedFor, suggestionId, withSkipped, type SkippedByMode } from '@/features/gaps/gapView';
+import { calorieHeadline, compactReasons, effectLine, isCaution, emptyCopy, fmtAmount, MODE_LABEL, macroText, modeChips, originBadges, planPayload, rotationState, shortOn, skipShown, skippedFor, suggestionId, withSkipped, type SkippedByMode } from '@/features/gaps/gapView';
 import { friendlyFoodName } from '@/lib/foodName';
 import { addDays, dayLabel, mealForNow, meals, type Meal, today } from '@/lib/format';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -261,7 +261,7 @@ function Reasons({ reasons }: { reasons: { code: string; text: string }[] }) {
     <View style={{ gap: 4 }}>
       {shown.map((r) => {
         // A caution (a limit it uses up, or going over the calories left) never gets a tick.
-        const caution = r.code === 'limit' || (r.code === 'calories' && /\bover\b/i.test(r.text));
+        const caution = isCaution(r);
         const Icon = caution ? CircleAlert : Check;
         return (
         <View key={r.text} style={{ flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' }}>

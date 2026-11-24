@@ -56,6 +56,14 @@ public sealed class GapFillPolicy
     /// <summary>A suggestion must cover at least this much of those needs (0–1+) to be shown at all.</summary>
     public double MinSuggestionScore { get; set; } = 0.25;
     public double CalorieFitWeight { get; set; } = 0.15;
+    /// <summary>
+    /// Protein pacing (#87): when protein is still a gap, a suggestion that uses a bigger share of the calories left than of the
+    /// protein still needed leaves too little room to reach protein later. The ranking loses this weight × (calorie share −
+    /// protein share) × protein's priority. Ranking only: it never hides a suggestion.
+    /// </summary>
+    public double ProteinPacingWeight { get; set; } = 0.6;
+    /// <summary>The pacing shortfall above which the card says so (as a caution).</summary>
+    public double ProteinPacingNoteShare { get; set; } = 0.4;
     public double FavoriteBonus { get; set; } = 0.10;
     public double PantryBonus { get; set; } = 0.08;
     public double FrequentBonus { get; set; } = 0.06;
