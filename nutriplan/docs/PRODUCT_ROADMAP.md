@@ -228,13 +228,19 @@ imports and no restaurant providers without owner approval.
 
 ## Merged from Copilot PRs
 
-Reviewed at the end of Phases 2 and 2.5 (2026-11-23), tested locally with Postgres, then merged into master:
+Reviewed at the end of Phases 2 and 2.5 (2026-11-23, and again 2026-11-24), tested locally with Postgres, then merged into master:
 
 | PR | Feature | Roadmap fit | Notes |
 |---|---|---|---|
 | #65 | Clear a meal (diary): confirm, Undo, planned items reopened | Phase 6 (UX) | atomic; refuses partial deletes if the meal changed; own isolation + Postgres tests |
 | #67 | Remove/restore grocery items (also plan-generated) | Phase 6 (UX) | additive migration `GroceryExclusions` (new owner-scoped table); cross-user and browser tests added at merge |
 | #66 | Move several diary entries to another meal | Phase 6 (UX) | merged later (`bff4a51`) once Copilot finished: 5 conflicts with #65 resolved keeping both; Clear hidden while selecting; a fragile test assertion fixed. UX review fixes (`de30230`): default destination was a no-op, added Undo, pinned action bar, live selection |
+| #83 | Grocery screen survives older/malformed API payloads (#68) | bug fix | `a5b96f7`; `aria-checked` restored and an older-server browser test added (`635e920`) |
+| #78 | Measure list opens in its own sheet, so the editor never jumps (#73) | Phase 1/2 (UX) | `ed2872a`; the #52 browser test rewritten for the sheet (`906b54e`) |
+| #79 | Recipes: website and Paprika imports separated; blocked sites (401/403/429) explained with a manual fallback (#72) | Phase 2 (UX) | `d088221`; merged as is |
+| #80 | Ask: recipe wording ("I would really like…"), margarita→margherita pizza, intent-aware loading text (#71) | Phase 6 (UX) | `99fe930`; fix: a logging sentence mentioning tonight/tomorrow said "Planning that…" |
+| #76 | Targets: preview of the daily calorie range each flexibility setting allows, from the real weekly calculation (#75) | Phase 6 (UX) | `e029004`; fix: NaN/out-of-range preview inputs rejected (tests); lint |
+| #82 | Meal "…" menu (Select entries, Clear meal) and Delete selected (#69) | Phase 6 (UX) | not merged as is (second selection model, one PATCH per entry); rebuilt on master's selection with a new atomic owner-scoped `POST /api/diary/delete` (`0b7a5be`); PR closed with an explanation |
 
 ## Development principles
 

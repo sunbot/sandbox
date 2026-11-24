@@ -7,6 +7,8 @@ stands right now.
 
 - **Current phase:** Phase 2 — Recipe Editor and Usability: Implemented, **Awaiting Device Verification**.
 - **Phase 2.5** (audit and restaurant strategy): Implemented; awaiting owner review of the findings.
+- **Owner testing:** the 2026-11-24 Copilot PR round is on master (and the next APK). Phase 2.6 is developed on branch
+  `claude/nutrition-meal-planning-app-9e9qj9` so master stays testable.
 - **Next action:** Phase 2.6, starting with fixes the audit demonstrated (coconut milk variants; recipe matching preferring
   "as purchased" foods over FNDDS cooked dishes; separate coverage, confidence and completeness), each with a regression
   test, and no data migration. Re-matching existing recipes or adding a restaurant provider needs owner approval.
@@ -28,12 +30,16 @@ stands right now.
 | What | Commit | Result |
 |---|---|---|
 | APK build 23 (`android-latest`) | `c6ba8c0` | ✓ published 2026-11-23 03:02 UTC (APKs are rebuilt only on request) |
+| APK build 25 (`android-latest`) | `287da02` | ✓ published 2026-11-23 (bulk move with review fixes) |
+| APK build 26 (`android-latest`) | master after the 2026-11-24 PR round | requested by the owner; see the increment log |
 
 ## Copilot PRs (checked at the end of Phases 2 and 2.5)
 
 - #65 clear a meal: merged (`176768a`); Android checklist item 7.
 - #67 grocery remove/restore: merged (`eeb4c25`) plus tests (`102cc98`). Production gets a new table via an additive migration on deploy.
 - #66 bulk-move diary entries: merged at the owner's request once Copilot finished (`bff4a51`): conflicts with #65 resolved, Clear hidden while selecting, a fragile test fixed. Android checklist item 8.
+- 2026-11-24 round: #83 (`a5b96f7`), #78 (`ed2872a`), #79 (`d088221`), #80 (`99fe930`), #76 (`e029004`) merged with follow-up
+  fixes/tests; #82 rebuilt on master (`0b7a5be`, new `POST /api/diary/delete`) and closed. Details in the roadmap table.
 
 ## Blockers / safety notes
 
@@ -56,3 +62,6 @@ stands right now.
 - 2026-11-23 — Copilot #66 merged into master (`bff4a51`) after resolving conflicts with #65; all suites pass (backend with Postgres, unit, browser 38).
 - 2026-11-23 — UX review of #66 on master (`de30230`): no-op default destination fixed, Undo added, action bar pinned, stale selections dropped; unit 157, browser 39.
 - 2026-11-23 — Owner feedback: no "Select entries" button; press and hold a food starts selecting (ticked), back gesture ends it, TalkBack "Select to move"; web now publishes checked state. Unit 157, browser 40.
+- 2026-11-24 — Copilot round: #83, #78, #79, #80, #76 merged (fixes: aria-checked, #52 test, log-vs-plan loading text, preview input
+  validation); #82's features rebuilt on master's selection (meal "…" menu, Delete selected via atomic `POST /api/diary/delete`) and the PR
+  closed. Backend 211 domain · 338 app · 63 infra · 14 API (Postgres); app unit 170; browser 46; typecheck, lint ✓.
