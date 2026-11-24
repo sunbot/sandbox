@@ -156,9 +156,10 @@ Developed on branch `claude/nutrition-meal-planning-app-9e9qj9` (owner testing t
 
 ## Phase 4 — Fill the Gaps Improvements · High · In Progress (remaining items Not Started)
 
-- ⬜ Consolidate repeated missing-nutrient warnings.
-- ⬜ Concise nutrition summary.
-- ⬜ Expandable details about incomplete nutrient information.
+- ✅ Consolidate repeated missing-nutrient warnings (one collapsible notice, #89).
+- ✅ Concise suggestion cards; full rationale on demand (#90).
+- ✅ Expandable details about incomplete nutrient information (#89).
+- ✅ Protein pacing in the ranking, with the trade-off stated on the card (#87, `6d3ddd5`).
 - 🟡 Distinguish missing data from confirmed deficiencies (`missingFrom`, minimum "≥" totals exist; UI to clarify).
 - ⬜ Keep calorie and macro targets visible while browsing.
 - 🟡 Recommend individual foods and custom recipes (both supported; nested recipes now included via cached nutrition).
@@ -261,6 +262,9 @@ Reviewed at the end of Phases 2 and 2.5 (2026-11-23, and again 2026-11-24), test
 | #80 | Ask: recipe wording ("I would really like…"), margarita→margherita pizza, intent-aware loading text (#71) | Phase 6 (UX) | `99fe930`; fix: a logging sentence mentioning tonight/tomorrow said "Planning that…" |
 | #76 | Targets: preview of the daily calorie range each flexibility setting allows, from the real weekly calculation (#75) | Phase 6 (UX) | `e029004`; fix: NaN/out-of-range preview inputs rejected (tests); lint |
 | #82 | Meal "…" menu (Select entries, Clear meal) and Delete selected (#69) | Phase 6 (UX) | not merged as is (second selection model, one PATCH per entry); rebuilt on master's selection with a new atomic owner-scoped `POST /api/diary/delete` (`0b7a5be`); PR closed with an explanation |
+| #88 | Remove leftovers planning from the recipe Log or plan card (#86) | Phase 2 (UX) | `e3eb64e`; README updated; browser test |
+| #89 | Fill the Gaps: data limitations collapsed into one notice (#87) | Phase 4 | merged as is |
+| #90 | Fill the Gaps: compact cards, details on demand (#87) | Phase 4 | `304f4ad`; fix: cautions (limits, over calories) never hidden; warning icon; tests |
 
 ## Development principles
 

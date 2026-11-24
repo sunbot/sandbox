@@ -71,3 +71,11 @@ stands right now.
 - 2026-11-24 — Phase 2.6 on its branch: recipe matching as bought, coconut milk variants, canned context, no package for a size
   word (`78147da`); Foundation folate as DFE (`17ac02b`); coverage/confidence/completeness and match source on recipes
   (`6a1b46d`). Backend 212 domain · 354 app · 64 infra · 14 API (Postgres); app unit 174; browser 47; benchmark re-run.
+- 2026-11-24 — PRs #88, #89 and #90 merged with fixes; issues done and closed:
+  - #84 (`78cd508`): search match reasons, focus outline.
+  - #85 (`35c9b70`): meal select-all, one-row bar, move to another day.
+  - #86: leftovers UI removed.
+  - #87 (`6d3ddd5`): protein pacing.
+  - #69: done earlier.
+  - Also on master: re-match all recipes (`2f32c1b`, owner-approved).
+  - Tests: backend 217 domain · 360 app · 64 infra · 15 API (Postgres); app unit 180; browser 53.
