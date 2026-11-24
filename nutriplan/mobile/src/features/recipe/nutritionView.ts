@@ -164,6 +164,94 @@ export function reliabilityNote(coverage: number, counts: IngredientCounts): { l
   return { level: 'partial', text: `Based on ${pct}% of ingredients${parts ? ` (${parts})` : ''}. Totals are minimums until these are fixed.` };
 }
 
+/* ───────── Three separate measures of trust ───────── */
+
+/** Nutrients people check most, with USDA ids. Absent from a food's data = unknown (never zero). */
+export const KEY_NUTRIENTS: { id: number; name: string }[] = [
+  { id: 1079, name: 'fiber' }, { id: 2000, name: 'sugars' }, { id: 1235, name: 'added sugars' }, { id: 1258, name: 'saturated fat' },
+  { id: 1093, name: 'sodium' }, { id: 1114, name: 'vitamin D' }, { id: 1190, name: 'folate' }, { id: 1178, name: 'vitamin B12' },
+];
+
+/** A match you confirmed, or a close automatic one, counts as confident. */
+export const CONFIDENT_MATCH = 0.8;
+
+export type RecipeTrust = {
+  /** Lines with a food and an amount, out of all ingredient lines. */
+  coverage: { counted: number; total: number; percent: number };
+  /** Share of the counted calories that come from confirmed or close matches (a weak match on salt hardly matters; on coconut milk it does). */
+  confidence: { percent: number | null; toCheck: number };
+  /** For each key nutrient, the share of the counted ingredients' weight whose food reports it. */
+  completeness: { complete: number; total: number; partial: { name: string; percent: number }[] };
+};
+
+type TrustInput = Pick<Ingredient, 'status' | 'note' | 'grams' | 'matchConfidence' | 'nutrition'>;
+
+/**
+ * Coverage, confidence and completeness, kept apart: "100% matched" can still be the wrong food, and the right food can
+ * still have no vitamin D data. Pure; computed from the ingredient lines the API returns.
+ */
+export function recipeTrust(ings: TrustInput[]): RecipeTrust {
+  const counts = ingredientCounts(ings);
+  const counted = ings.filter((i) => { const s = ingredientState(i); return s !== 'header' && s !== 'excluded' && s !== 'unmatched' && i.nutrition != null; });
+  const kcal = counted.reduce((n, i) => n + Math.max(0, i.nutrition!.calories), 0);
+  const sure = counted.filter((i) => i.status === 'Confirmed' || i.matchConfidence >= CONFIDENT_MATCH).reduce((n, i) => n + Math.max(0, i.nutrition!.calories), 0);
+  const weight = counted.reduce((n, i) => n + (i.grams ?? 0), 0);
+  const partial: { name: string; percent: number }[] = [];
+  let complete = 0;
+  for (const k of KEY_NUTRIENTS) {
+    if (weight <= 0) break;
+    const known = counted.filter((i) => i.nutrition!.nutrients?.[String(k.id)] != null).reduce((n, i) => n + (i.grams ?? 0), 0);
+    const pct = Math.round((known / weight) * 100);
+    if (pct >= 100) complete += 1; else partial.push({ name: k.name, percent: pct });
+  }
+  return {
+    coverage: { counted: counts.counted, total: counts.total, percent: counts.total ? Math.round((counts.counted / counts.total) * 100) : 0 },
+    confidence: { percent: kcal > 0 ? Math.round((sure / kcal) * 100) : null, toCheck: counts.check },
+    completeness: { complete: weight > 0 ? complete : 0, total: weight > 0 ? KEY_NUTRIENTS.length : 0, partial },
+  };
+}
+
+const DATASET: Record<string, string> = {
+  UsdaFoundation: 'USDA Foundation (lab-analysed)', UsdaSrLegacy: 'USDA SR Legacy', UsdaSurvey: 'USDA FNDDS (food as eaten, often cooked)',
+  UsdaBranded: 'USDA branded label', OpenFoodFacts: 'Open Food Facts (crowd-sourced)', User: 'Your food', Recipe: 'Your recipe',
+};
+
+/** Where a matched food's numbers come from and how sure the match is, in words: "USDA SR Legacy · close match (92%)". */
+export function matchDetail(ing: Pick<Ingredient, 'status' | 'matchConfidence' | 'foodSource'>): string | null {
+  if (!ing.foodSource) return null;
+  const source = DATASET[ing.foodSource] ?? ing.foodSource;
+  const pct = Math.round(ing.matchConfidence * 100);
+  const sure = ing.status === 'Confirmed' ? 'confirmed by you'
+    : ing.matchConfidence >= CONFIDENT_MATCH ? `close match (${pct}%)`
+    : ing.matchConfidence >= 0.5 ? `likely match (${pct}%)` : `weak match (${pct}%)`;
+  return `${source} · ${sure}`;
+}
+
+/** The three measures as short lines for the recipe screen. */
+export function trustLines(tr: RecipeTrust): { label: string; value: string; detail?: string; weak: boolean }[] {
+  const lines: { label: string; value: string; detail?: string; weak: boolean }[] = [
+    { label: 'Ingredients counted', value: `${tr.coverage.counted} of ${tr.coverage.total}`, weak: tr.coverage.counted < tr.coverage.total },
+  ];
+  if (tr.confidence.percent != null) {
+    lines.push({
+      label: 'Food matches',
+      value: `${tr.confidence.percent}% of calories from confirmed or close matches`,
+      detail: tr.confidence.toCheck ? `${tr.confidence.toCheck} to check` : undefined,
+      weak: tr.confidence.percent < 90,
+    });
+  }
+  if (tr.completeness.total > 0) {
+    const missing = tr.completeness.partial.map((p) => `${p.name} ${p.percent}%`).join(', ');
+    lines.push({
+      label: 'Nutrient data',
+      value: `${tr.completeness.complete} of ${tr.completeness.total} key nutrients known for every ingredient`,
+      detail: missing ? `Known for part of the recipe (by weight): ${missing}. Those totals are minimums.` : undefined,
+      weak: tr.completeness.partial.length > 0,
+    });
+  }
+  return lines;
+}
+
 /** Share of the recipe's calories from one ingredient, for the row's secondary read-out. null when unknown. */
 export const calorieShare = (ingredientKcal: number | null | undefined, totalRecipeKcal: number): number | null =>
   ingredientKcal != null && totalRecipeKcal > 0 ? Math.round((ingredientKcal / totalRecipeKcal) * 100) : null;
