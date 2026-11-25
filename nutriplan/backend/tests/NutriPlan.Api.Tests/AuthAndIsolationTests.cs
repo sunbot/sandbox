@@ -523,6 +523,19 @@ public sealed class AuthAndIsolationTests(ApiFixture api) : IClassFixture<ApiFix
     }
 
     [PostgresFact]
+    public async Task Recipe_search_json_says_why_a_recipe_matched_and_lists_name_matches_first()
+    {
+        var a = await NewMember();
+        await a.PostAsJsonAsync("/api/recipes", new { name = "Qzx chipotle chili", servings = 4, ingredients = new[] { "1 lb ground beef", "1 tbsp apple cider vinegar" } });
+        await a.PostAsJsonAsync("/api/recipes", new { name = "Qzx apple crumble", servings = 4, ingredients = new[] { "4 apples" } });
+        var list = (await a.GetFromJsonAsync<JsonArray>("/api/recipes?search=Apple"))!.Where(r => ((string)r!["name"]!).StartsWith("Qzx")).ToList();
+        Assert.Equal(["Qzx apple crumble", "Qzx chipotle chili"], list.Select(r => (string)r!["name"]!));
+        Assert.Null(list[0]!["matchedOn"]);
+        Assert.Equal("Ingredient", (string?)list[1]!["matchedOn"]);
+        Assert.Equal("1 tbsp apple cider vinegar", (string?)list[1]!["matchedText"]);
+    }
+
+    [PostgresFact]
     public async Task A_new_member_starts_with_default_targets_not_the_owners()
     {
         (await Owner().PutAsJsonAsync("/api/targets", new { calories = 1666.0 })).EnsureSuccessStatusCode();
