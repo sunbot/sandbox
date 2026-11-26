@@ -40,6 +40,9 @@ public sealed class RecipeIngredient
 
     public bool IsRecipe => RecipeId is not null;
 
+    /// <summary>You picked this food yourself (even if its amount couldn't be converted yet): re-matching never replaces it.</summary>
+    public bool ChosenByYou { get; set; }
+
     /// <summary>An independent copy (for previews that must not touch the stored recipe).</summary>
     public RecipeIngredient Copy() => (RecipeIngredient)MemberwiseClone();
 
@@ -63,6 +66,7 @@ public sealed class RecipeIngredient
     /// <summary>Points this line at nothing.</summary>
     public void ClearMatch()
     {
+        ChosenByYou = false;
         (FoodId, FoodName, Grams) = (null, null, null);
         (RecipeId, RecipeName, Servings) = (null, null, null);
     }
@@ -189,7 +193,7 @@ public sealed class Recipe : Users.IOwned
     {
         // Matched by text, so a confirmed line keeps its choice even when lines are added or reordered.
         var keep = _ingredients
-            .Where(i => i.Status is IngredientMatchStatus.Confirmed || i.IsRecipe || (i.Status is IngredientMatchStatus.Ignored && i.ResolutionNote == "Excluded by you"))
+            .Where(i => i.Status is IngredientMatchStatus.Confirmed || i.IsRecipe || i.ChosenByYou || (i.Status is IngredientMatchStatus.Ignored && i.ResolutionNote == "Excluded by you"))
             .GroupBy(i => i.RawText)
             .ToDictionary(g => g.Key, g => new Queue<RecipeIngredient>(g.OrderBy(i => i.Position)));
         var source = (lines ?? _ingredients.OrderBy(i => i.Position).Select(i => i.RawText)).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();

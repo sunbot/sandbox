@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useRecipeMutations } from '@/api/hooks';
 import type { RematchAllResult } from '@/api/types';
@@ -17,11 +17,16 @@ export function RematchAllSheet({ visible, onClose }: { visible: boolean; onClos
   const { rematchAll } = useRecipeMutations();
   const [result, setResult] = useState<RematchAllResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [wasVisible, setWasVisible] = useState(visible);
-  if (visible !== wasVisible) {
-    setWasVisible(visible);
-    if (visible) { setResult(null); setError(null); rematchAll.mutate(false, { onSuccess: setResult, onError: (e) => setError(e instanceof Error ? e.message : String(e)) }); }
-  }
+  // The preview is requested once per opening, from an effect (never from render, which React may repeat).
+  const { mutate } = rematchAll;
+  useEffect(() => {
+    if (!visible) return;
+    mutate(false, {
+      onSuccess: (r) => { setError(null); setResult(r); },
+      onError: (e) => { setResult(null); setError(e instanceof Error ? e.message : String(e)); },
+    });
+    return () => { setResult(null); setError(null); };
+  }, [visible, mutate]);
   const apply = () => rematchAll.mutate(true, { onSuccess: setResult, onError: (e) => setError(e instanceof Error ? e.message : String(e)) });
   const changed = result?.changed ?? [];
   const busy = rematchAll.isPending;

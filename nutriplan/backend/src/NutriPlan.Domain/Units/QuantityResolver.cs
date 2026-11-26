@@ -150,11 +150,11 @@ public static partial class QuantityResolver
     private static readonly string[] RegularWords = ["regular", "medium", "standard", "average"];
     private static readonly string[] OddWords = ["snack", "thin", "small", "mini", "miniature", "baby", "crust", "bite", "cocktail", "thick", "large"];
 
-    /// <summary>Portions that are a piece of the food or a different variety, not "one" of it.</summary>
     /// <summary>Packages: a fine "one" for "1 yogurt", never for "1 medium" of something.</summary>
     private static readonly HashSet<string> ContainerWords =
         ["can", "jar", "package", "pkg", "container", "box", "bottle", "bag", "carton", "packet", "pouch", "tub", "tray"];
 
+    /// <summary>Portions that are a piece of the food or a different variety, not "one" of it.</summary>
     private static readonly HashSet<string> PartOrVarietyWords =
         ["slice", "ring", "strip", "wedge", "leaf", "sprig", "grape", "cherry", "plum", "italian", "cube", "floret", "segment", "section", "spear", "stalk", "chopped", "nlea"];
 

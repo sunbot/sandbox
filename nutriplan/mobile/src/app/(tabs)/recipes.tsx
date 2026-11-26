@@ -8,6 +8,7 @@ import { ChefHat, ChevronRight, Download, Plus, Star } from '@/components/ds/ico
 import { paprikaImportError, urlImportError, type ImportNotice } from '@/features/recipe/importNotice';
 import { RecipeThumb } from '@/features/recipe/RecipeThumb';
 import { RematchAllSheet } from '@/features/recipe/RematchAllSheet';
+import { matchNote } from '@/features/foods/foodRows';
 import { useServerAuth } from '@/lib/authImage';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -137,6 +138,7 @@ export default function RecipesScreen() {
                   <AppText variant="secondary" tone="secondary" numeric>
                     {r0(r.perServing.calories)} kcal · P {r0(r.perServing.protein)} · C {r0(r.perServing.carbs)} · F {r0(r.perServing.fat)}
                   </AppText>
+                  {matchNote(r) ? <AppText variant="caption" tone="muted" numberOfLines={2}>{matchNote(r)}</AppText> : null}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' }}>
                     <AppText variant="caption" tone="muted" numberOfLines={1}>per serving · makes {r.servings}{r.categories.length ? ` · ${r.categories.slice(0, 2).join(', ')}` : ''}</AppText>
                     {r.coverage < 0.9 ? <Badge label={`${Math.round(r.coverage * 100)}% matched`} tone="warning" /> : null}

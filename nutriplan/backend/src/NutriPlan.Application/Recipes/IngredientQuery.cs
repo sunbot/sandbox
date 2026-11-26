@@ -195,15 +195,17 @@ public static partial class IngredientQuery
     public static string WithPackagingContext(string query, string? unit, string rawText)
     {
         if (query.Contains("canned", StringComparison.OrdinalIgnoreCase)) return query;
-        var canned = unit is not null && CanUnit().IsMatch(unit) || CannedWord().IsMatch(rawText);
+        // Only packaging: the parsed unit, or an amount followed by can/tin at the start ("1 (14.5 oz) can …"), never
+        // the verb in a note ("2 tbsp olive oil (you can use butter)").
+        var canned = unit is not null && CanUnit().IsMatch(unit) || CannedAmount().IsMatch(rawText);
         return canned ? $"{query} canned" : query;
     }
 
     [GeneratedRegex(@"^\s*cans?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex CanUnit();
 
-    [GeneratedRegex(@"\b(cans?|canned|tinned|tins?)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex CannedWord();
+    [GeneratedRegex(@"^\s*[\d½¼¾⅓⅔.,/\s-]+(?:\([^)]*\)\s*)?(?:cans?|tins?)\b|^\s*(?:canned|tinned)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex CannedAmount();
 
     /// <summary>Recipe wording → USDA wording, or null when no alias applies.</summary>
     public static string? Alias(string foodText)

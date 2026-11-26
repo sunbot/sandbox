@@ -140,7 +140,8 @@ public sealed class AssistantService(
                 {
                     // Planning: your own recipes with that name come first ("plan turkey chili for Friday").
                     var name = string.Join(' ', interpreted.Items.Select(i => i.FoodQuery));
-                    var saved = name.Length < 3 ? [] : (await recipeService.ListAsync(name, null, ct)).Take(3).ToList();
+                    // Only recipes named that way: a recipe that merely contains eggs isn't what "plan eggs" means.
+                    var saved = name.Length < 3 ? [] : (await recipeService.ListAsync(name, null, ct)).Where(r => r.MatchedOn is null).Take(3).ToList();
                     var when = date == today.AddDays(1) ? "tomorrow" : date.ToString("dddd, MMM d");
                     var planReply = (groups.Count, saved.Count) switch
                     {

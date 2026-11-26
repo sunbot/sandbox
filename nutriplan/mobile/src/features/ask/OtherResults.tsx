@@ -6,6 +6,7 @@ import type { AssistantResponse, RecipeIdea, RecipeSummary } from '@/api/types';
 import { AppCard, AppText, PrimaryButton, SecondaryButton } from '@/components/ds';
 import { CalendarClock, Check, Sparkles } from '@/components/ds/icons';
 import { dayLabel, mealForNow, today, type Meal } from '@/lib/format';
+import { matchNote } from '@/features/foods/foodRows';
 import { friendlyFoodName } from '@/lib/foodName';
 import { ingredientState, matchDetail, recipeTrust, reviewQueue, trustLines } from '@/features/recipe/nutritionView';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -55,6 +56,7 @@ function SavedRecipe({ recipe, planning, date, meal }: { recipe: RecipeSummary; 
       <Pressable onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id, planDate: planning ? date : undefined } })} accessibilityRole="button">
         <AppText variant="cardTitle">{recipe.name}</AppText>
         <AppText variant="secondary" tone="secondary" numeric>{macros(recipe.perServing)} · per serving · your recipe</AppText>
+        {matchNote(recipe) ? <AppText variant="caption" tone="muted">{matchNote(recipe)}</AppText> : null}
       </Pressable>
       {planning ? (
         <View style={{ alignSelf: 'flex-start', gap: t.space.xs }}>

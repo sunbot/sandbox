@@ -78,6 +78,9 @@ public class RecipeMatchingTests
     [InlineData("black beans", "can", "1 can black beans, drained", "black beans canned")]
     [InlineData("diced tomatoes", "oz", "1 (14.5 oz) can diced tomatoes", "diced tomatoes canned")]
     [InlineData("tomatoes", null, "2 tomatoes, diced", "tomatoes")]
+    [InlineData("olive oil", "tbsp", "2 tbsp olive oil (you can use butter)", "olive oil")]   // the verb in a note isn't packaging
+    [InlineData("honey", "tbsp", "1 tbsp honey, or as much as you can", "honey")]
+    [InlineData("chickpeas", null, "canned chickpeas, drained", "chickpeas canned")]
     [InlineData("nuts coconut milk canned", "can", "1 can coconut milk", "nuts coconut milk canned")]
     public void A_can_in_the_line_searches_for_the_canned_food(string query, string? unit, string raw, string expected) =>
         Assert.Equal(expected, IngredientQuery.WithPackagingContext(query, unit, raw));
@@ -131,6 +134,7 @@ public class RecipeMatchingTests
         var recipe = _store.Recipes.Single();
         // The old matcher's result for line 0, as stored before this phase: auto-matched, not chosen by you.
         recipe.Ingredients[0].Status = IngredientMatchStatus.AutoMatched;
+        recipe.Ingredients[0].ChosenByYou = false;
         _store.AddFood("Nuts, coconut milk, canned (liquid expressed from grated meat and water)", 197, 2, 2.8, 21.3, FoodSource.UsdaSrLegacy, new FoodPortion("cup", 226));
         var savesBefore = _store.Saves;
 
@@ -151,5 +155,58 @@ public class RecipeMatchingTests
         Assert.Equal("Coconut milk", after.Ingredients[1].FoodName);
 
         Assert.Empty((await Recipes().RematchAllAsync(apply: false)).Changed); // nothing left to change
+    }
+
+    [Fact]
+    public async Task Rematch_all_preview_includes_recipes_that_change_through_a_sub_recipe_and_apply_writes_only_those()
+    {
+        // A sauce matched to the coconut drink before the canned entry existed, used by a curry; a third recipe is unaffected.
+        var drink = _store.AddFood("Coconut milk", 31, 0.2, 2.9, 2.1, FoodSource.UsdaSurvey, new FoodPortion("cup", 244));
+        var oats = _store.AddFood("Oats", 380, 13, 68, 7, FoodSource.UsdaSrLegacy, new FoodPortion("cup", 81));
+        var sauce = await Recipes().CreateAsync(new SaveRecipeRequest("Coconut sauce", 2, ["1 can (13.5 oz) coconut milk"], null, null, null, null, null));
+        var s = _store.Recipes.Single(r => r.Id == sauce.Summary.Id);
+        s.Ingredients[0].FoodId = drink.Id; s.Ingredients[0].FoodName = drink.Name; s.Ingredients[0].Grams = 382.7;
+        s.Ingredients[0].Status = IngredientMatchStatus.AutoMatched; s.Ingredients[0].MatchConfidence = 1;
+        var curry = await Recipes().CreateAsync(new SaveRecipeRequest("Curry", 4, ["2 servings coconut sauce"], null, null, null, null, null));
+        await Recipes().UpdateIngredientAsync(curry.Summary.Id, 0, new UpdateIngredientRequest(null, null, null, null, null) { RecipeId = sauce.Summary.Id, Servings = 2 });
+        // Bring stored numbers to the "old matcher" state.
+        await Recipes().UpdateIngredientAsync(sauce.Summary.Id, 0, new UpdateIngredientRequest(drink.Id, 382.7, null, null, null));
+        s.Ingredients[0].Status = IngredientMatchStatus.AutoMatched; s.Ingredients[0].ChosenByYou = false;
+        await Recipes().CreateAsync(new SaveRecipeRequest("Porridge", 1, ["1 cup oats"], null, null, null, null, null));
+        var porridge = _store.Recipes.Single(r => r.Name == "Porridge");
+        var porridgeTouched = porridge.UpdatedAt;
+        _store.AddFood("Nuts, coconut milk, canned (liquid expressed from grated meat and water)", 197, 2, 2.8, 21.3, FoodSource.UsdaSrLegacy, new FoodPortion("cup", 226));
+        var curryKcalBefore = _store.Recipes.Single(r => r.Name == "Curry").NutritionPerServing.Calories;
+        var saves = _store.Saves;
+
+        var preview = await Recipes().RematchAllAsync(apply: false);
+        Assert.Equal(saves, _store.Saves);
+        Assert.Equal(["Coconut sauce", "Curry"], preview.Changed.Select(c => c.Name).Order());
+        var curryChange = preview.Changed.Single(c => c.Name == "Curry");
+        Assert.Empty(curryChange.Lines);                                         // changed only through the sauce
+        Assert.True(curryChange.KcalPerServingAfter > curryChange.KcalPerServingBefore);
+        Assert.Equal(curryKcalBefore, _store.Recipes.Single(r => r.Name == "Curry").NutritionPerServing.Calories); // nothing touched
+
+        var applied = await Recipes().RematchAllAsync(apply: true);
+        Assert.Equal(preview.Changed.Select(c => (c.Name, c.KcalPerServingAfter)).Order(), applied.Changed.Select(c => (c.Name, c.KcalPerServingAfter)).Order());
+        Assert.Equal(curryChange.KcalPerServingAfter, Math.Round(_store.Recipes.Single(r => r.Name == "Curry").NutritionPerServing.Calories));
+        Assert.Equal(porridgeTouched, porridge.UpdatedAt);                      // an unchanged recipe isn't rewritten
+        Assert.Empty((await Recipes().RematchAllAsync(apply: false)).Changed);
+    }
+
+    [Fact]
+    public async Task A_food_you_chose_whose_amount_cannot_be_converted_is_never_replaced_by_rematching()
+    {
+        var kale = _store.AddFood("Kale, raw", 35, 2.9, 4.4, 1.5, FoodSource.UsdaSrLegacy, new FoodPortion("cup, chopped", 21));
+        var detail = await Recipes().CreateAsync(new SaveRecipeRequest("Greens", 2, ["1 bunch kale"], null, null, null, null, null));
+        await Recipes().UpdateIngredientAsync(detail.Summary.Id, 0, new UpdateIngredientRequest(kale.Id, null, null, null, null));
+        var line = _store.Recipes.Single().Ingredients[0];
+        Assert.Null(line.Grams);                                                 // "bunch" can't be converted: still to check
+        Assert.True(line.ChosenByYou);
+        _store.AddFood("Kale, frozen, unprepared", 28, 2.7, 4.9, 0.5, FoodSource.UsdaSrLegacy, new FoodPortion("bunch", 170));
+
+        await Recipes().RematchAllAsync(apply: true);
+        await Recipes().RematchAsync(detail.Summary.Id);
+        Assert.Equal(kale.Id, _store.Recipes.Single().Ingredients[0].FoodId);
     }
 }

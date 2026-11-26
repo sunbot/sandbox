@@ -332,6 +332,18 @@ public class ReliabilityTests
         Assert.Empty(_store.Recipes);                                // an idea is only priced, never saved
     }
 
+    [Fact]
+    public async Task Planning_a_food_offers_only_recipes_named_for_it_not_every_recipe_that_contains_it()
+    {
+        _store.AddFood("Egg, whole, raw", 143, 12.6, 0.7, 9.5, portions: new FoodPortion("large", 50));
+        var bread = new Domain.Recipes.Recipe("Banana bread", 8);
+        bread.SetIngredientLines(["3 bananas", "2 eggs"]);
+        _store.Recipes.Add(bread);
+        var r = await Assistant(null).HandleAsync(new AssistantRequest("plan eggs for friday dinner", Sat));
+        Assert.Equal("PlanMeal", r.Intent);
+        Assert.Empty(r.SavedRecipes);                                   // "Banana bread" has eggs, but isn't what was asked for
+    }
+
     private sealed class NoIdeas : IRecipeIdeaGenerator
     {
         public bool IsAvailable => false;

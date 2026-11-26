@@ -75,9 +75,17 @@ public class ParsingTests
     {
         // Foundation foods publish total folate (1177), never DFE (1190).
         var spinach = new Dictionary<int, double> { [NutrientIds.Energy] = 23, [NutrientIds.FolateTotal] = 194 };
-        UsdaImporter.Normalize(spinach, "Spinach, mature, raw");
+        UsdaImporter.Normalize(spinach, "Spinach, mature, raw", "Vegetables and Vegetable Products");
         Assert.Equal(194, spinach[NutrientIds.Folate]);
         Assert.False(spinach.ContainsKey(NutrientIds.FolateTotal));
+
+        // A grain product may be enriched even when its name doesn't say so: unknown, not total folate.
+        var bread = new Dictionary<int, double> { [NutrientIds.Energy] = 270, [NutrientIds.FolateTotal] = 120 };
+        UsdaImporter.Normalize(bread, "Bread, white, commercial", "Baked Products");
+        Assert.False(bread.ContainsKey(NutrientIds.Folate));
+        var nocategory = new Dictionary<int, double> { [NutrientIds.Energy] = 100, [NutrientIds.FolateTotal] = 50 };
+        UsdaImporter.Normalize(nocategory, "Something", null);
+        Assert.False(nocategory.ContainsKey(NutrientIds.Folate));
 
         // Enriched or fortified: part of the total is folic acid (1.7× in DFE) in an unknown share, so it stays unknown.
         var flour = new Dictionary<int, double> { [NutrientIds.Energy] = 364, [NutrientIds.FolateTotal] = 291 };

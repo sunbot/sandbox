@@ -299,6 +299,7 @@ public sealed partial class RecipeService(
             }
             if (grams is > MaxIngredientGrams) throw new ValidationException($"That's more than {MaxIngredientGrams / 1000:0} kg for one ingredient. Check the amount.");
             ing.UseFood(food.Id, food.DisplayName, grams);
+            ing.ChosenByYou = true;
             if (r.Amount is not null) (ing.Amount, ing.Unit) = (r.Amount, r.Unit);
             ing.Status = grams is null ? IngredientMatchStatus.AutoMatched : IngredientMatchStatus.Confirmed;
             ing.MatchConfidence = 1;
@@ -319,47 +320,77 @@ public sealed partial class RecipeService(
     }
 
     /// <summary>
-    /// Re-matches every one of your recipes with the current matcher. With <paramref name="apply"/> false nothing is saved:
-    /// it reports what would change. Lines you confirmed or excluded, and lines that are your recipes, are kept; diary and
-    /// plan entries keep their own snapshots. Applying saves every changed recipe in one go and updates the recipes that use them.
+    /// Re-matches every one of your recipes with the current matcher. Everything is worked out on copies first, recipes used
+    /// inside other recipes included, so the preview (<paramref name="apply"/> false) shows exactly what Apply saves, and
+    /// Apply writes only the recipes it lists. Lines you confirmed, excluded or chose yourself, and lines that are your
+    /// recipes, are kept. Diary and plan entries keep their own snapshots.
     /// </summary>
     public async Task<RematchAllResultDto> RematchAllAsync(bool apply, CancellationToken ct = default)
     {
         var all = await recipes.ListAsync(null, null, ct);
+        var copies = all.ToDictionary(r => r.Id, DetachedCopy);   // keyed by the stored id, which nested lines refer to
+        var cache = new Dictionary<string, List<RankedFood>>(StringComparer.OrdinalIgnoreCase); // "salt" is searched once, not per recipe
+        foreach (var copy in copies.Values)
+        {
+            copy.ReparseIngredients();
+            await MatchIngredientsAsync(copy, onlyUnmatched: false, ct, cache);
+        }
+        // Innermost recipes first, so a sauce's new numbers reach the lasagne that uses it.
+        var nutrition = new Dictionary<Guid, RecipeNutrition>();
+        foreach (var id in InnermostFirst(copies))
+            nutrition[id] = await RecalculateNestedAsync(copies[id], copies, ct);
+
         var changes = new List<RecipeRematchDto>();
         var changed = new List<Recipe>();
         foreach (var stored in all)
         {
-            // A preview works on a detached copy, so the stored recipe can't pick up the changes by accident.
-            var recipe = apply ? stored : DetachedCopy(stored);
-            var kcalBefore = stored.NutritionPerServing.Calories;
-            var coverageBefore = stored.NutritionCoverage;
-            var before = recipe.Ingredients.ToDictionary(i => i.Position, i => (i.RawText, i.FoodName, i.Grams, i.Status));
-            recipe.ReparseIngredients();
-            await MatchIngredientsAsync(recipe, onlyUnmatched: false, ct);
-            var lines = recipe.Ingredients
+            var copy = copies[stored.Id];
+            var before = stored.Ingredients.ToDictionary(i => i.Position, i => (i.RawText, i.FoodName, i.Grams, i.Status));
+            var lines = copy.Ingredients
                 .Select(i => (Now: i, Was: before.TryGetValue(i.Position, out var b) && b.RawText == i.RawText ? b : default))
                 .Where(x => x.Was.RawText is null || x.Was.FoodName != x.Now.FoodName || !SameGrams(x.Was.Grams, x.Now.Grams) || x.Was.Status != x.Now.Status)
                 .Select(x => new RematchLineDto(x.Now.RawText, x.Was.FoodName, x.Now.FoodName, x.Was.Grams, x.Now.Grams, x.Now.Status.ToString()))
                 .ToList();
-            var kcalAfter = recipe.NutritionPerServing.Calories;
-            if (lines.Count == 0 && Math.Abs(kcalAfter - kcalBefore) < 0.5) continue;
-            changed.Add(recipe);
+            var kcalBefore = stored.NutritionPerServing.Calories;
+            var kcalAfter = copy.NutritionPerServing.Calories;
+            if (lines.Count == 0 && Math.Abs(kcalAfter - kcalBefore) < 0.5 && Math.Abs(copy.NutritionCoverage - stored.NutritionCoverage) < 0.005) continue;
+            changed.Add(stored);
             changes.Add(new RecipeRematchDto(stored.Id, stored.Name, Math.Round(kcalBefore), Math.Round(kcalAfter),
-                Math.Round(coverageBefore, 2), Math.Round(recipe.NutritionCoverage, 2), lines));
+                Math.Round(stored.NutritionCoverage, 2), Math.Round(copy.NutritionCoverage, 2), lines));
         }
         if (apply && changed.Count > 0)
         {
-            await PropagateAsync(changed, ct);
+            // Only what was listed is written: the recipes with a change get the copy's lines and numbers.
+            foreach (var stored in changed)
+            {
+                stored.ReplaceIngredients(copies[stored.Id].Ingredients.Select(i => i.Copy()));
+                stored.ApplyNutrition(nutrition[stored.Id]);
+            }
             await uow.SaveChangesAsync(ct);
         }
-        // Preview: the in-memory changes are never saved (no SaveChanges in this request).
         return new RematchAllResultDto(apply && changed.Count > 0, all.Count, changes);
+    }
+
+    /// <summary>Recipe ids ordered so every recipe comes after the recipes it uses (loops are refused on save, but are tolerated here).</summary>
+    private static List<Guid> InnermostFirst(IReadOnlyDictionary<Guid, Recipe> byId)
+    {
+        var order = new List<Guid>();
+        var state = new Dictionary<Guid, bool>(); // false = visiting, true = done
+        void Visit(Guid id)
+        {
+            if (state.TryGetValue(id, out _) || !byId.TryGetValue(id, out var r)) return;
+            state[id] = false;
+            foreach (var sub in r.SubRecipeIds) Visit(sub);
+            state[id] = true;
+            order.Add(id);
+        }
+        foreach (var id in byId.Keys) Visit(id);
+        return order;
     }
 
     private static Recipe DetachedCopy(Recipe r)
     {
-        var copy = new Recipe(r.Name, r.Servings, r.Origin);
+        var copy = new Recipe(r.Name, r.Servings, r.Origin) { CookedWeightGrams = r.CookedWeightGrams, FinishedVolumeMl = r.FinishedVolumeMl };
         copy.ReplaceIngredients(r.Ingredients.Select(i => i.Copy()));
         return copy;
     }
@@ -489,7 +520,7 @@ public sealed partial class RecipeService(
 
         foreach (var ing in recipe.Ingredients)
         {
-            if (ing.Status is IngredientMatchStatus.Ignored or IngredientMatchStatus.Confirmed) continue;
+            if (ing.Status is IngredientMatchStatus.Ignored or IngredientMatchStatus.Confirmed || ing.ChosenByYou) continue;
             if (ing.IsRecipe) continue; // one of your recipes, chosen by you: never re-matched to a food
             if (onlyUnmatched && ing.Status == IngredientMatchStatus.AutoMatched && ing.Grams is not null) continue;
 
@@ -648,27 +679,38 @@ public sealed partial class RecipeService(
         foreach (var id in order)
         {
             if (!byId.TryGetValue(id, out var parent)) continue;
-            foreach (var ing in parent.Ingredients.Where(i => i.IsRecipe && i.Status != IngredientMatchStatus.Ignored))
-            {
-                if (!byId.TryGetValue(ing.RecipeId!.Value, out var sub)) continue;
-                ing.RecipeName = sub.Name;
-                var a = ing.Amount is { } amt ? RecipeMeasures.Resolve(sub, amt, ing.Unit) : null;
-                if (a is { IsResolved: true }) (ing.Servings, ing.Grams) = (Math.Round(a.Servings!.Value, 4), a.Grams is { } g ? Math.Round(g, 2) : null);
-                else if (a is not null)
-                {
-                    // Given by weight/volume, and the recipe no longer has that finished weight/volume: don't keep counting
-                    // an old conversion silently. The line stops counting until you choose an amount (shown as "check").
-                    (ing.Servings, ing.Grams) = (null, null);
-                    ing.Status = IngredientMatchStatus.AutoMatched;
-                    ing.MatchConfidence = 0;
-                    ing.ResolutionNote = $"{a.Explanation} Choose an amount for this line.";
-                }
-                else ing.Grams = ing.Servings is { } sv && sub.GramsPerServing is { } gps ? Math.Round(sv * gps, 2) : null;
-            }
-            var foodMap = await foods.GetManyAsync(parent.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
-            parent.ReplaceIngredients(parent.Ingredients.ToList()); // marks the changed ingredient list for saving
-            parent.ApplyNutrition(RecipeNutritionCalculator.Calculate(parent, foodMap, byId));
+            await RecalculateNestedAsync(parent, byId, ct);
         }
+    }
+
+    /// <summary>
+    /// A recipe's nested lines brought up to date with the recipes they use (name, servings and grams from their current
+    /// finished weight/volume), then its nutrition recalculated from <paramref name="byId"/>. Returns the nutrition applied.
+    /// </summary>
+    private async Task<RecipeNutrition> RecalculateNestedAsync(Recipe parent, IReadOnlyDictionary<Guid, Recipe> byId, CancellationToken ct)
+    {
+        foreach (var ing in parent.Ingredients.Where(i => i.IsRecipe && i.Status != IngredientMatchStatus.Ignored))
+        {
+            if (!byId.TryGetValue(ing.RecipeId!.Value, out var sub)) continue;
+            ing.RecipeName = sub.Name;
+            var a = ing.Amount is { } amt ? RecipeMeasures.Resolve(sub, amt, ing.Unit) : null;
+            if (a is { IsResolved: true }) (ing.Servings, ing.Grams) = (Math.Round(a.Servings!.Value, 4), a.Grams is { } g ? Math.Round(g, 2) : null);
+            else if (a is not null)
+            {
+                // Given by weight/volume, and the recipe no longer has that finished weight/volume: don't keep counting
+                // an old conversion silently. The line stops counting until you choose an amount (shown as "check").
+                (ing.Servings, ing.Grams) = (null, null);
+                ing.Status = IngredientMatchStatus.AutoMatched;
+                ing.MatchConfidence = 0;
+                ing.ResolutionNote = $"{a.Explanation} Choose an amount for this line.";
+            }
+            else ing.Grams = ing.Servings is { } sv && sub.GramsPerServing is { } gps ? Math.Round(sv * gps, 2) : null;
+        }
+        var foodMap = await foods.GetManyAsync(parent.Ingredients.Where(i => i.FoodId is not null).Select(i => i.FoodId!.Value), ct);
+        parent.ReplaceIngredients(parent.Ingredients.ToList()); // marks the changed ingredient list for saving
+        var n = RecipeNutritionCalculator.Calculate(parent, foodMap, byId);
+        parent.ApplyNutrition(n);
+        return n;
     }
 
     private static double? Positive(double? value, string what) => value switch

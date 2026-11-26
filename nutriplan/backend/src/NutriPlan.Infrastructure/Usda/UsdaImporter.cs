@@ -117,7 +117,8 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         {
             var id = fdcId.ToString(CultureInfo.InvariantCulture);
             if (existing.Contains(id)) { skipped++; continue; }
-            if (!nutrients.TryGetValue(fdcId, out var map) || !Normalize(map, row.description)) { skipped++; continue; }
+            var usdaCategory = row.food_category_id is { } fc && categories.TryGetValue(fc, out var fcName) ? fcName : null;
+            if (!nutrients.TryGetValue(fdcId, out var map) || !Normalize(map, row.description, usdaCategory)) { skipped++; continue; }
 
             branded.TryGetValue(fdcId, out var b);
             var foodPortions = portions.GetValueOrDefault(fdcId) ?? [];
@@ -150,7 +151,7 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
     }
 
     /// <summary>Fills energy/sugar from alternates; returns false if the food has no usable energy value.</summary>
-    public static bool Normalize(Dictionary<int, double> map, string? name = null)
+    public static bool Normalize(Dictionary<int, double> map, string? name = null, string? category = null)
     {
         // Folate is tracked as DFE (µg dietary folate equivalents = food folate + 1.7 × folic acid). Foundation foods publish
         // only total folate. Without added folic acid the two are the same, so total folate is used; for an enriched or
@@ -160,7 +161,10 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
             var folicAcid = map.GetValueOrDefault(NutrientIds.FolicAcid);
             if (map.TryGetValue(NutrientIds.FolateFood, out var food) && map.ContainsKey(NutrientIds.FolicAcid))
                 map[NutrientIds.Folate] = Math.Round(food + 1.7 * folicAcid, 1);
-            else if (map.TryGetValue(NutrientIds.FolateTotal, out var total) && folicAcid == 0 && !Fortified(name))
+            // Folic acid not reported doesn't mean none: only foods of a kind that is never enriched (fresh produce, meat,
+            // fish, dairy, nuts, legumes, oils, spices) are taken as having none. Grains, cereals, baked goods, snacks and
+            // mixed products stay unknown.
+            else if (map.TryGetValue(NutrientIds.FolateTotal, out var total) && folicAcid == 0 && !Fortified(name) && NeverEnriched(category))
                 map[NutrientIds.Folate] = total;
         }
         map.Remove(NutrientIds.FolateTotal);
@@ -181,6 +185,15 @@ public sealed class UsdaImporter(NutriPlanDbContext db, ILogger<UsdaImporter> lo
         map.Remove(NutrientIds.SugarsTotalNlea);
         return map.ContainsKey(NutrientIds.Energy);
     }
+
+    private static readonly HashSet<string> NeverEnrichedCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Dairy and Egg Products", "Spices and Herbs", "Fats and Oils", "Poultry Products", "Fruits and Fruit Juices", "Pork Products",
+        "Vegetables and Vegetable Products", "Nut and Seed Products", "Beef Products", "Finfish and Shellfish Products",
+        "Legumes and Legume Products", "Lamb, Veal, and Game Products",
+    };
+
+    private static bool NeverEnriched(string? category) => category is not null && NeverEnrichedCategories.Contains(category);
 
     private static bool Fortified(string? name) =>
         name is not null && System.Text.RegularExpressions.Regex.IsMatch(name, @"\b(enriched|fortified)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);

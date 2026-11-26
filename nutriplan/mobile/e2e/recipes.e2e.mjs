@@ -143,3 +143,13 @@ test('searching "apple" labels a recipe found through an ingredient, lists name 
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test('the Recipes tab says why a recipe matched a search when it is not the name (#84)', async () => {
+  const chiliHit = { ...summary('smoky', 'Smoky Chipotle Beef Chili', 6, 420), matchedOn: 'Ingredient', matchedText: '1 tbsp apple cider vinegar' };
+  const { ctx, p, calls, errors } = await open('/recipes', { 'GET /api/recipes': (c) => [200, c.query.get('search') ? [summary('pie', 'Apple pie', 8, 300), chiliHit] : [chili, pasta]] });
+  await p.getByRole('textbox', { name: 'Search recipes' }).fill('apple');
+  await p.getByText('Matches ingredient: 1 tbsp apple cider vinegar').waitFor({ timeout: 15000 });
+  assert.equal(calls.filter((c) => c.path === '/api/recipes/rematch-all').length, 0, 'nothing re-matched by searching');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
